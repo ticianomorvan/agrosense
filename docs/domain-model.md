@@ -28,6 +28,11 @@ No membership, crop catalog, rule, queue, notification, image-history, or separa
 assessment-history tables. No land editor, signup flow, season-rollover UI,
 weather raster overlays, regional spatial matching, or outbound messages.
 
+The explicit 2026-09-12 WhatsApp requests add two scoped exceptions:
+[manual outbound messaging](kapso.md) and a [read-only conversational agent](whatsapp-agent.md).
+The agent's bounded reasoning loop and separate Durable Object transport state
+do not change these five tables, dashboard refresh budgets or agronomic rules.
+
 ```mermaid
 erDiagram
     AUTH_USERS ||--o{ FARMS : owns
@@ -306,6 +311,14 @@ via the `RuleProvider` pattern:
 1. Base system rules (e.g. `demo-v1`) are merged with `farms.custom_rules`.
 2. A custom rule with the same `code` overrides the system rule of the same code.
 3. The evaluation engine is a pure, deterministic function receiving the merged ruleset.
+
+`evaluatePlotAlert` requires an explicit `event.kind`; daily evidence can be
+shared by multiple hazards and cannot identify the event kind. It derives the
+source freshness deadline at full timestamp precision and throws
+`ExpiredForecastEvidenceError` with code `INVALID_PROVIDER_DATA` when that
+deadline is not later than evaluation time. An optional `validUntil` input can
+shorten this deadline but cannot extend it. Callers can supply `now` and `alertId`
+to reproduce the same complete alert during replay or testing.
 
 Evaluate the seeded open cycle only; the MVP has no scheduled crop transitions. For each rule:
 match crop and stage, require declared stage_as_of <= the event's local start

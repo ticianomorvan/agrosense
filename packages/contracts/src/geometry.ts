@@ -121,7 +121,7 @@ export function polygonArea(polygon: Position[][]): number {
   );
 }
 
-export const polygonSchema = z.object({
+export const polygonSchema = z.strictObject({
   type: z.literal("Polygon"),
   coordinates: z
     .array(
@@ -132,3 +132,6 @@ export const polygonSchema = z.object({
     )
     .length(1),
 });
+
+export type Point = z.infer<typeof pointSchema>;
+export type Polygon = z.infer<typeof polygonSchema>;

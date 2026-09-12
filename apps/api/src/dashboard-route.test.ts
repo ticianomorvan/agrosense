@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import app from "./index";
+import app from "./app";
 import * as dashboard from "./lib/dashboard";
 import * as refresh from "./lib/refresh";
 

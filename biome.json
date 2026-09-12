@@ -1,6 +1,9 @@
 {
   "$schema": "https://biomejs.dev/schemas/2.5.13/schema.json",
-  "files": { "includes": ["**", "!exa-results", "!**/dist", "!**/.wrangler"] },
+  "files": {
+    "includes": ["**", "!**/dist", "!**/.wrangler", "!.worktrees"]
+  },
+  "css": { "parser": { "tailwindDirectives": true } },
   "formatter": { "indentStyle": "space" },
   "linter": { "rules": { "preset": "recommended" } }
 }

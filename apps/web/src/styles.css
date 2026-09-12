@@ -1,34 +1,138 @@
+@import "tailwindcss";
+@import "leaflet/dist/leaflet.css" layer(base);
+
 :root {
-  font-family: system-ui, sans-serif;
-  color: #173c2d;
-  background: #f4f3eb;
-  font-synthesis: none;
-  line-height: 1.6;
+  color-scheme: light;
+  --background: #f4f3eb;
+  --foreground: #173c2d;
+  --card: #ffffff;
+  --card-foreground: #173c2d;
+  --popover: #ffffff;
+  --popover-foreground: #173c2d;
+  --primary: #245c3b;
+  --primary-hover: #173c2d;
+  --primary-foreground: #ffffff;
+  --secondary: #e8ede7;
+  --secondary-foreground: #173c2d;
+  --muted: #e8ede7;
+  --muted-foreground: #4b6054;
+  --accent: #e8ede7;
+  --accent-foreground: #173c2d;
+  --destructive: #a32d2d;
+  --destructive-foreground: #ffffff;
+  --destructive-muted: #fbeaea;
+  --success: #e9f2e8;
+  --success-foreground: #245c3b;
+  --warning: #fff3db;
+  --warning-foreground: #854600;
+  --info: #eaf2f8;
+  --info-foreground: #285c8a;
+  --unknown: #eef0ed;
+  --unknown-foreground: #58635c;
+  --border: #b9c7bc;
+  --input: #728879;
+  --ring: #235eaa;
+  --radius: 0.25rem;
 }
-body {
-  margin: 0;
+@theme inline {
+  --font-sans:
+    system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-destructive-muted: var(--destructive-muted);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+  --color-unknown: var(--unknown);
+  --color-unknown-foreground: var(--unknown-foreground);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --radius-sm: var(--radius);
+  --radius-md: var(--radius);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 2);
 }
-main {
-  max-width: 48rem;
-  margin: 0 auto;
-  padding: clamp(2rem, 10vw, 8rem) 1.5rem;
+
+@layer base {
+  * {
+    @apply border-border outline-ring;
+  }
+  body {
+    @apply bg-background font-sans text-base leading-normal text-foreground;
+  }
+  h1,
+  h2,
+  h3,
+  p {
+    @apply wrap-anywhere;
+  }
+  h1 {
+    @apply text-2xl leading-[1.3] font-semibold lg:text-[2rem] lg:leading-tight;
+  }
+  h2 {
+    @apply text-xl leading-[1.4] font-semibold;
+  }
+  h3 {
+    @apply text-base leading-normal font-semibold;
+  }
+  a {
+    @apply text-primary underline;
+  }
+  :focus-visible:not([data-slot]) {
+    @apply outline-2 outline-offset-2 outline-ring;
+  }
+  a:not(p a):not([data-slot]) {
+    @apply inline-flex min-h-11 min-w-11 items-center;
+  }
+  button,
+  input,
+  select,
+  a {
+    touch-action: manipulation;
+  }
+  button,
+  select {
+    cursor: pointer;
+  }
 }
-h1 {
-  max-width: 14ch;
-  font-size: clamp(2.5rem, 7vw, 4.5rem);
-  line-height: 1.08;
-  letter-spacing: -0.04em;
+
+/* Leaflet creates these elements outside React. */
+@layer components {
+  .field-map .leaflet-tooltip {
+    @apply w-max max-w-23 rounded-lg border border-muted-foreground bg-card px-2 py-1 text-center font-sans text-sm leading-normal font-semibold whitespace-normal text-foreground wrap-anywhere shadow-none md:max-w-48;
+  }
+  .field-map .leaflet-tooltip::before {
+    display: none;
+  }
 }
-.eyebrow {
-  font-size: 0.8rem;
-  font-weight: 650;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-}
-.status {
-  display: inline-block;
-  margin-top: 2rem;
-  padding: 0.75rem 1rem;
-  border: 1px solid #728879;
-  border-radius: 0.5rem;
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition: none;
+    animation: none;
+  }
+  [data-slot="button"]:active {
+    translate: none;
+  }
 }
