@@ -21,9 +21,9 @@ context, and review hazards (frost, severe-storm, hail, extreme-heat) from one
 forecast adapter plus Sentinel-2 imagery. Desktop uses the requested three-column
 workspace: selected plot/crop facts on the left, the largest map/imagery region in
 the center, and the selected plot's weather events newest-first on the right.
-Selection is local UI state. Plot-alert risk and recommendations remain in the
-shared publication model for automation and WhatsApp, but are not rendered on the
-web timeline; alert delivery is a WhatsApp surface.
+Selection is local UI state. The selected plot’s current recommendations and
+synthetic potential-loss estimate appear in a neutral assessment panel above the weather timeline. Alert delivery
+also uses WhatsApp; the web panel has no red alert border or banner.
 
 Keep five tables: farms → plots → crop_cycles, and farms → events → plot_alerts.
 Plot alerts also reference plots. Supabase auth.users is pre-existing infrastructure.
@@ -493,8 +493,10 @@ forecast, events, monitoring. Read all DB data under one consistent snapshot.
   This is the API projection order; the selected-plot web timeline filters by
   evidence.plotIds and orders startsAt descending with UUID tie-breaking.
 - The web timeline renders event identity, state, bounds, and source evidence.
-  It deliberately omits EventCard.alerts, risk levels, reasons, and recommended
-  actions. Those alert notifications belong to the authenticated WhatsApp flow.
+  A separate neutral assessment panel above it uses the selected plot’s highest
+  current evaluated risk to show its reason, recommended actions, and potential
+  production loss. Missing or expired assessments show unavailable states, never
+  a zero loss. WhatsApp remains the notification delivery channel.
 - Only active, non-recent, non-stale evaluated alerts contribute to current risk.
   isStale is true when asOf >= validUntil, current rule-set version differs, or
   the snapshot's crop-cycle ID/updatedAt differs from the current open cycle

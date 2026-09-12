@@ -124,7 +124,7 @@ reconciliation. All automation mutation RPCs are service-only.
 `WorkspacePage` first loads the authenticated owner's farms. An empty account
 receives a farm form followed by a plot/crop-cycle form; established accounts can
 switch farms or add another farm/plot. The web form creates bounded rectangular
-GeoJSON from explicit decimal-degree inputs and the Worker revalidates every
+GeoJSON from map points or explicit decimal-degree inputs and the Worker revalidates every
 geometry and relationship before its owner-safe RPC commits. There is no browser
 signup or post-creation boundary editor.
 
@@ -135,8 +135,8 @@ on sign-out. Tokens stay in memory; requests target only the validated productio
 API origin (or the local relative proxy), remain cancellable, and are validated
 with shared Zod schemas. Failed requests never substitute sample data.
 The API derives risk and forecast freshness at full PostgreSQL timestamp precision.
-The current web workspace shows plot facts and the dated weather-event timeline;
-it does not render the retired risk-priority views.
+The current web workspace shows plot facts, the selected plot assessment, and the
+dated weather-event timeline; it does not render the retired risk-priority views.
 Shared controls use shadcn Button, Badge, NativeSelect and Input with AgroSense
 semantic tokens and status variants. Application layouts use Tailwind utilities;
 custom CSS is limited to tokens, global defaults and Leaflet-generated markup.
@@ -144,10 +144,11 @@ On desktop, the selected plot's land/crop facts, the largest Sentinel-2 map, and
 its newest-first weather-event timeline form three columns. At narrow widths the
 facts and event record lead and the map becomes an explicit alternate view.
 Phones defer Leaflet and the initial satellite request until that view opens;
-subsequent toggles preserve imagery dates, plot selection and loaded map state. The
-web timeline does not render `PlotAlert` risk or recommendations; notification
-alerts are a WhatsApp surface. Map rendering loads lazily and the initial imagery
-request uses the previous 30-day UTC window. Add primitives with
+subsequent toggles preserve imagery dates, plot selection and loaded map state.
+The selected plot's current recommendations and potential-loss estimate appear
+in a neutral assessment panel above the timeline, without a red alert border.
+Expired assessments show an unavailable state. Notifications also use WhatsApp.
+The initial imagery request uses the previous 30-day UTC window. Add primitives with
 `pnpm dlx shadcn@latest add` from `apps/web`; the CLI and unused animation styles
 are not application dependencies.
 
