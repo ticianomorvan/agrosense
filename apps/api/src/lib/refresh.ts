@@ -1,8 +1,14 @@
-import type { RefreshResponse } from "@agrosense/contracts";
-import { refreshResponseSchema } from "@agrosense/contracts";
+import {
+  forecastSummarySchema,
+  type PlotForecast,
+  type RefreshResponse,
+  refreshResponseSchema,
+} from "@agrosense/contracts";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Database } from "./database.types";
+import type { Database, Json } from "./database.types";
+import { json } from "./database-utils";
 import type { createServiceClient } from "./supabase";
+import { fetchOpenMeteoPlotForecast } from "./weather-provider";
 
 type UserClient = SupabaseClient<Database>;
 type ServiceClient = ReturnType<typeof createServiceClient>;
@@ -83,12 +89,6 @@ export async function refreshFarm(
         retryAfter: Math.ceil((REFRESH_COOLDOWN_MS - elapsed) / 1000),
       });
   }
-  if (farm.data_mode !== "demo")
-    throw new RefreshError({
-      kind: "unavailable",
-      code: "PROVIDER_UNAVAILABLE",
-    });
-
   const { data: plots, error: plotsError } = await userClient
     .from("plots")
     .select("*")
@@ -96,11 +96,71 @@ export async function refreshFarm(
   if (plotsError) throw plotsError;
   const refreshedAt = now.toISOString();
   const nextVersion = farm.data_version + 1;
-  const forecast = syntheticForecast(plots ?? [], refreshedAt);
+  let forecast:
+    | ReturnType<typeof syntheticForecast>
+    | {
+        schemaVersion: 1;
+        fetchedAt: string;
+        windowStart: string;
+        windowEnd: string;
+        plots: PlotForecast[];
+      };
+  try {
+    const fetched =
+      farm.data_mode === "live"
+        ? await Promise.all(
+            (plots ?? []).map((plot) =>
+              fetchOpenMeteoPlotForecast({
+                plotId: plot.id,
+                samplePoint: json<PlotForecast["samplePoint"]>(
+                  plot.sample_point_geojson,
+                ),
+              }),
+            ),
+          )
+        : null;
+    if (fetched) {
+      const firstPlot = fetched[0];
+      const firstHour = firstPlot?.hours[0];
+      const lastHour = firstPlot?.hours.at(-1);
+      if (!firstHour || !lastHour)
+        throw new Error("Provider returned no hours");
+      const start = fetched.reduce((min, plot) => {
+        const hour = plot.hours[0];
+        return hour && hour.at < min ? hour.at : min;
+      }, firstHour.at);
+      const end = fetched.reduce((max, plot) => {
+        const hour = plot.hours.at(-1);
+        return hour && hour.at > max ? hour.at : max;
+      }, lastHour.at);
+      const candidate = {
+        schemaVersion: 1 as const,
+        fetchedAt: refreshedAt,
+        windowStart: start,
+        windowEnd: new Date(Date.parse(end) + 3_600_000).toISOString(),
+        plots: fetched,
+      };
+      forecastSummarySchema.parse(candidate);
+      forecast = candidate;
+    } else forecast = syntheticForecast(plots ?? [], refreshedAt);
+  } catch {
+    await serviceClient
+      .from("farms")
+      .update({
+        last_attempt_at: refreshedAt,
+        last_error_code: "PROVIDER_UNAVAILABLE",
+      })
+      .eq("id", farmId)
+      .eq("data_version", farm.data_version);
+    throw new RefreshError({
+      kind: "unavailable",
+      code: "PROVIDER_UNAVAILABLE",
+    });
+  }
   const { data: updatedFarm, error: updateError } = await serviceClient
     .from("farms")
     .update({
-      forecast_summary: forecast,
+      forecast_summary: forecast as unknown as Json,
       last_attempt_at: refreshedAt,
       last_success_at: refreshedAt,
       last_error_code: null,

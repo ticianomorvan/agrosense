@@ -1,6 +1,13 @@
 import { z } from "zod";
 import { pointSchema, polygonSchema } from "./geometry";
 
+export {
+  pointInPolygon,
+  polygonArea,
+  polygonContainsPolygon,
+  polygonSchema,
+} from "./geometry";
+
 export const healthResponseSchema = z.object({
   status: z.literal("ok"),
   service: z.literal("agrosense-api"),
@@ -54,6 +61,45 @@ const eventKindSchema = z.enum([
   "extreme-heat",
 ]);
 export type EventKind = z.infer<typeof eventKindSchema>;
+export const riskRuleSchema = z
+  .strictObject({
+    code: z.string().min(1).max(100),
+    hazardKind: eventKindSchema,
+    cropCode: z.enum(["maize", "soybean"]),
+    stageCodes: z.array(z.string().min(1).max(20)).min(1).max(8),
+    temperatureHeightM: z.literal(2),
+    thresholdC: z.number().min(-100).max(70).nullable(),
+    windGustThresholdKmh: z.number().min(0).max(300).nullable(),
+    precipitationThresholdMm: z.number().min(0).max(500).nullable(),
+    minimumConsecutiveHours: z.number().int().min(1).max(24),
+    stageMaxAgeDays: z.number().int().min(1).max(30),
+    riskLevel: z.enum(["low", "moderate", "high", "critical"]),
+    reviewState: z.enum(["synthetic", "approved"]),
+    evidenceUrl: z
+      .url({ protocol: /^https$/ })
+      .max(2048)
+      .nullable(),
+    reasonTemplate: z.string().min(1).max(1000),
+    recommendedActionTemplates: z
+      .array(z.string().min(1).max(1000))
+      .min(1)
+      .max(10),
+  })
+  .refine(
+    (r) => r.reviewState !== "approved" || r.evidenceUrl !== null,
+    "Approved rules require evidenceUrl",
+  );
+export type RiskRule = z.infer<typeof riskRuleSchema>;
+export const ruleSetSchema = z
+  .strictObject({
+    version: z.string().min(1).max(100),
+    rules: z.array(riskRuleSchema).max(20),
+  })
+  .refine(
+    (set) => new Set(set.rules.map((r) => r.code)).size === set.rules.length,
+    "Rule codes must be unique",
+  );
+export type RuleSet = z.infer<typeof ruleSetSchema>;
 
 export const forecastHourSchema = z.strictObject({
   at: instantSchema.refine(
@@ -93,7 +139,7 @@ export const plotForecastSchema = z.strictObject({
 });
 export type PlotForecast = z.infer<typeof plotForecastSchema>;
 
-const forecastSummarySchema = z.object({
+export const forecastSummarySchema = z.strictObject({
   schemaVersion: z.literal(1),
   fetchedAt: instantSchema,
   windowStart: instantSchema,
@@ -219,7 +265,7 @@ const plotAlertSchema = z.object({
   inputSnapshot: inputSnapshotSchema,
   isStale: z.boolean(),
 });
-const farmSchema = z.object({
+const farmSchema = z.strictObject({
   id: z.uuid(),
   name: z.string().min(1).max(100),
   province: z.string().min(1).max(100),
@@ -229,6 +275,7 @@ const farmSchema = z.object({
   boundary: polygonSchema,
   declaredAreaHa: z.number().min(0.01).max(1_000_000),
   dataVersion: z.number().int().min(1),
+  customRules: z.array(riskRuleSchema).max(10),
 });
 const plotSchema = z.object({
   id: z.uuid(),

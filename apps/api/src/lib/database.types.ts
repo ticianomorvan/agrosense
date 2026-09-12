@@ -134,6 +134,7 @@ export type Database = {
           boundary_geojson: Json;
           declared_area_ha: number;
           data_version: number;
+          custom_rules?: Json;
           forecast_summary: Json | null;
           last_attempt_at: string | null;
           last_success_at: string | null;
@@ -152,6 +153,7 @@ export type Database = {
           boundary_geojson: Json;
           declared_area_ha: number;
           data_version?: number;
+          custom_rules?: Json;
           forecast_summary?: Json | null;
           last_attempt_at?: string | null;
           last_success_at?: string | null;
@@ -170,6 +172,7 @@ export type Database = {
           boundary_geojson?: Json;
           declared_area_ha?: number;
           data_version?: number;
+          custom_rules?: Json;
           forecast_summary?: Json | null;
           last_attempt_at?: string | null;
           last_success_at?: string | null;

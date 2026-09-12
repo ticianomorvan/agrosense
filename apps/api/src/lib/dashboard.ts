@@ -186,6 +186,9 @@ export function projectDashboard(
       ),
       declaredAreaHa: farm.declared_area_ha,
       dataVersion: farm.data_version,
+      customRules: json<DashboardResponse["farm"]["customRules"]>(
+        farm.custom_rules ?? [],
+      ),
     },
     plots: plots.map((plot) => {
       const activeCycle = currentCycles.get(plot.id);

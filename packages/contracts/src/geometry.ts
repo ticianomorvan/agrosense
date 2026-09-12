@@ -76,6 +76,51 @@ function isSimpleRing(ring: Position[]): boolean {
   return hasTurn;
 }
 
+export function pointInPolygon(
+  point: Position,
+  polygon: Position[][],
+): boolean {
+  const ring = polygon[0] ?? [];
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const a = ring[i],
+      b = ring[j];
+    if (!a || !b) continue;
+    const onEdge =
+      cross(a, b, point) === 0 &&
+      point[0] >= Math.min(a[0], b[0]) &&
+      point[0] <= Math.max(a[0], b[0]) &&
+      point[1] >= Math.min(a[1], b[1]) &&
+      point[1] <= Math.max(a[1], b[1]);
+    if (onEdge) return true;
+    if (
+      a[1] > point[1] !== b[1] > point[1] &&
+      point[0] < ((b[0] - a[0]) * (point[1] - a[1])) / (b[1] - a[1]) + a[0]
+    )
+      inside = !inside;
+  }
+  return inside;
+}
+
+export function polygonContainsPolygon(
+  container: Position[][],
+  child: Position[][],
+): boolean {
+  return (child[0] ?? [])
+    .slice(0, -1)
+    .every((point) => pointInPolygon(point, container));
+}
+
+export function polygonArea(polygon: Position[][]): number {
+  const ring = polygon[0] ?? [];
+  return Math.abs(
+    ring.slice(0, -1).reduce((area, point, i) => {
+      const next = ring[i + 1];
+      return area + (next ? point[0] * next[1] - next[0] * point[1] : 0);
+    }, 0) / 2,
+  );
+}
+
 export const polygonSchema = z.object({
   type: z.literal("Polygon"),
   coordinates: z
