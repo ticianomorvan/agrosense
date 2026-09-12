@@ -21,6 +21,8 @@ export interface EvaluatePlotAlertInput {
   now?: string;
   alertId?: string;
   generationMethod?: "template" | "llm";
+  modelId?: string | null;
+  promptVersion?: string | null;
 }
 
 const RISK_ORDER: Record<RiskLevel, number> = {
@@ -53,12 +55,24 @@ export function resolveRules(
 
 /**
  * Checks whether an array of hourly forecasts satisfies the rule's threshold for the required consecutive hours.
+ * Validates temporal continuity (each consecutive interval must be exactly 1 hour apart).
  */
 export function ruleFires(rule: RiskRule, hours: ForecastHour[]): boolean {
   const requiredConsecutive = rule.minimumConsecutiveHours;
   let consecutive = 0;
 
-  for (const hour of hours) {
+  for (let i = 0; i < hours.length; i++) {
+    const hour = hours[i];
+    if (!hour) continue;
+
+    // Reset run if intervals are not contiguous 1-hour steps
+    if (i > 0 && consecutive > 0) {
+      const prev = hours[i - 1];
+      if (prev && Date.parse(hour.at) - Date.parse(prev.at) !== 3_600_000) {
+        consecutive = 0;
+      }
+    }
+
     let matches = true;
 
     if (rule.thresholdC !== null) {
@@ -103,6 +117,10 @@ export function evaluatePlotAlert(input: EvaluatePlotAlertInput): PlotAlert {
   const { plot, event, rules } = input;
   const ruleSetVersion = input.ruleSetVersion ?? "demo-v1";
   const generationMethod = input.generationMethod ?? "template";
+  const modelId =
+    generationMethod === "llm" ? (input.modelId ?? "default-model") : null;
+  const promptVersion =
+    generationMethod === "llm" ? (input.promptVersion ?? "v1") : null;
   const now = input.now ?? new Date().toISOString();
   const alertId = input.alertId ?? crypto.randomUUID();
   const validUntil =
@@ -146,8 +164,8 @@ export function evaluatePlotAlert(input: EvaluatePlotAlertInput): PlotAlert {
         matchedRuleCodes,
         generation: {
           method: generationMethod,
-          modelId: null,
-          promptVersion: null,
+          modelId,
+          promptVersion,
         },
       },
       isStale: false,
@@ -165,9 +183,56 @@ export function evaluatePlotAlert(input: EvaluatePlotAlertInput): PlotAlert {
     );
   }
 
-  // State precedence 2: Missing active crop cycle or stage -> insufficient_data
+  // Determine hazard kind
+  const hazardKind: EventKind =
+    event.kind ??
+    (event.evidence.detectionThresholdC === 0
+      ? "frost"
+      : event.evidence.detectionThresholdC === 35
+        ? "extreme-heat"
+        : event.evidence.hours.some(
+              (h) => h.weatherCode === 96 || h.weatherCode === 99,
+            )
+          ? "hail"
+          : "severe-storm");
+
+  const isDemo = event.evidence.source.isDemo;
+  const effectiveRules = resolveRules(rules ?? DEMO_V1_RULES);
+
+  // Live evaluation permits approved rules with evidence URLs only (lines 339-340)
+  const candidateRules = effectiveRules.filter((r) => {
+    if (!isDemo) {
+      return r.reviewState === "approved" && r.evidenceUrl !== null;
+    }
+    return true;
+  });
+
+  if (candidateRules.length === 0) {
+    return createAlert(
+      "no_applicable_rule",
+      null,
+      isDemo
+        ? "No agronomic rules configured."
+        : "No approved agronomic rules with evidence URL for live event.",
+      [],
+      [],
+    );
+  }
+
+  const hazardRules = candidateRules.filter((r) => r.hazardKind === hazardKind);
+  if (hazardRules.length === 0) {
+    return createAlert(
+      "no_applicable_rule",
+      null,
+      "No applicable agronomic rule for hazard kind.",
+      [],
+      [],
+    );
+  }
+
+  // State precedence 2: Missing crop cycle or stage for an otherwise matching rule -> insufficient_data
   const cropCycle = plot.activeCropCycle;
-  if (!cropCycle?.stageCode || !cropCycle.stageAsOf) {
+  if (!cropCycle?.cropCode || !cropCycle.stageCode || !cropCycle.stageAsOf) {
     return createAlert(
       "insufficient_data",
       null,
@@ -177,72 +242,16 @@ export function evaluatePlotAlert(input: EvaluatePlotAlertInput): PlotAlert {
     );
   }
 
-  // Determine event hazard kind
-  const hazardKind: EventKind =
-    event.kind ??
-    (event.evidence.detectionThresholdC === 0
-      ? "frost"
-      : event.evidence.detectionThresholdC === 35
-        ? "extreme-heat"
-        : "severe-storm");
-
-  const effectiveRules = resolveRules(rules ?? DEMO_V1_RULES);
-
-  // Check for rules matching the crop and stage
-  const matchingCropStageRules = effectiveRules.filter(
+  // Match crop and phenological stage
+  const matchingCropStageRules = hazardRules.filter(
     (r) =>
-      r.hazardKind === hazardKind &&
       r.cropCode === cropCycle.cropCode &&
       r.stageCodes.some(
         (code) => code.toLowerCase() === cropCycle.stageCode?.toLowerCase(),
       ),
   );
 
-  // State precedence 3: Stale stage date for an otherwise matching rule -> insufficient_data
-  if (matchingCropStageRules.length > 0) {
-    const forecastDateMs = Date.parse(
-      `${event.evidence.forecastDate}T00:00:00Z`,
-    );
-    const stageAsOfMs = Date.parse(`${cropCycle.stageAsOf}T00:00:00Z`);
-
-    if (stageAsOfMs > forecastDateMs) {
-      return createAlert(
-        "insufficient_data",
-        null,
-        "Declared stage date cannot follow event forecast date.",
-        [],
-        [],
-      );
-    }
-
-    const ageDays = Math.floor(
-      (forecastDateMs - stageAsOfMs) / (24 * 60 * 60 * 1000),
-    );
-    const maxAllowedAge = Math.max(
-      ...matchingCropStageRules.map((r) => r.stageMaxAgeDays),
-    );
-
-    if (ageDays > maxAllowedAge) {
-      return createAlert(
-        "insufficient_data",
-        null,
-        `Declared stage observation is stale (${ageDays} days old; max allowed is ${maxAllowedAge} days).`,
-        [],
-        [],
-      );
-    }
-  }
-
-  // Filter eligible rules for live vs demo modes
-  const eligibleRules = matchingCropStageRules.filter((r) => {
-    if (!event.evidence.source.isDemo) {
-      return r.reviewState === "approved" && r.evidenceUrl !== null;
-    }
-    return true;
-  });
-
-  // State precedence 4: No eligible rule -> no_applicable_rule
-  if (eligibleRules.length === 0) {
+  if (matchingCropStageRules.length === 0) {
     return createAlert(
       "no_applicable_rule",
       null,
@@ -252,12 +261,48 @@ export function evaluatePlotAlert(input: EvaluatePlotAlertInput): PlotAlert {
     );
   }
 
+  // State precedence 3: Stage date cannot follow event forecast date
+  const forecastDateMs = Date.parse(`${event.evidence.forecastDate}T00:00:00Z`);
+  const stageAsOfMs = Date.parse(`${cropCycle.stageAsOf}T00:00:00Z`);
+
+  if (stageAsOfMs > forecastDateMs) {
+    return createAlert(
+      "insufficient_data",
+      null,
+      "Declared stage date cannot follow event forecast date.",
+      [],
+      [],
+    );
+  }
+
+  const ageDays = Math.floor(
+    (forecastDateMs - stageAsOfMs) / (24 * 60 * 60 * 1000),
+  );
+
+  // Filter rules whose individual stageMaxAgeDays is not exceeded (lines 311-313)
+  const freshRules = matchingCropStageRules.filter(
+    (r) => ageDays <= r.stageMaxAgeDays,
+  );
+
+  if (freshRules.length === 0) {
+    const maxAllowed = Math.max(
+      ...matchingCropStageRules.map((r) => r.stageMaxAgeDays),
+    );
+    return createAlert(
+      "insufficient_data",
+      null,
+      `Declared stage observation is stale (${ageDays} days old; max allowed is ${maxAllowed} days).`,
+      [],
+      [],
+    );
+  }
+
   // Evaluate meteorological thresholds against event evidence hours
-  const firingRules = eligibleRules.filter((r) =>
+  const firingRules = freshRules.filter((r) =>
     ruleFires(r, event.evidence.hours),
   );
 
-  // State precedence 5: No firing rule -> no_applicable_rule
+  // State precedence 4: No firing rule -> no_applicable_rule
   if (firingRules.length === 0) {
     return createAlert(
       "no_applicable_rule",
@@ -268,7 +313,7 @@ export function evaluatePlotAlert(input: EvaluatePlotAlertInput): PlotAlert {
     );
   }
 
-  // State precedence 6: Evaluated!
+  // State precedence 5: Evaluated!
   // Sort firing rules: greatest risk first, then lexicographically smallest rule code for ties
   firingRules.sort((a, b) => {
     const riskDiff = RISK_ORDER[b.riskLevel] - RISK_ORDER[a.riskLevel];

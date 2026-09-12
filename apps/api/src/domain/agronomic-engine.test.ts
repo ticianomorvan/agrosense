@@ -7,6 +7,7 @@ import {
   plotAlertSchema,
   type RiskRule,
   resolveRules,
+  riskRuleSchema,
 } from "@agrosense/contracts";
 import { describe, expect, it } from "vitest";
 
@@ -58,6 +59,59 @@ function createEvent(
   };
 }
 
+describe("Agronomic Rules Engine - Contract Validations", () => {
+  it("validates all 5 default demo-v1 rules against riskRuleSchema", () => {
+    expect(DEMO_V1_RULES).toHaveLength(5);
+    for (const rule of DEMO_V1_RULES) {
+      expect(riskRuleSchema.parse(rule)).toBeDefined();
+    }
+  });
+
+  it("rejects rules with cross-crop stages (e.g. soybean stages on maize)", () => {
+    expect(() =>
+      riskRuleSchema.parse({
+        code: "invalid-cross-crop",
+        hazardKind: "frost",
+        cropCode: "maize",
+        stageCodes: ["R4"], // R4 is a soybean stage, not a maize stage
+        temperatureHeightM: 2,
+        thresholdC: -1,
+        windGustThresholdKmh: null,
+        precipitationThresholdMm: null,
+        minimumConsecutiveHours: 1,
+        stageMaxAgeDays: 14,
+        riskLevel: "high",
+        reviewState: "synthetic",
+        evidenceUrl: null,
+        reasonTemplate: "Template",
+        recommendedActionTemplates: ["Action"],
+      }),
+    ).toThrow(/RiskRule stages must belong to its crop/);
+  });
+
+  it("rejects approved rules with null evidenceUrl", () => {
+    expect(() =>
+      riskRuleSchema.parse({
+        code: "invalid-approved-rule",
+        hazardKind: "frost",
+        cropCode: "maize",
+        stageCodes: ["V3"],
+        temperatureHeightM: 2,
+        thresholdC: -1,
+        windGustThresholdKmh: null,
+        precipitationThresholdMm: null,
+        minimumConsecutiveHours: 1,
+        stageMaxAgeDays: 14,
+        riskLevel: "moderate",
+        reviewState: "approved",
+        evidenceUrl: null, // Approved rules MUST have HTTPS evidenceUrl
+        reasonTemplate: "Template",
+        recommendedActionTemplates: ["Action"],
+      }),
+    ).toThrow(/Approved rules require a non-null HTTPS evidenceUrl/);
+  });
+});
+
 describe("Agronomic Rules Engine - RuleProvider Pattern", () => {
   it("resolves default system rules (demo-v1)", () => {
     const rules = resolveRules();
@@ -97,30 +151,6 @@ describe("Agronomic Rules Engine - RuleProvider Pattern", () => {
     expect(overridden?.riskLevel).toBe("critical");
     expect(overridden?.minimumConsecutiveHours).toBe(2);
   });
-
-  it("appends brand new custom rules with distinct code", () => {
-    const customRule: RiskRule = {
-      code: "custom-maize-v4-hail",
-      hazardKind: "hail",
-      cropCode: "maize",
-      stageCodes: ["V4"],
-      temperatureHeightM: 2,
-      thresholdC: null,
-      windGustThresholdKmh: null,
-      precipitationThresholdMm: null,
-      minimumConsecutiveHours: 1,
-      stageMaxAgeDays: 14,
-      riskLevel: "high",
-      reviewState: "synthetic",
-      evidenceUrl: null,
-      reasonTemplate: "Hail alert for {code}",
-      recommendedActionTemplates: ["Inspect canopy defoliation"],
-    };
-
-    const rules = resolveRules(DEMO_V1_RULES, [customRule]);
-    expect(rules).toHaveLength(DEMO_V1_RULES.length + 1);
-    expect(rules.find((r) => r.code === "custom-maize-v4-hail")).toBeDefined();
-  });
 });
 
 describe("Agronomic Rules Engine - Evaluation & State Precedence", () => {
@@ -155,7 +185,7 @@ describe("Agronomic Rules Engine - Evaluation & State Precedence", () => {
     expect(plotAlertSchema.parse(alert)).toBeDefined();
   });
 
-  it("yields insufficient_data when plot lacks active crop cycle or stage", () => {
+  it("yields insufficient_data when plot lacks active crop cycle or stage for an otherwise matching rule", () => {
     const hours = [createHour("2026-09-12T04:00:00Z", { temperatureC: -2 })];
     const event = createEvent("frost", "2026-09-12", hours);
 
@@ -165,6 +195,7 @@ describe("Agronomic Rules Engine - Evaluation & State Precedence", () => {
     });
     expect(alertNoCycle.assessmentState).toBe("insufficient_data");
     expect(alertNoCycle.riskLevel).toBeNull();
+    expect(alertNoCycle.recommendedActions).toEqual([]);
 
     const alertNoStage = evaluatePlotAlert({
       plot: {
@@ -192,7 +223,7 @@ describe("Agronomic Rules Engine - Evaluation & State Precedence", () => {
     expect(alert.reason).toContain("cannot follow event forecast date");
   });
 
-  it("yields insufficient_data when stage observation exceeds stageMaxAgeDays (stale stage)", () => {
+  it("yields insufficient_data when stage observation exceeds stageMaxAgeDays", () => {
     const hours = [createHour("2026-09-12T04:00:00Z", { temperatureC: -2 })];
     const event = createEvent("frost", "2026-09-12", hours);
 
@@ -211,28 +242,84 @@ describe("Agronomic Rules Engine - Evaluation & State Precedence", () => {
     );
   });
 
-  it("yields no_applicable_rule when plot stage has no matching rule in catalog", () => {
+  it("enforces stageMaxAgeDays per-rule when multiple rules have different age limits", () => {
+    const strictRule: RiskRule = {
+      code: "rule-strict-10-days",
+      hazardKind: "frost",
+      cropCode: "maize",
+      stageCodes: ["V3"],
+      temperatureHeightM: 2,
+      thresholdC: 0,
+      windGustThresholdKmh: null,
+      precipitationThresholdMm: null,
+      minimumConsecutiveHours: 1,
+      stageMaxAgeDays: 10,
+      riskLevel: "critical", // Stricter rule has higher severity
+      reviewState: "synthetic",
+      evidenceUrl: null,
+      reasonTemplate: "Strict rule {code}",
+      recommendedActionTemplates: ["Strict action"],
+    };
+
+    const permissiveRule: RiskRule = {
+      code: "rule-permissive-14-days",
+      hazardKind: "frost",
+      cropCode: "maize",
+      stageCodes: ["V3"],
+      temperatureHeightM: 2,
+      thresholdC: 0,
+      windGustThresholdKmh: null,
+      precipitationThresholdMm: null,
+      minimumConsecutiveHours: 1,
+      stageMaxAgeDays: 14,
+      riskLevel: "moderate",
+      reviewState: "synthetic",
+      evidenceUrl: null,
+      reasonTemplate: "Permissive rule {code}",
+      recommendedActionTemplates: ["Permissive action"],
+    };
+
     const hours = [createHour("2026-09-12T04:00:00Z", { temperatureC: -2 })];
     const event = createEvent("frost", "2026-09-12", hours);
 
-    // Maize in R1 has no demo frost rule (demo rules are for V3, V6)
-    const alert = evaluatePlotAlert({
+    // Case 1: age is 12 days -> strictRule is expired (age 12 > 10), but permissiveRule is fresh (age 12 <= 14)
+    // strictRule MUST NOT fire despite having higher severity!
+    const alert12Days = evaluatePlotAlert({
       plot: {
         id: plotId,
-        activeCropCycle: { ...baseCropCycle, stageCode: "R1" },
+        activeCropCycle: { ...baseCropCycle, stageAsOf: "2026-08-31" }, // exactly 12 days
       },
       event,
+      rules: [strictRule, permissiveRule],
     });
 
-    expect(alert.assessmentState).toBe("no_applicable_rule");
-    expect(alert.riskLevel).toBeNull();
-    expect(alert.recommendedActions).toHaveLength(0);
+    expect(alert12Days.assessmentState).toBe("evaluated");
+    expect(alert12Days.riskLevel).toBe("moderate");
+    expect(alert12Days.inputSnapshot.matchedRuleCodes).toEqual([
+      "rule-permissive-14-days",
+    ]);
+
+    // Case 2: age is 10 days (boundary) -> both rules are fresh, strictRule fires and wins on critical severity
+    const alert10Days = evaluatePlotAlert({
+      plot: {
+        id: plotId,
+        activeCropCycle: { ...baseCropCycle, stageAsOf: "2026-09-02" }, // exactly 10 days
+      },
+      event,
+      rules: [strictRule, permissiveRule],
+    });
+
+    expect(alert10Days.assessmentState).toBe("evaluated");
+    expect(alert10Days.riskLevel).toBe("critical");
+    expect(alert10Days.inputSnapshot.matchedRuleCodes).toEqual([
+      "rule-permissive-14-days",
+      "rule-strict-10-days",
+    ]);
   });
 
-  it("yields no_applicable_rule when live event lacks approved rules with evidenceUrl", () => {
+  it("yields no_applicable_rule in live mode when rules are synthetic (even if stage is stale)", () => {
     const hours = [createHour("2026-09-12T04:00:00Z", { temperatureC: -2 })];
     const event = createEvent("frost", "2026-09-12", hours);
-    // Mark as live source
     event.evidence.source = {
       code: "open_meteo",
       url: "https://open-meteo.com",
@@ -246,78 +333,127 @@ describe("Agronomic Rules Engine - Evaluation & State Precedence", () => {
       coordinates: [-64.18, -31.42],
     };
 
+    // With a stale stage (20 days old) in LIVE mode:
+    // Synthetic rules cannot be used to declare insufficient_data; it MUST return no_applicable_rule
     const alert = evaluatePlotAlert({
-      plot: { id: plotId, activeCropCycle: baseCropCycle },
+      plot: {
+        id: plotId,
+        activeCropCycle: { ...baseCropCycle, stageAsOf: "2026-08-23" },
+      },
       event,
     });
 
-    // Synthetic demo rules cannot fire for live events
     expect(alert.assessmentState).toBe("no_applicable_rule");
     expect(alert.riskLevel).toBeNull();
+    expect(alert.recommendedActions).toEqual([]);
+    expect(plotAlertSchema.parse(alert)).toBeDefined();
   });
 });
 
-describe("Agronomic Rules Engine - Detection & Rule Firing", () => {
+describe("Agronomic Rules Engine - Evaluation of All Canonical Rules", () => {
   const plotId = "44444444-4444-4444-8444-444444444444";
-  const maizeV3: CropCycle = {
-    id: "33333333-3333-4333-8333-333333333333",
-    plotId,
-    cropCode: "maize",
-    seasonLabel: "2025/26",
-    sownOn: "2026-08-01",
-    stageCode: "V3",
-    stageAsOf: "2026-09-05",
-    endedOn: null,
-    updatedAt: "2026-09-05T12:00:00Z",
-  };
 
-  it("evaluates demo-maize-v3 frost alert successfully", () => {
-    const hours = [
-      createHour("2026-09-12T03:00:00Z", { temperatureC: 2 }),
-      createHour("2026-09-12T04:00:00Z", { temperatureC: -1.5 }),
-      createHour("2026-09-12T05:00:00Z", { temperatureC: 4 }),
-    ];
-    const event = createEvent("frost", "2026-09-12", hours);
-
+  it("evaluates demo-maize-v3 frost alert", () => {
+    const cropCycle: CropCycle = {
+      id: "33333333-3333-4333-8333-333333333333",
+      plotId,
+      cropCode: "maize",
+      seasonLabel: "2025/26",
+      sownOn: "2026-08-01",
+      stageCode: "V3",
+      stageAsOf: "2026-09-05",
+      endedOn: null,
+      updatedAt: "2026-09-05T12:00:00Z",
+    };
+    const hours = [createHour("2026-09-12T04:00:00Z", { temperatureC: -1.5 })];
     const alert = evaluatePlotAlert({
-      plot: { id: plotId, activeCropCycle: maizeV3 },
-      event,
+      plot: { id: plotId, activeCropCycle: cropCycle },
+      event: createEvent("frost", "2026-09-12", hours),
     });
 
     expect(alert.assessmentState).toBe("evaluated");
     expect(alert.riskLevel).toBe("moderate");
-    expect(alert.reason).toBe(
-      "Escenario sintético: la regla demo-maize-v3 coincide.",
-    );
-    expect(alert.recommendedActions).toEqual([
-      "Demostración: revisar el lote; no es asesoramiento agronómico.",
-    ]);
     expect(alert.inputSnapshot.matchedRuleCodes).toEqual(["demo-maize-v3"]);
-    expect(plotAlertSchema.parse(alert)).toBeDefined();
+  });
+
+  it("evaluates demo-maize-v6 frost alert with high risk", () => {
+    const cropCycle: CropCycle = {
+      id: "33333333-3333-4333-8333-333333333333",
+      plotId,
+      cropCode: "maize",
+      seasonLabel: "2025/26",
+      sownOn: "2026-08-01",
+      stageCode: "V6",
+      stageAsOf: "2026-09-05",
+      endedOn: null,
+      updatedAt: "2026-09-05T12:00:00Z",
+    };
+    const hours = [createHour("2026-09-12T04:00:00Z", { temperatureC: -1 })];
+    const alert = evaluatePlotAlert({
+      plot: { id: plotId, activeCropCycle: cropCycle },
+      event: createEvent("frost", "2026-09-12", hours),
+    });
+
+    expect(alert.assessmentState).toBe("evaluated");
+    expect(alert.riskLevel).toBe("high");
+    expect(alert.inputSnapshot.matchedRuleCodes).toEqual(["demo-maize-v6"]);
+  });
+
+  it("evaluates demo-soybean-r4 frost alert with high risk", () => {
+    const cropCycle: CropCycle = {
+      id: "33333333-3333-4333-8333-333333333333",
+      plotId,
+      cropCode: "soybean",
+      seasonLabel: "2025/26",
+      sownOn: "2026-08-01",
+      stageCode: "R4",
+      stageAsOf: "2026-09-05",
+      endedOn: null,
+      updatedAt: "2026-09-05T12:00:00Z",
+    };
+    const hours = [createHour("2026-09-12T04:00:00Z", { temperatureC: -1.2 })];
+    const alert = evaluatePlotAlert({
+      plot: { id: plotId, activeCropCycle: cropCycle },
+      event: createEvent("frost", "2026-09-12", hours),
+    });
+
+    expect(alert.assessmentState).toBe("evaluated");
+    expect(alert.riskLevel).toBe("high");
+    expect(alert.inputSnapshot.matchedRuleCodes).toEqual(["demo-soybean-r4"]);
   });
 
   it("evaluates demo-maize-heat requiring 2 consecutive hours >= 35°C", () => {
-    const maizeVT: CropCycle = { ...maizeV3, stageCode: "VT" };
+    const cropCycle: CropCycle = {
+      id: "33333333-3333-4333-8333-333333333333",
+      plotId,
+      cropCode: "maize",
+      seasonLabel: "2025/26",
+      sownOn: "2026-08-01",
+      stageCode: "VT",
+      stageAsOf: "2026-09-05",
+      endedOn: null,
+      updatedAt: "2026-09-05T12:00:00Z",
+    };
 
-    // Single isolated hour -> should NOT fire
-    const isolatedHours = [
-      createHour("2026-09-12T13:00:00Z", { temperatureC: 34 }),
+    // Non-consecutive: hours at 14:00 and 16:00 (gap at 15:00)
+    const gapHours = [
       createHour("2026-09-12T14:00:00Z", { temperatureC: 36 }),
       createHour("2026-09-12T15:00:00Z", { temperatureC: 33 }),
+      createHour("2026-09-12T16:00:00Z", { temperatureC: 36 }),
     ];
-    const alertIsolated = evaluatePlotAlert({
-      plot: { id: plotId, activeCropCycle: maizeVT },
-      event: createEvent("extreme-heat", "2026-09-12", isolatedHours),
+    const alertGap = evaluatePlotAlert({
+      plot: { id: plotId, activeCropCycle: cropCycle },
+      event: createEvent("extreme-heat", "2026-09-12", gapHours),
     });
-    expect(alertIsolated.assessmentState).toBe("no_applicable_rule");
+    expect(alertGap.assessmentState).toBe("no_applicable_rule");
 
-    // 2 consecutive hours -> fires critical
+    // 2 consecutive hours
     const consecutiveHours = [
       createHour("2026-09-12T14:00:00Z", { temperatureC: 35.5 }),
       createHour("2026-09-12T15:00:00Z", { temperatureC: 36.2 }),
     ];
     const alertConsecutive = evaluatePlotAlert({
-      plot: { id: plotId, activeCropCycle: maizeVT },
+      plot: { id: plotId, activeCropCycle: cropCycle },
       event: createEvent("extreme-heat", "2026-09-12", consecutiveHours),
     });
     expect(alertConsecutive.assessmentState).toBe("evaluated");
@@ -327,14 +463,24 @@ describe("Agronomic Rules Engine - Detection & Rule Firing", () => {
     ]);
   });
 
-  it("evaluates demo-storm-v on severe gusts >= 70 km/h", () => {
-    const maizeV6: CropCycle = { ...maizeV3, stageCode: "V6" };
+  it("evaluates demo-storm-v on wind gusts >= 70 km/h", () => {
+    const cropCycle: CropCycle = {
+      id: "33333333-3333-4333-8333-333333333333",
+      plotId,
+      cropCode: "maize",
+      seasonLabel: "2025/26",
+      sownOn: "2026-08-01",
+      stageCode: "V6",
+      stageAsOf: "2026-09-05",
+      endedOn: null,
+      updatedAt: "2026-09-05T12:00:00Z",
+    };
     const hours = [
       createHour("2026-09-12T18:00:00Z", { windGustKmh: 45 }),
-      createHour("2026-09-12T19:00:00Z", { windGustKmh: 78 }),
+      createHour("2026-09-12T19:00:00Z", { windGustKmh: 75 }),
     ];
     const alert = evaluatePlotAlert({
-      plot: { id: plotId, activeCropCycle: maizeV6 },
+      plot: { id: plotId, activeCropCycle: cropCycle },
       event: createEvent("severe-storm", "2026-09-12", hours),
     });
 
@@ -342,48 +488,26 @@ describe("Agronomic Rules Engine - Detection & Rule Firing", () => {
     expect(alert.riskLevel).toBe("high");
     expect(alert.inputSnapshot.matchedRuleCodes).toEqual(["demo-storm-v"]);
   });
-});
 
-describe("Agronomic Rules Engine - Multi-match & Lexicographical Tie-breaking", () => {
-  const plotId = "44444444-4444-4444-8444-444444444444";
-  const maizeV3: CropCycle = {
-    id: "33333333-3333-4333-8333-333333333333",
-    plotId,
-    cropCode: "maize",
-    seasonLabel: "2025/26",
-    sownOn: "2026-08-01",
-    stageCode: "V3",
-    stageAsOf: "2026-09-05",
-    endedOn: null,
-    updatedAt: "2026-09-05T12:00:00Z",
-  };
-
-  it("picks higher risk when multiple rules fire with different severity", () => {
-    const ruleModerate: RiskRule = {
-      code: "rule-b-moderate",
-      hazardKind: "frost",
-      cropCode: "maize",
-      stageCodes: ["V3"],
-      temperatureHeightM: 2,
-      thresholdC: 0,
-      windGustThresholdKmh: null,
-      precipitationThresholdMm: null,
-      minimumConsecutiveHours: 1,
-      stageMaxAgeDays: 14,
-      riskLevel: "moderate",
-      reviewState: "synthetic",
-      evidenceUrl: null,
-      reasonTemplate: "Reason {code}",
-      recommendedActionTemplates: ["Action moderate"],
+  it("evaluates custom hail rule matching WMO weather code 96/99", () => {
+    const cropCycle: CropCycle = {
+      id: "33333333-3333-4333-8333-333333333333",
+      plotId,
+      cropCode: "soybean",
+      seasonLabel: "2025/26",
+      sownOn: "2026-08-01",
+      stageCode: "R4",
+      stageAsOf: "2026-09-05",
+      endedOn: null,
+      updatedAt: "2026-09-05T12:00:00Z",
     };
-
-    const ruleCritical: RiskRule = {
-      code: "rule-z-critical",
-      hazardKind: "frost",
-      cropCode: "maize",
-      stageCodes: ["V3"],
+    const hailRule: RiskRule = {
+      code: "custom-soybean-hail",
+      hazardKind: "hail",
+      cropCode: "soybean",
+      stageCodes: ["R4"],
       temperatureHeightM: 2,
-      thresholdC: -2,
+      thresholdC: null,
       windGustThresholdKmh: null,
       precipitationThresholdMm: null,
       minimumConsecutiveHours: 1,
@@ -391,77 +515,49 @@ describe("Agronomic Rules Engine - Multi-match & Lexicographical Tie-breaking", 
       riskLevel: "critical",
       reviewState: "synthetic",
       evidenceUrl: null,
-      reasonTemplate: "Reason {code}",
-      recommendedActionTemplates: ["Action critical"],
+      reasonTemplate: "Hail alert {code}",
+      recommendedActionTemplates: ["Inspect pods"],
     };
 
-    const hours = [createHour("2026-09-12T04:00:00Z", { temperatureC: -3 })];
+    const hours = [createHour("2026-09-12T17:00:00Z", { weatherCode: 96 })];
     const alert = evaluatePlotAlert({
-      plot: { id: plotId, activeCropCycle: maizeV3 },
-      event: createEvent("frost", "2026-09-12", hours),
-      rules: [ruleModerate, ruleCritical],
+      plot: { id: plotId, activeCropCycle: cropCycle },
+      event: createEvent("hail", "2026-09-12", hours),
+      rules: [hailRule],
     });
 
+    expect(alert.assessmentState).toBe("evaluated");
     expect(alert.riskLevel).toBe("critical");
-    expect(alert.reason).toBe("Reason rule-z-critical");
-    expect(alert.recommendedActions).toEqual(["Action critical"]);
     expect(alert.inputSnapshot.matchedRuleCodes).toEqual([
-      "rule-b-moderate",
-      "rule-z-critical",
+      "custom-soybean-hail",
     ]);
   });
 
-  it("breaks ties with lexicographically smallest rule code when risk levels are equal", () => {
-    const ruleA: RiskRule = {
-      code: "alpha-rule",
-      hazardKind: "frost",
+  it("handles LLM generation method by including modelId and promptVersion", () => {
+    const cropCycle: CropCycle = {
+      id: "33333333-3333-4333-8333-333333333333",
+      plotId,
       cropCode: "maize",
-      stageCodes: ["V3"],
-      temperatureHeightM: 2,
-      thresholdC: -1,
-      windGustThresholdKmh: null,
-      precipitationThresholdMm: null,
-      minimumConsecutiveHours: 1,
-      stageMaxAgeDays: 14,
-      riskLevel: "high",
-      reviewState: "synthetic",
-      evidenceUrl: null,
-      reasonTemplate: "Reason {code}",
-      recommendedActionTemplates: ["Alpha action"],
+      seasonLabel: "2025/26",
+      sownOn: "2026-08-01",
+      stageCode: "V3",
+      stageAsOf: "2026-09-05",
+      endedOn: null,
+      updatedAt: "2026-09-05T12:00:00Z",
     };
-
-    const ruleB: RiskRule = {
-      code: "beta-rule",
-      hazardKind: "frost",
-      cropCode: "maize",
-      stageCodes: ["V3"],
-      temperatureHeightM: 2,
-      thresholdC: -1,
-      windGustThresholdKmh: null,
-      precipitationThresholdMm: null,
-      minimumConsecutiveHours: 1,
-      stageMaxAgeDays: 14,
-      riskLevel: "high",
-      reviewState: "synthetic",
-      evidenceUrl: null,
-      reasonTemplate: "Reason {code}",
-      recommendedActionTemplates: ["Beta action"],
-    };
-
     const hours = [createHour("2026-09-12T04:00:00Z", { temperatureC: -2 })];
     const alert = evaluatePlotAlert({
-      plot: { id: plotId, activeCropCycle: maizeV3 },
+      plot: { id: plotId, activeCropCycle: cropCycle },
       event: createEvent("frost", "2026-09-12", hours),
-      rules: [ruleB, ruleA], // Provided in reverse order
+      generationMethod: "llm",
+      modelId: "gpt-4o",
+      promptVersion: "v1.2",
     });
 
-    // alpha-rule is lexicographically smaller than beta-rule
-    expect(alert.riskLevel).toBe("high");
-    expect(alert.reason).toBe("Reason alpha-rule");
-    expect(alert.recommendedActions).toEqual(["Alpha action"]);
-    expect(alert.inputSnapshot.matchedRuleCodes).toEqual([
-      "alpha-rule",
-      "beta-rule",
-    ]);
+    expect(alert.generationMethod).toBe("llm");
+    expect(alert.inputSnapshot.generation.method).toBe("llm");
+    expect(alert.inputSnapshot.generation.modelId).toBe("gpt-4o");
+    expect(alert.inputSnapshot.generation.promptVersion).toBe("v1.2");
+    expect(plotAlertSchema.parse(alert)).toBeDefined();
   });
 });

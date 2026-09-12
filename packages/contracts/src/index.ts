@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { eventKindSchema } from "./agronomic";
+import { eventKindSchema, riskRuleSchema } from "./agronomic";
 import { pointSchema, polygonSchema } from "./geometry";
 
 export const healthResponseSchema = z.object({
@@ -162,30 +162,51 @@ export const inputSnapshotSchema = z.object({
   cropCycle: cropCycleSchema.nullable(),
   event: eventSnapshotSchema,
   ruleSetVersion: z.string().min(1).max(100),
-  matchedRuleCodes: z.array(z.string().min(1).max(100)).max(20),
+  matchedRuleCodes: z
+    .array(z.string().min(1).max(100))
+    .max(20)
+    .refine(
+      (codes) => new Set(codes).size === codes.length,
+      "Matched rule codes must be unique",
+    ),
   generation: generationSchema,
 });
 export type InputSnapshot = z.infer<typeof inputSnapshotSchema>;
 
-export const plotAlertSchema = z.object({
-  id: z.uuid(),
-  plotId: z.uuid(),
-  eventId: z.uuid(),
-  assessmentState: z.enum([
-    "evaluated",
-    "insufficient_data",
-    "no_applicable_rule",
-  ]),
-  riskLevel: z.enum(["low", "moderate", "high", "critical"]).nullable(),
-  reason: z.string().min(1).max(1000),
-  recommendedActions: z.array(z.string()),
-  ruleVersion: z.string().min(1).max(100),
-  generatedAt: instantSchema,
-  validUntil: instantSchema,
-  generationMethod: z.enum(["template", "llm"]),
-  inputSnapshot: inputSnapshotSchema,
-  isStale: z.boolean(),
-});
+export const plotAlertSchema = z
+  .object({
+    id: z.uuid(),
+    plotId: z.uuid(),
+    eventId: z.uuid(),
+    assessmentState: z.enum([
+      "evaluated",
+      "insufficient_data",
+      "no_applicable_rule",
+    ]),
+    riskLevel: z.enum(["low", "moderate", "high", "critical"]).nullable(),
+    reason: z.string().min(1).max(1000),
+    recommendedActions: z.array(z.string().min(1).max(1000)).max(10),
+    ruleVersion: z.string().min(1).max(100),
+    generatedAt: instantSchema,
+    validUntil: instantSchema,
+    generationMethod: z.enum(["template", "llm"]),
+    inputSnapshot: inputSnapshotSchema,
+    isStale: z.boolean(),
+  })
+  .refine(
+    (alert) => Date.parse(alert.validUntil) > Date.parse(alert.generatedAt),
+    "validUntil must be after generatedAt",
+  )
+  .refine((alert) => {
+    if (alert.assessmentState === "evaluated") {
+      return (
+        alert.riskLevel !== null &&
+        alert.recommendedActions.length >= 1 &&
+        alert.recommendedActions.length <= 10
+      );
+    }
+    return alert.riskLevel === null && alert.recommendedActions.length === 0;
+  }, "evaluated requires riskLevel and 1-10 recommendedActions; other states require null riskLevel and empty recommendedActions");
 export type PlotAlert = z.infer<typeof plotAlertSchema>;
 
 export const farmSchema = z.object({
@@ -198,6 +219,7 @@ export const farmSchema = z.object({
   boundary: polygonSchema,
   declaredAreaHa: z.number().min(0.01).max(1_000_000),
   dataVersion: z.number().int().min(1),
+  customRules: z.array(riskRuleSchema).max(10).default([]),
 });
 export type Farm = z.infer<typeof farmSchema>;
 

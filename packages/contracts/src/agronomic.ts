@@ -41,7 +41,7 @@ export const riskRuleSchema = z
     hazardKind: eventKindSchema,
     cropCode: cropCodeSchema,
     stageCodes: z
-      .array(z.string().min(1).max(20))
+      .array(stageCodeSchema)
       .min(1)
       .max(8)
       .refine(
@@ -66,6 +66,14 @@ export const riskRuleSchema = z
       .min(1)
       .max(10),
   })
+  .refine((rule) => {
+    const maizeStages = new Set(["V3", "V6", "VT", "R1"]);
+    const soybeanStages = new Set(["V2", "R1", "R4", "R6"]);
+    if (rule.cropCode === "maize") {
+      return rule.stageCodes.every((s) => maizeStages.has(s));
+    }
+    return rule.stageCodes.every((s) => soybeanStages.has(s));
+  }, "RiskRule stages must belong to its crop")
   .refine(
     (rule) => rule.reviewState !== "approved" || rule.evidenceUrl !== null,
     "Approved rules require a non-null HTTPS evidenceUrl",
