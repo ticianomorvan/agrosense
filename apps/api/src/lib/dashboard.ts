@@ -12,6 +12,13 @@ type AlertRow = Database["public"]["Tables"]["plot_alerts"]["Row"];
 
 type DashboardClient = ReturnType<typeof createUserClient>;
 
+export class DashboardPayloadLimitError extends Error {
+  constructor() {
+    super("Dashboard exceeds its payload limits");
+    this.name = "DashboardPayloadLimitError";
+  }
+}
+
 function temporalState(
   asOf: string,
   startsAt: string,
@@ -227,6 +234,24 @@ export function projectDashboard(
       forecastValidUntil,
     },
   };
+  // Enforce aggregate bounds before the more expensive polygon topology checks.
+  const positions = [
+    response.farm.boundary,
+    ...response.plots.map((plot) => plot.boundary),
+  ].reduce(
+    (total, boundary) =>
+      total +
+      boundary.coordinates.reduce((count, ring) => count + ring.length, 0),
+    0,
+  );
+  if (
+    positions > 5000 ||
+    response.plots.length > 10 ||
+    response.events.length > 50 ||
+    response.events.some((event) => event.alerts.length > 10) ||
+    new TextEncoder().encode(JSON.stringify(response)).byteLength > 1024 * 1024
+  )
+    throw new DashboardPayloadLimitError();
   return dashboardResponseSchema.parse(response);
 }
 

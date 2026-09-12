@@ -322,3 +322,45 @@ describe("dashboard freshness", () => {
     ).toBe(status);
   });
 });
+
+describe("dashboard payload limits", () => {
+  it("rejects a response whose UTF-8 encoding exceeds one MiB", () => {
+    const oversized = {
+      ...alert,
+      assessment_state: "evaluated",
+      risk_level: "high" as const,
+      recommended_actions: ["é".repeat(512 * 1024)],
+    };
+    expect(() =>
+      projectDashboard(farm, [plot], [], [event], [oversized]),
+    ).toThrow("Dashboard exceeds its payload limits");
+  });
+
+  it.each([
+    [2500, false],
+    [2501, true],
+  ])(
+    "bounds aggregate polygon positions: %i per polygon",
+    (positions, exceeds) => {
+      const vertices = Array.from({ length: positions - 1 }, (_, index) => {
+        const angle = (2 * Math.PI * index) / (positions - 1);
+        return [Math.cos(angle), Math.sin(angle)];
+      });
+      const boundary = {
+        type: "Polygon",
+        coordinates: [[...vertices, vertices[0] ?? [1, 0]]],
+      };
+      const project = () =>
+        projectDashboard(
+          { ...farm, boundary_geojson: boundary },
+          [{ ...plot, boundary_geojson: boundary }],
+          [],
+          [],
+          [],
+        );
+      if (exceeds)
+        expect(project).toThrow("Dashboard exceeds its payload limits");
+      else expect(project).not.toThrow();
+    },
+  );
+});

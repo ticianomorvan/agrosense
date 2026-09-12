@@ -5,7 +5,7 @@ import {
 } from "@agrosense/contracts";
 import { Hono } from "hono";
 import { type ApiEnv, requireAuth } from "./lib/auth";
-import { loadDashboard } from "./lib/dashboard";
+import { DashboardPayloadLimitError, loadDashboard } from "./lib/dashboard";
 
 const app = new Hono<ApiEnv>();
 
@@ -18,6 +18,7 @@ app.get("/api/session", requireAuth, (c) =>
 );
 
 app.get("/api/farms/:farmId/dashboard", requireAuth, async (c) => {
+  c.header("Cache-Control", "private, no-store");
   if (Object.keys(c.req.query()).length > 0)
     return c.json(
       {
@@ -41,14 +42,14 @@ app.get("/api/farms/:farmId/dashboard", requireAuth, async (c) => {
         { error: { code: "NOT_FOUND", message: "Farm not found" } },
         404,
       );
-    c.header("Cache-Control", "private, no-store");
     return c.json(dashboard);
   } catch (error) {
-    console.error(error);
-    return c.json(
-      { error: { code: "INTERNAL_ERROR", message: "Internal server error" } },
-      500,
-    );
+    if (error instanceof DashboardPayloadLimitError)
+      return c.json(
+        { error: { code: "PAYLOAD_LIMIT_EXCEEDED", message: error.message } },
+        413,
+      );
+    throw error;
   }
 });
 
