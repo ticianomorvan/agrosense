@@ -1,4 +1,7 @@
 import {
+  authConfigResponseSchema,
+  createFarmRequestSchema,
+  createPlotRequestSchema,
   type HealthResponse,
   type SessionResponse,
   updateCropCycleRequestSchema,
@@ -11,9 +14,15 @@ import { requireAuth } from "./lib/auth";
 import { CropCycleError, updateCropCycle } from "./lib/crop-cycle";
 import { DashboardPayloadLimitError, loadDashboard } from "./lib/dashboard";
 import { jsonError } from "./lib/http";
+import {
+  createFarm,
+  createPlot,
+  listFarms,
+  OnboardingError,
+} from "./lib/onboarding";
 import { RefreshError, refreshFarm } from "./lib/refresh";
 import { readLimitedRequestBody } from "./lib/request-body";
-import { createServiceClient } from "./lib/supabase";
+import { createServiceClient, readSupabaseConfig } from "./lib/supabase";
 import { satelliteRoutes } from "./satellite/routes";
 import { whatsapp } from "./whatsapp";
 
@@ -27,9 +36,96 @@ app.get("/api/health", (c) =>
   c.json({ status: "ok", service: "agrosense-api" } satisfies HealthResponse),
 );
 
+app.get("/api/auth/config", (c) => {
+  c.header("Cache-Control", "no-store");
+  try {
+    const config = readSupabaseConfig(c.env);
+    return c.json(
+      authConfigResponseSchema.parse({
+        url: config.url,
+        publishableKey: config.publishableKey,
+      }),
+    );
+  } catch {
+    return jsonError(
+      c,
+      503,
+      "AUTH_UNAVAILABLE",
+      "Authentication is temporarily unavailable",
+    );
+  }
+});
+
 app.get("/api/session", requireAuth, (c) =>
   c.json({ userId: c.get("userId") } satisfies SessionResponse),
 );
+
+app.get("/api/farms", requireAuth, async (c) => {
+  c.header("Cache-Control", "private, no-store");
+  if (Object.keys(c.req.query()).length > 0)
+    return jsonError(c, 400, "BAD_REQUEST", "Query parameters are unsupported");
+  return c.json(await listFarms(c.get("supabase")));
+});
+
+app.post("/api/farms", requireAuth, async (c) => {
+  c.header("Cache-Control", "private, no-store");
+  if (Object.keys(c.req.query()).length > 0)
+    return jsonError(c, 400, "BAD_REQUEST", "Query parameters are unsupported");
+  const rawBody = await readLimitedRequestBody(c.req.raw, 16 * 1024);
+  if (rawBody === null)
+    return jsonError(c, 413, "PAYLOAD_TOO_LARGE", "Request body is too large");
+  let body: unknown;
+  try {
+    body = JSON.parse(rawBody);
+  } catch {
+    return jsonError(c, 400, "BAD_REQUEST", "Request body must be JSON");
+  }
+  const request = createFarmRequestSchema.safeParse(body);
+  if (!request.success)
+    return jsonError(c, 400, "BAD_REQUEST", "Invalid farm setup request");
+  try {
+    const created = await createFarm(
+      createServiceClient(c.env),
+      c.get("userId"),
+      request.data,
+    );
+    return c.json(created, 201);
+  } catch (error) {
+    return onboardingError(c, error);
+  }
+});
+
+app.post("/api/farms/:farmId/plots", requireAuth, async (c) => {
+  c.header("Cache-Control", "private, no-store");
+  if (Object.keys(c.req.query()).length > 0)
+    return jsonError(c, 400, "BAD_REQUEST", "Query parameters are unsupported");
+  const farmId = c.req.param("farmId");
+  if (!uuidSchema.safeParse(farmId).success)
+    return jsonError(c, 400, "BAD_REQUEST", "farmId must be a UUID");
+  const rawBody = await readLimitedRequestBody(c.req.raw, 16 * 1024);
+  if (rawBody === null)
+    return jsonError(c, 413, "PAYLOAD_TOO_LARGE", "Request body is too large");
+  let body: unknown;
+  try {
+    body = JSON.parse(rawBody);
+  } catch {
+    return jsonError(c, 400, "BAD_REQUEST", "Request body must be JSON");
+  }
+  const request = createPlotRequestSchema.safeParse(body);
+  if (!request.success)
+    return jsonError(c, 400, "BAD_REQUEST", "Invalid plot setup request");
+  try {
+    const created = await createPlot(
+      createServiceClient(c.env),
+      c.get("userId"),
+      farmId,
+      request.data,
+    );
+    return c.json(created, 201);
+  } catch (error) {
+    return onboardingError(c, error);
+  }
+});
 
 app.get("/api/farms/:farmId/dashboard", requireAuth, async (c) => {
   c.header("Cache-Control", "private, no-store");
@@ -183,3 +279,21 @@ app.onError((error, c) => {
 });
 
 export default app;
+
+function onboardingError(
+  context: Parameters<typeof jsonError>[0],
+  error: unknown,
+) {
+  if (!(error instanceof OnboardingError)) throw error;
+  switch (error.kind) {
+    case "not_found":
+      return jsonError(context, 404, "NOT_FOUND", error.message);
+    case "conflict":
+    case "duplicate":
+      return jsonError(context, 409, "VERSION_CONFLICT", error.message);
+    case "limit":
+      return jsonError(context, 413, "PAYLOAD_LIMIT_EXCEEDED", error.message);
+    case "invalid":
+      return jsonError(context, 422, "VALIDATION_ERROR", error.message);
+  }
+}
