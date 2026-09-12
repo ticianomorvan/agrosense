@@ -7,18 +7,7 @@ const nameSchema = z.string().trim().min(1).max(100);
 const localDateSchema = z.iso.date();
 const stageSchema = z.enum(["V3", "V6", "VT", "R1", "V2", "R4", "R6"]);
 
-export const authConfigResponseSchema = z.strictObject({
-  url: z.url().refine((value) => {
-    const url = new URL(value);
-    return (
-      url.protocol === "https:" ||
-      (url.protocol === "http:" &&
-        ["localhost", "127.0.0.1"].includes(url.hostname))
-    );
-  }, "Supabase must use HTTPS outside local development"),
-  publishableKey: z.string().min(1).max(500),
-});
-export type AuthConfigResponse = z.infer<typeof authConfigResponseSchema>;
+export { type AuthConfigResponse, authConfigResponseSchema } from "./auth";
 
 export const farmListItemSchema = z.strictObject({
   id: z.uuid(),

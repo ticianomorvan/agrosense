@@ -5,6 +5,7 @@ import { boundedFetch } from "../lib/http";
 import { createServiceClient, type SupabaseBindings } from "../lib/supabase";
 import {
   FARM_TIMEZONE,
+  type ForecastBindings,
   getPlotForecast,
   InvalidForecastError,
 } from "./forecast";
@@ -41,7 +42,7 @@ const failure = (code: string, message: string): ToolResult => ({
 });
 
 export function createAgentTools(options: {
-  env: SupabaseBindings;
+  env: SupabaseBindings & ForecastBindings;
   ownerId: string;
   fetcher?: typeof fetch;
   now?: () => Date;
@@ -181,6 +182,7 @@ export function createAgentTools(options: {
               plotName: plot.name,
               coordinates: plot.sample_point_geojson.coordinates,
               days,
+              apiKey: options.env.OPEN_METEO_API_KEY,
               signal,
               fetcher,
               now,

@@ -6,6 +6,7 @@ import {
   cropLabels,
   cropStages,
   type Farm,
+  polygonContainsPolygon,
 } from "@agrosense/contracts";
 import { type FormEvent, useId, useState } from "react";
 import { Button } from "../../components/ui/button";
@@ -15,8 +16,9 @@ import {
   NativeSelectOption,
 } from "../../components/ui/native-select";
 import { BoundaryFields } from "./BoundaryFields";
+import { BoundaryMap } from "./BoundaryMap";
 import { boundaryValues, farmExtent, todayInCordoba } from "./form-values";
-import { rectangleFromBounds } from "./geometry";
+import { type CoordinateBounds, rectangleFromBounds } from "./geometry";
 
 export function PlotSetup({
   farm,
@@ -37,6 +39,13 @@ export function PlotSetup({
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
   const [boundaryInvalid, setBoundaryInvalid] = useState(false);
+  const [manualCoordsOpen, setManualCoordsOpen] = useState(false);
+  const [coordinates, setCoordinates] = useState<CoordinateBounds>({
+    west: "",
+    south: "",
+    east: "",
+    north: "",
+  });
   const stages = crop ? cropStages[crop] : [];
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -46,7 +55,19 @@ export function PlotSetup({
     const rectangle = rectangleFromBounds(boundaryValues(form, "plot"));
     if (!rectangle.ok) {
       setBoundaryInvalid(true);
+      setManualCoordsOpen(true);
       setError(rectangle.message);
+      return;
+    }
+    if (
+      !polygonContainsPolygon(
+        farm.boundary.coordinates,
+        rectangle.boundary.coordinates,
+      )
+    ) {
+      setBoundaryInvalid(true);
+      setManualCoordsOpen(true);
+      setError("Plot boundary must remain inside the farm boundary.");
       return;
     }
     const stageAsOf = stage
@@ -226,19 +247,63 @@ export function PlotSetup({
             />
           </label>
         </div>
-        <div className="space-y-1 text-sm leading-normal text-muted-foreground tabular-nums">
-          <p>Plot bounds must remain inside the farm boundary.</p>
-          <p>
-            Farm extent reference — west {extent.west.toFixed(6)}, east{" "}
-            {extent.east.toFixed(6)}, south {extent.south.toFixed(6)}, north{" "}
-            {extent.north.toFixed(6)}.
-          </p>
+        <div className="space-y-4">
+          <div className="space-y-1">
+            <h2 className="text-base font-semibold text-foreground">
+              Plot boundary
+            </h2>
+            <p className="text-sm leading-normal text-muted-foreground">
+              The farm outline is dashed. Mark 4 points inside it to define a
+              rectangular plot. The preview shows the rectangle that will be
+              saved.
+            </p>
+          </div>
+          <BoundaryMap
+            farmBoundary={farm.boundary}
+            farmName={farm.name}
+            bounds={coordinates}
+            onBoundsChange={setCoordinates}
+            disabled={pending}
+          />
+          <div className="space-y-1 text-sm leading-normal text-muted-foreground tabular-nums">
+            <p>Plot bounds must remain inside the farm boundary.</p>
+            <p>
+              Farm extent reference — west {extent.west.toFixed(6)}, east{" "}
+              {extent.east.toFixed(6)}, south {extent.south.toFixed(6)}, north{" "}
+              {extent.north.toFixed(6)}.
+            </p>
+          </div>
+          <details
+            className="rounded-lg border border-border bg-card p-3"
+            open={manualCoordsOpen || boundaryInvalid}
+            onToggle={(e) => setManualCoordsOpen(e.currentTarget.open)}
+            onInvalidCapture={(event) => {
+              event.currentTarget.open = true;
+              setManualCoordsOpen(true);
+            }}
+          >
+            <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-2 rounded-lg text-sm font-semibold text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+              <span>Manual coordinate inputs (synced)</span>
+              <span className="text-xs text-muted-foreground font-normal">
+                {coordinates.west
+                  ? "Coordinates synced"
+                  : "Click to view or edit"}
+              </span>
+            </summary>
+            <div className="mt-3">
+              <BoundaryFields
+                prefix="plot"
+                values={coordinates}
+                onChange={(direction, value) =>
+                  setCoordinates((prev) => ({ ...prev, [direction]: value }))
+                }
+                errorId={boundaryInvalid && error ? `${id}-error` : undefined}
+                invalid={boundaryInvalid}
+                disabled={pending}
+              />
+            </div>
+          </details>
         </div>
-        <BoundaryFields
-          prefix="plot"
-          errorId={boundaryInvalid && error ? `${id}-error` : undefined}
-          invalid={boundaryInvalid}
-        />
         {error && (
           <p id={`${id}-error`} role="alert">
             {error}

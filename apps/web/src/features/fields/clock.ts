@@ -1,8 +1,6 @@
-import {
-  type DashboardResponse,
-  deadlineMilliseconds,
-} from "@agrosense/contracts";
+import type { DashboardResponse } from "@agrosense/contracts";
 import { useEffect, useState } from "react";
+import { deadlineMilliseconds } from "./assessment";
 
 // Subscribe to the response's deadlines, not a polling interval or a new TTL.
 export function subscribeToRiskClock(
@@ -13,8 +11,6 @@ export function subscribeToRiskClock(
     deadlineMilliseconds(event.endsAt),
     ...event.alerts.map((alert) => deadlineMilliseconds(alert.validUntil)),
   ]);
-  if (data.monitoring.forecastValidUntil)
-    deadlines.push(deadlineMilliseconds(data.monitoring.forecastValidUntil));
   let timer: ReturnType<typeof setTimeout> | undefined;
   function schedule() {
     clearTimeout(timer);
@@ -40,10 +36,9 @@ export function subscribeToRiskClock(
   };
 }
 
-export function useRiskClock(data: DashboardResponse | undefined) {
+export function useRiskClock(data: DashboardResponse) {
   const [now, setNow] = useState(Date.now);
   useEffect(() => {
-    if (!data) return;
     return subscribeToRiskClock(data, (time) => {
       // Moving the system clock backward must not revive expired advice.
       setNow((previous) => Math.max(previous, time));

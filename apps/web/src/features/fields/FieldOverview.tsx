@@ -2,7 +2,6 @@ import type { Farm, SatellitePreview } from "@agrosense/contracts";
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "cn";
 import {
-  Component,
   lazy,
   type ReactNode,
   Suspense,
@@ -11,6 +10,7 @@ import {
   useState,
 } from "react";
 import { DataState } from "../../components/data-state";
+import { ErrorBoundary } from "../../components/error-boundary";
 import { Button } from "../../components/ui/button";
 import { EventTimeline } from "../events/EventTimeline";
 import { SatelliteControls } from "../satellite/SatelliteControls";
@@ -32,11 +32,25 @@ export function FieldOverview({
   const query = useQuery(dashboardOptions(source));
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [phoneMap, setPhoneMap] = useState(false);
+  const [mapActivated, setMapActivated] = useState(
+    () => window.matchMedia("(min-width: 768px)").matches,
+  );
   const [satellite, setSatellite] = useState<SatellitePreview>();
   const select = useCallback((id: string) => {
     setSelectedId(id);
     setPhoneMap(false);
   }, []);
+
+  useEffect(() => {
+    if (mapActivated) return;
+    const desktop = window.matchMedia("(min-width: 768px)");
+    const activate = () => {
+      if (desktop.matches) setMapActivated(true);
+    };
+    activate();
+    desktop.addEventListener("change", activate);
+    return () => desktop.removeEventListener("change", activate);
+  }, [mapActivated]);
 
   useEffect(() => {
     const plots = query.data?.plots ?? [];
@@ -123,7 +137,10 @@ export function FieldOverview({
           <div className="md:hidden">
             <Button
               variant="outline"
-              onClick={() => setPhoneMap((current) => !current)}
+              onClick={() => {
+                setMapActivated(true);
+                setPhoneMap((current) => !current);
+              }}
             >
               {phoneMap ? "Back to plot overview" : "View satellite map"}
             </Button>
@@ -150,30 +167,44 @@ export function FieldOverview({
                   True-color context for the selected farm and plot.
                 </p>
               </div>
-              <MapBoundary>
-                <Suspense
-                  fallback={
-                    <DataState
-                      className="min-h-96 md:min-h-144"
-                      title="Loading the farm map…"
-                      pending
-                    />
-                  }
-                >
-                  <FieldMap
-                    data={data}
-                    plots={data.plots}
-                    selectedId={selected.id}
-                    onSelect={select}
-                    satellite={satellite}
+              {mapActivated && (
+                <>
+                  <ErrorBoundary
+                    fallback={
+                      <DataState
+                        className="min-h-96 md:min-h-144"
+                        title="Map unavailable"
+                      >
+                        Use the plot selector to review each plot. Reload the
+                        page to try loading the map again.
+                      </DataState>
+                    }
+                  >
+                    <Suspense
+                      fallback={
+                        <DataState
+                          className="min-h-96 md:min-h-144"
+                          title="Loading the farm map…"
+                          pending
+                        />
+                      }
+                    >
+                      <FieldMap
+                        data={data}
+                        plots={data.plots}
+                        selectedId={selected.id}
+                        onSelect={select}
+                        satellite={satellite}
+                      />
+                    </Suspense>
+                  </ErrorBoundary>
+                  <SatelliteControls
+                    key={`${source.scope}:${source.farmId}`}
+                    source={source}
+                    onImage={setSatellite}
                   />
-                </Suspense>
-              </MapBoundary>
-              <SatelliteControls
-                key={`${source.scope}:${source.farmId}`}
-                source={source}
-                onImage={setSatellite}
-              />
+                </>
+              )}
             </section>
             <div
               className={cn(
@@ -213,24 +244,4 @@ function OverviewHeader({
       {toolbar}
     </div>
   );
-}
-
-class MapBoundary extends Component<
-  { children: ReactNode },
-  { failed: boolean }
-> {
-  state = { failed: false };
-  static getDerivedStateFromError() {
-    return { failed: true };
-  }
-  render() {
-    return this.state.failed ? (
-      <DataState className="min-h-96 md:min-h-144" title="Map unavailable">
-        Use the plot selector to review each plot. Reload the page to try
-        loading the map again.
-      </DataState>
-    ) : (
-      this.props.children
-    );
-  }
 }

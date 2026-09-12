@@ -7,7 +7,7 @@
     "node": ">=24 <25"
   },
   "scripts": {
-    "dev": "pnpm --parallel --filter './apps/*' dev",
+    "dev": "pnpm --parallel --filter @agrosense/api --filter @agrosense/web dev",
     "build": "pnpm --filter @agrosense/web build && pnpm --filter @agrosense/api build",
     "preview": "pnpm build && pnpm --parallel --filter './apps/*' preview",
     "typecheck": "pnpm -r typecheck",
@@ -15,10 +15,10 @@
     "format": "biome check --write .",
     "test": "pnpm --filter @agrosense/api test && pnpm --filter @agrosense/web test && pnpm db:test",
     "check": "pnpm typecheck && pnpm lint && pnpm test && pnpm build && pnpm --filter @agrosense/api test:runtime",
-    "predeploy": "pnpm --filter @agrosense/web validate:deploy",
-    "deploy": "pnpm deploy:api && pnpm deploy:web",
-    "deploy:api": "pnpm --filter @agrosense/api deploy",
-    "deploy:web": "pnpm --filter @agrosense/web deploy",
+    "deploy:check": "pnpm --filter @agrosense/web validate:deploy && pnpm check && pnpm --filter @agrosense/web exec wrangler deploy --dry-run",
+    "deploy": "pnpm deploy:check && pnpm deploy:api && pnpm --filter @agrosense/web exec wrangler deploy",
+    "deploy:api": "pnpm --filter @agrosense/api run deploy",
+    "deploy:web": "pnpm --filter @agrosense/web run deploy",
     "db:test": "node --test supabase/tests/*.test.mjs",
     "db:start": "supabase start",
     "db:stop": "supabase stop",

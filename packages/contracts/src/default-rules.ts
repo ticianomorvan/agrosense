@@ -123,5 +123,3 @@ export const DEMO_V1_RULESET: RuleSet = {
   version: "demo-v1",
   rules: DEMO_V1_RULES,
 };
-
-export const DEFAULT_AGRONOMIC_RULES = DEMO_V1_RULES;

@@ -10,7 +10,6 @@ export type EventKind = z.infer<typeof eventKindSchema>;
 
 export const riskLevelSchema = z.enum(["low", "moderate", "high", "critical"]);
 export type RiskLevel = z.infer<typeof riskLevelSchema>;
-export type SeverityLevel = RiskLevel;
 
 export const assessmentStateSchema = z.enum([
   "evaluated",
@@ -80,7 +79,6 @@ export const riskRuleSchema = z
   );
 
 export type RiskRule = z.infer<typeof riskRuleSchema>;
-export type AgronomicRule = RiskRule;
 
 export const ruleSetSchema = z.strictObject({
   version: z.string().min(1).max(100),

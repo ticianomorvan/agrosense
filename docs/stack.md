@@ -16,7 +16,7 @@ API/frontend/database tests, production builds and browser checks.
 | Frontend | React + Vite | Client-rendered SPA with fast local development |
 | API | Hono + Wrangler | Web-standard handlers running on Cloudflare Workers |
 | Contracts | Shared Zod schemas | Runtime response validation and inferred TypeScript types |
-| Hosting | Pages on Workers Static Assets + API Worker | Independent SPA/API deploys with an exact-origin CORS boundary |
+| Hosting | Workers Static Assets + API Worker | Independent SPA/API deploys with an exact-origin CORS boundary |
 | Quality | Biome + Vitest | Formatting, linting, and API/frontend tests |
 | Agent | Vercel AI SDK + official OpenRouter provider | Native Zod tools and bounded `ToolLoopAgent` execution |
 | Persistence | Supabase Postgres + Auth | Typed Data API client, JWT verification, and owner-scoped RLS |
@@ -30,15 +30,17 @@ See the [style guide](style-guide.md).
 The SPA exposes three browser routes: `/` for the requested minimal landing
 page, `/sign-in` for Supabase email/password authentication, and protected
 `/app` for onboarding and the field workspace. History navigation stays
-client-side; unknown paths return to the landing page.
+client-side; unknown paths return to the landing page. A cold landing page defers
+authentication and workspace code until sign-in or protected navigation. Once
+initialized, the auth subscription remains active across navigation.
 
 ## Layout and implementation order
 
 1. `packages/contracts`: browser-safe request/response schemas.
 2. `apps/api`: Hono routes under `/api`; JSON errors for unknown API routes.
 3. `apps/web`: React SPA using relative `/api` requests behind Vite's local proxy
-   and `VITE_API_BASE_URL` in production. The production build uses the current
-   Pages platform on Workers Static Assets.
+   and `VITE_API_BASE_URL` in production. The production build uses Workers
+   Static Assets.
 
 The API entrypoint exports the Hono app and Durable Object class. Wrangler
 minifies the production Worker bundle. The Worker allows CORS for the exact
@@ -57,7 +59,10 @@ From the repository root: `pnpm install`, `pnpm dev`, `pnpm typecheck`,
 `pnpm lint`, `pnpm test`, and `pnpm build`. `pnpm check` runs all quality checks.
 `pnpm preview` runs the built SPA at port 4173 and proxies its API calls to the
 local Worker at port 8787. Deployment is split into `pnpm deploy:api` and
-`pnpm deploy:web`; the combined `pnpm deploy` requires `VITE_API_BASE_URL`.
+`pnpm deploy:web`; the combined `pnpm run deploy` requires `VITE_API_BASE_URL`.
+`pnpm deploy:check` validates that origin, runs the full check suite, and dry-runs
+both Worker packages. The combined release completes this preflight before its
+first upload, then publishes the API and the already-built frontend.
 
 API tests live beside route source. Verify real Worker routing with Wrangler,
 including unknown `/api` paths and client-side navigation paths. Add behavior
@@ -119,7 +124,7 @@ reconciliation. All automation mutation RPCs are service-only.
 `WorkspacePage` first loads the authenticated owner's farms. An empty account
 receives a farm form followed by a plot/crop-cycle form; established accounts can
 switch farms or add another farm/plot. The web form creates bounded rectangular
-GeoJSON from explicit decimal-degree inputs and the Worker revalidates every
+GeoJSON from map points or explicit decimal-degree inputs and the Worker revalidates every
 geometry and relationship before its owner-safe RPC commits. There is no browser
 signup or post-creation boundary editor.
 
@@ -129,18 +134,21 @@ available. Remount the overview on identity/farm changes and clear the QueryClie
 on sign-out. Tokens stay in memory; requests target only the validated production
 API origin (or the local relative proxy), remain cancellable, and are validated
 with shared Zod schemas. Failed requests never substitute sample data.
-Risk and forecast freshness update at response deadlines and tab resume without a
-network fetch; sub-millisecond PostgreSQL deadlines are not rounded down.
+The API derives risk and forecast freshness at full PostgreSQL timestamp precision.
+The current web workspace shows plot facts, the selected plot assessment, and the
+dated weather-event timeline; it does not render the retired risk-priority views.
 Shared controls use shadcn Button, Badge, NativeSelect and Input with AgroSense
 semantic tokens and status variants. Application layouts use Tailwind utilities;
 custom CSS is limited to tokens, global defaults and Leaflet-generated markup.
 On desktop, the selected plot's land/crop facts, the largest Sentinel-2 map, and
 its newest-first weather-event timeline form three columns. At narrow widths the
-facts and event record lead and the map becomes an explicit alternate view. The
-selected plot’s current recommendations and potential-loss estimate appear in a
-neutral assessment panel above the timeline, without a red alert border.
+facts and event record lead and the map becomes an explicit alternate view.
+Phones defer Leaflet and the initial satellite request until that view opens;
+subsequent toggles preserve imagery dates, plot selection and loaded map state.
+The selected plot's current recommendations and potential-loss estimate appear
+in a neutral assessment panel above the timeline, without a red alert border.
 Expired assessments show an unavailable state. Notifications also use WhatsApp.
-Map rendering loads lazily and the initial imagery request uses the previous 30-day UTC window. Add primitives with
+The initial imagery request uses the previous 30-day UTC window. Add primitives with
 `pnpm dlx shadcn@latest add` from `apps/web`; the CLI and unused animation styles
 are not application dependencies.
 

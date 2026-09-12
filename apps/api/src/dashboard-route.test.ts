@@ -56,3 +56,16 @@ it("maps refresh cooldowns and rejects unsupported input", async () => {
     },
   });
 });
+
+it("rejects an oversized refresh body before admitting provider work", async () => {
+  const refreshFarm = vi.spyOn(refresh, "refreshFarm");
+  const response = await app.request(
+    "/api/farms/11111111-1111-4111-8111-111111111111/refresh",
+    { method: "POST", body: " ".repeat(16 * 1024 + 1) },
+  );
+  expect(response.status).toBe(413);
+  expect(await response.json()).toMatchObject({
+    error: { code: "PAYLOAD_TOO_LARGE" },
+  });
+  expect(refreshFarm).not.toHaveBeenCalled();
+});

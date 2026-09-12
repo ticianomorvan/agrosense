@@ -1,13 +1,17 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, expect, it, vi } from "vitest";
-import { createDemoDashboard } from "./demo-source";
+import { createAssessmentDashboard } from "./__fixtures__/assessment";
 import { FieldOverview } from "./FieldOverview";
 
 const now = new Date("2026-09-12T12:00:00Z");
-afterEach(() => vi.useRealTimers());
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+});
 
-function renderWorkspace(data = createDemoDashboard(now)) {
+function renderWorkspace(data = createAssessmentDashboard(now)) {
+  vi.stubGlobal("window", { matchMedia: () => ({ matches: false }) });
   vi.useFakeTimers();
   vi.setSystemTime(now);
   const client = new QueryClient();
@@ -35,7 +39,7 @@ it("shows the selected plot's recommendations and potential loss in the workspac
 });
 
 it("changes the assessment with the selected plot", () => {
-  const data = createDemoDashboard(now);
+  const data = createAssessmentDashboard(now);
   data.plots = [...data.plots.slice(1), ...data.plots.slice(0, 1)];
   const html = renderWorkspace(data);
   expect(html).toContain("Monitor damage to flowers");
@@ -44,7 +48,7 @@ it("changes the assessment with the selected plot", () => {
 });
 
 it("does not present expired recommendations or loss estimates as current", () => {
-  const data = createDemoDashboard(now);
+  const data = createAssessmentDashboard(now);
   for (const event of data.events)
     for (const alert of event.alerts) {
       alert.validUntil = now.toISOString();
@@ -56,7 +60,7 @@ it("does not present expired recommendations or loss estimates as current", () =
 });
 
 it("keeps recommendations when the economic estimate is unavailable", () => {
-  const data = createDemoDashboard(now);
+  const data = createAssessmentDashboard(now);
   for (const event of data.events)
     for (const alert of event.alerts) {
       alert.lossEstimate = null;

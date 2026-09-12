@@ -1,6 +1,7 @@
 import type { DashboardResponse } from "@agrosense/contracts";
+import { assessmentSource, plotStatus } from "./assessment";
 import { useRiskClock } from "./clock";
-import { assessmentSource, formatInstant, plotStatus } from "./presentation";
+import { formatInstant } from "./presentation";
 
 export function PlotAssessment({
   data,

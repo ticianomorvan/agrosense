@@ -1,19 +1,20 @@
-import { DEMO_V1_RULES } from "./default-rules";
 import {
-  type CropCycle,
   type EventKind,
-  type EventSnapshot,
-  estimateEconomicImpact,
   eventKindSchema,
-  type ForecastHour,
-  instantSchema,
-  type PlotAlert,
-  plotAlertSchema,
   type RiskLevel,
   type RiskRule,
+} from "./agronomic";
+import {
+  type EventSnapshot,
+  type ForecastHour,
+  type PlotAlert,
+  plotAlertSchema,
   sourceSchema,
-} from "./index";
-import { addMinutes, compareInstants } from "./time";
+} from "./dashboard";
+import { DEMO_V1_RULES } from "./default-rules";
+import { estimateEconomicImpact } from "./economic-impact";
+import type { CropCycle } from "./land";
+import { addMinutes, compareInstants, instantSchema } from "./time";
 
 export interface EvaluatePlotAlertInput {
   plot: {
@@ -58,10 +59,7 @@ export class ExpiredForecastEvidenceError extends Error {
   }
 }
 
-/**
- * Resolves effective rule set by merging system defaults with user-defined custom rules (RuleProvider Pattern).
- * Custom rules with an identical `code` override default rules.
- */
+/** Custom rules with an identical code override the corresponding system rule. */
 export function resolveRules(
   systemRules: RiskRule[] = DEMO_V1_RULES,
   customRules: RiskRule[] = [],
@@ -83,7 +81,7 @@ export function resolveRules(
  * Checks whether an array of hourly forecasts satisfies the rule's threshold for the required consecutive hours.
  * Validates temporal continuity (each consecutive interval must be exactly 1 hour apart).
  */
-export function ruleFires(rule: RiskRule, hours: ForecastHour[]): boolean {
+function ruleFires(rule: RiskRule, hours: ForecastHour[]): boolean {
   const requiredConsecutive = rule.minimumConsecutiveHours;
   let consecutive = 0;
 
@@ -140,10 +138,7 @@ export function ruleFires(rule: RiskRule, hours: ForecastHour[]): boolean {
   return false;
 }
 
-/**
- * Pure deterministic agronomic alert evaluation engine per plot and event.
- * Complies explicitly with docs/domain-model.md lines 310-344.
- */
+/** Deterministic agronomic evaluation of one plot and weather event. */
 export function evaluatePlotAlert(input: EvaluatePlotAlertInput): PlotAlert {
   const { plot, event, rules } = input;
   const ruleSetVersion = input.ruleSetVersion ?? "demo-v1";
@@ -239,7 +234,7 @@ export function evaluatePlotAlert(input: EvaluatePlotAlertInput): PlotAlert {
   const isDemo = event.evidence.source.isDemo;
   const effectiveRules = resolveRules(rules ?? DEMO_V1_RULES);
 
-  // Live evaluation permits approved rules with evidence URLs only (lines 339-340)
+  // Synthetic rules must never determine live crop risk.
   const candidateRules = effectiveRules.filter((r) => {
     if (!isDemo) {
       return r.reviewState === "approved" && r.evidenceUrl !== null;
@@ -331,7 +326,6 @@ export function evaluatePlotAlert(input: EvaluatePlotAlertInput): PlotAlert {
     (eventLocalDateMs - stageAsOfMs) / (24 * 60 * 60 * 1000),
   );
 
-  // Filter rules whose individual stageMaxAgeDays is not exceeded (lines 311-313)
   const freshRules = matchingCropStageRules.filter(
     (r) => ageDays <= r.stageMaxAgeDays,
   );
@@ -354,18 +348,6 @@ export function evaluatePlotAlert(input: EvaluatePlotAlertInput): PlotAlert {
     ruleFires(r, event.evidence.hours),
   );
 
-  // State precedence 4: No firing rule -> no_applicable_rule
-  if (firingRules.length === 0) {
-    return createAlert(
-      "no_applicable_rule",
-      null,
-      "Weather conditions did not reach agronomic rule thresholds.",
-      [],
-      [],
-    );
-  }
-
-  // State precedence 5: Evaluated!
   // Sort firing rules: greatest risk first, then lexicographically smallest rule code for ties
   firingRules.sort((a, b) => {
     const riskDiff = RISK_ORDER[b.riskLevel] - RISK_ORDER[a.riskLevel];
@@ -380,7 +362,7 @@ export function evaluatePlotAlert(input: EvaluatePlotAlertInput): PlotAlert {
     return createAlert(
       "no_applicable_rule",
       null,
-      "No applicable agronomic rule found.",
+      "Weather conditions did not reach agronomic rule thresholds.",
       [],
       [],
     );

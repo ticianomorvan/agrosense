@@ -117,8 +117,10 @@ export function WorkspacePage({ session }: { session: Session }) {
   const selectedFarm =
     farms.find(({ id }) => id === selectedFarmId) ?? farms[0];
   if (!selectedFarm) return null;
-  const liveSource = createLiveSource(ownerId, selectedFarm.id, async () =>
-    Promise.resolve(accessToken),
+  const liveSource = createLiveSource(
+    ownerId,
+    selectedFarm.id,
+    async () => accessToken,
   );
   const toolbar = (
     <div className="flex w-full flex-wrap items-end gap-3 lg:w-auto lg:justify-end">

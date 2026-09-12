@@ -102,7 +102,7 @@ export async function importDemoSeed(
     at: new Date(
       Date.parse(`${forecastDate}T00:00:00Z`) + index * 3600000,
     ).toISOString(),
-    temperatureC: index === 0 ? -2 : 8,
+    temperatureC: index === 0 ? -2 : index === 12 || index === 13 ? 36 : 8,
     windGustKmh: null,
     precipitationMm: null,
     precipitationProbability: null,
@@ -131,7 +131,7 @@ export async function importDemoSeed(
       updatedAt: nowIso,
     }),
   );
-  const [event] = buildPublication({
+  const events = buildPublication({
     forecasts,
     plotAreasHa: new Map(
       seed.plots.map((plot, index) => [
@@ -143,8 +143,7 @@ export async function importDemoSeed(
     now: nowIso,
     detect: detectThreatEvents,
   });
-  if (!event) throw new Error("Demo forecast has no event");
-  const { alerts, ...eventPayload } = event;
+  if (events.length === 0) throw new Error("Demo forecast has no event");
   const payload = {
     farm: {
       name: seed.farm.name,
@@ -154,8 +153,7 @@ export async function importDemoSeed(
       declaredAreaHa: seed.farm.declaredAreaHa,
     },
     plots: seed.plots.map((plot, index) => ({ ...plot, id: plotIds[index] })),
-    event: eventPayload,
-    alerts,
+    events: events.map(({ alerts, ...event }) => ({ ...event, alerts })),
   };
   const { data, error } = await serviceClient.rpc("import_demo_seed", {
     p_owner_id: z.uuid().parse(ownerId),
@@ -163,8 +161,15 @@ export async function importDemoSeed(
       payload as unknown as Database["public"]["Functions"]["import_demo_seed"]["Args"]["p_payload"],
   });
   if (error) throw error;
+  const result = z
+    .strictObject({
+      farmId: z.uuid(),
+      eventIds: z.array(z.uuid()).min(1),
+    })
+    .parse(data);
   return {
-    ...z.strictObject({ farmId: z.uuid(), eventId: z.uuid() }).parse(data),
+    ...result,
+    eventId: result.eventIds[0],
     plotIds,
   };
 }

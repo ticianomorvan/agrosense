@@ -5,6 +5,7 @@
       "**",
       "!**/dist",
       "!**/.wrangler",
+      "!**/.playwright-mcp",
       "!.worktrees",
       "!supabase/.temp"
     ]

@@ -1,5 +1,8 @@
-import type { DashboardResponse } from "@agrosense/contracts";
-import { dashboardResponseSchema } from "@agrosense/contracts";
+import {
+  addMinutes,
+  type DashboardResponse,
+  dashboardResponseSchema,
+} from "@agrosense/contracts";
 import type { Database } from "./database.types";
 import { iso, json } from "./database-utils";
 import type { createUserClient } from "./supabase";
@@ -137,25 +140,19 @@ export function projectDashboard(
   const forecast = farm.forecast_summary
     ? json<DashboardResponse["forecast"]>(farm.forecast_summary)
     : null;
-  const forecastValidUntil = forecast
-    ? (forecast.plots
-        .map((plot) => {
-          const retrievedDeadline = new Date(plot.source.retrievedAt);
-          retrievedDeadline.setMinutes(retrievedDeadline.getMinutes() + 60);
-          const issuedDeadline = plot.source.issuedAt
-            ? new Date(plot.source.issuedAt)
-            : null;
-          if (issuedDeadline)
-            issuedDeadline.setHours(issuedDeadline.getHours() + 6);
-          return iso(
-            (issuedDeadline && issuedDeadline < retrievedDeadline
-              ? issuedDeadline
-              : retrievedDeadline
-            ).toISOString(),
-          );
-        })
-        .sort()[0] ?? null)
-    : null;
+  let forecastValidUntil: string | null = null;
+  for (const { source } of forecast?.plots ?? []) {
+    const retrievedDeadline = iso(addMinutes(source.retrievedAt, 60));
+    const issuedDeadline = source.issuedAt
+      ? iso(addMinutes(source.issuedAt, 360))
+      : null;
+    const deadline =
+      issuedDeadline && issuedDeadline < retrievedDeadline
+        ? issuedDeadline
+        : retrievedDeadline;
+    if (forecastValidUntil === null || deadline < forecastValidUntil)
+      forecastValidUntil = deadline;
+  }
   const hasStaleActiveAlert = projectedEvents.some(
     (event) =>
       event.status === "active" &&

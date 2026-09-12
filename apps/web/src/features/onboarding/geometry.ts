@@ -60,3 +60,17 @@ function number(value: string): number | null {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
 }
+
+export function boundsFromPoints(
+  points: ReadonlyArray<{ lat: number; lng: number }>,
+): CoordinateBounds | null {
+  if (points.length < 4) return null;
+  const lats = points.map((p) => p.lat);
+  const lngs = points.map((p) => p.lng);
+  return {
+    west: Math.min(...lngs).toFixed(6),
+    east: Math.max(...lngs).toFixed(6),
+    south: Math.min(...lats).toFixed(6),
+    north: Math.max(...lats).toFixed(6),
+  };
+}

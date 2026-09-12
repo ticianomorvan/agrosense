@@ -16,12 +16,10 @@ export type AutomationBindings = {
   OPEN_METEO_API_KEY?: string;
 };
 
-const notificationConfigSchema = kapsoSendConfigSchema;
-
 export function readNotificationConfig(
   env: AutomationBindings & KapsoBindings,
 ) {
-  return notificationConfigSchema.parse(env);
+  return kapsoSendConfigSchema.parse(env);
 }
 
 // Postgres JSON timestamps use offsets; normalize at the API boundary as needed.
@@ -49,12 +47,6 @@ export const notificationJobSchema = z.strictObject({
 });
 export type NotificationJob = z.infer<typeof notificationJobSchema>;
 
-const risks = {
-  low: "low",
-  moderate: "moderate",
-  high: "high",
-  critical: "critical",
-};
 const dateFormatter = new Intl.DateTimeFormat("en-US", {
   timeZone: "America/Argentina/Cordoba",
   day: "2-digit",
@@ -68,38 +60,28 @@ function compact(text: string, limit: number) {
   return clean.length > limit ? `${clean.slice(0, limit - 1)}…` : clean;
 }
 
-export function notificationContent(job: NotificationJob) {
+export function formatNotificationText(job: NotificationJob): string {
   const { payload } = job;
   const window = `${dateFormatter.format(new Date(payload.startsAt))}–${dateFormatter.format(new Date(payload.endsAt))} (Córdoba).`;
   const details =
     job.kind === "withdrawal"
       ? `Forecast withdrawn due to newer data. ${window} Check current conditions in AgroSense.`
       : payload.assessmentState === "evaluated" && payload.riskLevel !== null
-        ? `${job.kind === "escalation" ? "Increased risk. " : ""}Crop risk: ${risks[payload.riskLevel]}. ${window} ${compact(payload.reason, 180)} ${compact(payload.recommendedActions[0] ?? "Check AgroSense.", 140)}`
+        ? `${job.kind === "escalation" ? "Increased risk. " : ""}Crop risk: ${payload.riskLevel}. ${window} ${compact(payload.reason, 180)} ${compact(payload.recommendedActions[0] ?? "Check AgroSense.", 140)}`
         : `Weather alert. ${window} Crop risk unavailable: no applicable agronomic assessment with current data. Check AgroSense.`;
-  return {
-    farm: compact(payload.farmName, 100),
-    plot: compact(payload.plotName, 100),
-    hazard: compact(payload.title, 160),
-    details: compact(details, 450),
-  };
-}
-
-export function formatNotificationText(job: NotificationJob): string {
-  const params = notificationContent(job);
   return [
-    `*AgroSense: Weather alert*`,
-    `Farm: ${params.farm}`,
-    `Field: ${params.plot}`,
-    `Forecast event: ${params.hazard}`,
-    `Details: ${params.details}`,
-    ``,
-    `Check AgroSense to review the forecast and field assessment.`,
+    "*AgroSense: Weather alert*",
+    `Farm: ${compact(payload.farmName, 100)}`,
+    `Field: ${compact(payload.plotName, 100)}`,
+    `Forecast event: ${compact(payload.title, 160)}`,
+    `Details: ${compact(details, 450)}`,
+    "",
+    "Check AgroSense to review the forecast and field assessment.",
   ].join("\n");
 }
 
 export function sendNotification(
-  config: z.infer<typeof notificationConfigSchema>,
+  config: z.infer<typeof kapsoSendConfigSchema>,
   job: NotificationJob,
   fetcher: typeof fetch = fetch,
   signal?: AbortSignal,

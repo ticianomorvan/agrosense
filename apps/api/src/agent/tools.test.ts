@@ -41,7 +41,11 @@ const plot = {
   },
 };
 
-function setup(data: unknown = [plot], weather: unknown = forecast) {
+function setup(
+  data: unknown = [plot],
+  weather: unknown = forecast,
+  apiKey?: string,
+) {
   const fetcher = vi.fn<typeof fetch>(async (input, init) => {
     const url = new URL(String(input));
     if (url.origin === env.SUPABASE_URL) {
@@ -50,11 +54,14 @@ function setup(data: unknown = [plot], weather: unknown = forecast) {
       );
       return Response.json(data);
     }
-    expect(url.origin).toBe("https://api.open-meteo.com");
+    expect(url.origin).toBe(
+      `https://${apiKey ? "customer-api" : "api"}.open-meteo.com`,
+    );
     expect(url.pathname).toBe("/v1/forecast");
     return Response.json(weather);
   });
-  const registry = createAgentTools({ env, ownerId, fetcher, now });
+  const toolEnv = { ...env, OPEN_METEO_API_KEY: apiKey };
+  const registry = createAgentTools({ env: toolEnv, ownerId, fetcher, now });
   return { fetcher, tools: directTools(registry), registry };
 }
 function directTools(registry: AgentTools) {
@@ -192,6 +199,35 @@ describe("agent tools", () => {
     expect(url.searchParams.get("longitude")).toBe("-64.2");
     expect(url.searchParams.get("forecast_days")).toBe("3");
     expect(url.searchParams.get("timezone")).toBe("America/Argentina/Cordoba");
+    expect(url.searchParams.has("apikey")).toBe(false);
+  });
+
+  it("uses the configured customer weather endpoint without exposing its key to the model", async () => {
+    const apiKey = "test-commercial-weather-key";
+    const { tools, fetcher } = setup([plot], forecast, apiKey);
+    const result = await tools.execute(
+      "get_forecast",
+      JSON.stringify({ plotId, days: 3 }),
+      signal(),
+    );
+    expect(result.ok).toBe(true);
+    const url = new URL(String(fetcher.mock.calls[1]?.[0]));
+    expect(url.searchParams.get("apikey")).toBe(apiKey);
+    expect(JSON.stringify(result)).not.toContain(apiKey);
+
+    fetcher
+      .mockResolvedValueOnce(Response.json([plot]))
+      .mockRejectedValueOnce(new Error(`Request failed: ${url.href}`));
+    const unavailable = await tools.execute(
+      "get_forecast",
+      JSON.stringify({ plotId, days: 3 }),
+      signal(),
+    );
+    expect(unavailable).toMatchObject({
+      ok: false,
+      error: { code: "TOOL_UNAVAILABLE" },
+    });
+    expect(JSON.stringify(unavailable)).not.toContain(apiKey);
   });
 
   it("does not call a weather provider for an inaccessible or absent plot", async () => {

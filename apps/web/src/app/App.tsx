@@ -1,10 +1,10 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useState } from "react";
+import { ErrorBoundary } from "../components/error-boundary";
 import { Button, buttonVariants } from "../components/ui/button";
 import { SignInPage } from "../features/auth/SignInPage";
 import { useAuth } from "../features/auth/use-auth";
 import { LandingPage } from "../pages/LandingPage";
-import { WorkspacePage } from "../pages/WorkspacePage";
 import {
   type AppRoute,
   routeFromPath,
@@ -12,10 +12,16 @@ import {
   workspaceNeedsSignIn,
 } from "./routing";
 
+const WorkspacePage = lazy(() =>
+  import("../pages/WorkspacePage").then((module) => ({
+    default: module.WorkspacePage,
+  })),
+);
+
 export function App() {
   const queryClient = useQueryClient();
-  const auth = useAuth();
   const [route, setRoute] = useState(() => routeFromPath(location.pathname));
+  const auth = useAuth(route !== "landing");
   const navigate = useCallback((next: AppRoute, replace = false) => {
     const path = routePaths[next];
     if (location.pathname !== path)
@@ -106,17 +112,30 @@ export function App() {
           onSignedIn={() => navigate("workspace", true)}
         />
       ) : auth.status === "ready" && auth.session ? (
-        <WorkspacePage session={auth.session} />
+        <ErrorBoundary fallback={<WorkspaceStatus failed />}>
+          <Suspense fallback={<WorkspaceStatus />}>
+            <WorkspacePage session={auth.session} />
+          </Suspense>
+        </ErrorBoundary>
       ) : (
-        <main
-          id="main-content"
-          tabIndex={-1}
-          className="mx-auto grid max-w-[1600px] gap-4 p-4 md:gap-6 md:p-6"
-          aria-busy="true"
-        >
-          <h1>Opening your workspace…</h1>
-        </main>
+        <WorkspaceStatus />
       )}
     </>
+  );
+}
+
+function WorkspaceStatus({ failed = false }: { failed?: boolean }) {
+  return (
+    <main
+      id="main-content"
+      tabIndex={-1}
+      className="mx-auto grid max-w-[1600px] gap-4 p-4 md:gap-6 md:p-6"
+      aria-busy={!failed || undefined}
+    >
+      <h1>{failed ? "Workspace unavailable" : "Opening your workspace…"}</h1>
+      {failed && (
+        <p role="alert">Reload the page to try opening your workspace again.</p>
+      )}
+    </main>
   );
 }

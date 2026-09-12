@@ -1,5 +1,6 @@
 import { useId } from "react";
 import { Input } from "../../components/ui/input";
+import type { CoordinateBounds } from "./geometry";
 
 export type BoundaryFieldPrefix = "farm" | "plot";
 
@@ -7,10 +8,16 @@ export function BoundaryFields({
   prefix,
   errorId,
   invalid = false,
+  values,
+  onChange,
+  disabled = false,
 }: {
   prefix: BoundaryFieldPrefix;
   errorId?: string;
   invalid?: boolean;
+  values?: CoordinateBounds;
+  onChange?: (direction: keyof CoordinateBounds, value: string) => void;
+  disabled?: boolean;
 }) {
   const id = useId();
   const hintId = `${id}-hint`;
@@ -46,6 +53,13 @@ export function BoundaryFields({
               required
               aria-invalid={invalid || undefined}
               aria-describedby={describedBy}
+              disabled={disabled}
+              value={values ? values[direction] : undefined}
+              onChange={
+                onChange
+                  ? (event) => onChange(direction, event.target.value)
+                  : undefined
+              }
             />
           </label>
         ))}

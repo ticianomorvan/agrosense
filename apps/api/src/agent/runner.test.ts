@@ -237,20 +237,23 @@ describe("AI SDK agent through OpenRouter", () => {
     expect(execute).toHaveBeenCalledTimes(1);
   });
 
-  it("returns a bounded error when a tool result is too large", async () => {
-    const fetcher = vi
-      .fn<typeof fetch>()
-      .mockResolvedValueOnce(chatResponse(null, [call("list_farms")]))
-      .mockResolvedValueOnce(chatResponse("Please narrow the query."));
-    const { tools, execute } = testTools();
-    execute.mockResolvedValue({
-      ok: true,
-      data: { result: "x".repeat(33000) },
-    });
-    const result = await run(fetcher, tools);
-    expect(result.trace[0]?.errorCode).toBe("TOOL_RESULT_TOO_LARGE");
-    expect(JSON.stringify(body(fetcher, 1))).not.toContain("x".repeat(33000));
-  });
+  it.each(["x".repeat(33000), "🌽".repeat(9000)])(
+    "bounds tool results by UTF-8 bytes (case %#)",
+    async (text) => {
+      const fetcher = vi
+        .fn<typeof fetch>()
+        .mockResolvedValueOnce(chatResponse(null, [call("list_farms")]))
+        .mockResolvedValueOnce(chatResponse("Please narrow the query."));
+      const { tools, execute } = testTools();
+      execute.mockResolvedValue({
+        ok: true,
+        data: { result: text },
+      });
+      const result = await run(fetcher, tools);
+      expect(result.trace[0]?.errorCode).toBe("TOOL_RESULT_TOO_LARGE");
+      expect(JSON.stringify(body(fetcher, 1))).not.toContain(text);
+    },
+  );
 
   it.each([
     () => chatResponse(null, [call("list_farms")], "length"),

@@ -1,7 +1,6 @@
-import { afterEach, expect, it, vi } from "vitest";
-import { KapsoError } from "../lib/kapso";
+import { expect, it, vi } from "vitest";
 import {
-  notificationContent,
+  formatNotificationText,
   readNotificationConfig,
   sendNotification,
 } from "./notification";
@@ -31,7 +30,6 @@ const job = {
     recommendedActions: [],
   },
 };
-afterEach(() => vi.unstubAllGlobals());
 
 it("sends a plain text notification to the persisted recipient with a callback token", async () => {
   const fetcher = vi.fn(async () =>
@@ -63,52 +61,46 @@ it("does not require the conversation agent's allowlisted owner or model config"
   expect(() => readNotificationConfig(env)).not.toThrow();
 });
 
-it.each([408, 500, 503])(
-  "keeps HTTP %s ambiguous and never retries a send in memory",
-  async (status) => {
-    const fetcher = vi.fn(async () => new Response(null, { status }));
+it.each([
+  [429, "KAPSO_RATE_LIMITED"],
+  [400, "KAPSO_REJECTED"],
+  [500, "SEND_OUTCOME_UNKNOWN"],
+])(
+  "preserves the shared adapter's HTTP %s outcome without retrying",
+  async (status, code) => {
+    const fetcher = vi.fn(
+      async () => new Response(null, { status: Number(status) }),
+    );
     await expect(
       sendNotification(readNotificationConfig(env), job, fetcher),
-    ).rejects.toMatchObject({ code: "SEND_OUTCOME_UNKNOWN" });
+    ).rejects.toMatchObject({ code });
     expect(fetcher).toHaveBeenCalledTimes(1);
   },
 );
 
-it.each([
-  [429, "KAPSO_RATE_LIMITED"],
-  [400, "KAPSO_REJECTED"],
-  [401, "KAPSO_REJECTED"],
-])("classifies explicit HTTP %s rejection", async (status, code) => {
-  const fetcher = vi.fn(
-    async () => new Response(null, { status: Number(status) }),
-  );
-  await expect(
-    sendNotification(readNotificationConfig(env), job, fetcher),
-  ).rejects.toMatchObject({ code });
+it("states a withdrawal with the original event window", () => {
+  const text = formatNotificationText({ ...job, kind: "withdrawal" });
+  expect(text).toContain("Forecast withdrawn due to newer data.");
+  expect(text).toContain("09/12, 03:00–09/12, 05:00 (Córdoba).");
 });
 
-it("never turns malformed success into a retryable rejection", async () => {
-  const fetcher = vi.fn(async () => Response.json({ messages: [] }));
-  await expect(
-    sendNotification(readNotificationConfig(env), job, fetcher),
-  ).rejects.toBeInstanceOf(KapsoError);
-  await expect(
-    sendNotification(readNotificationConfig(env), job, fetcher),
-  ).rejects.toMatchObject({ code: "SEND_OUTCOME_UNKNOWN" });
-});
-
-it("bounds notification content and states withdrawal without declaring the plot safe", () => {
-  const content = notificationContent({ ...job, kind: "withdrawal" });
-  expect(content.details).toContain("withdrawn");
-  expect(content.details).not.toContain("seguro");
-  const lengthy = notificationContent({
+it("includes increased crop risk and bounds long assessment details in the final text", () => {
+  const text = formatNotificationText({
     ...job,
+    kind: "escalation",
     payload: {
       ...job.payload,
       farmName: "a".repeat(100),
       plotName: "b".repeat(100),
       title: "c".repeat(160),
+      assessmentState: "evaluated",
+      riskLevel: "high",
+      reason: "r".repeat(1000),
+      recommendedActions: ["s".repeat(1000)],
     },
   });
-  expect(Object.values(lengthy).join("").length).toBeLessThan(900);
+  expect(text).toContain("Increased risk. Crop risk: high.");
+  expect(text).toContain(`${"r".repeat(179)}…`);
+  expect(text).toContain(`${"s".repeat(139)}…`);
+  expect(text.length).toBeLessThan(1024);
 });
