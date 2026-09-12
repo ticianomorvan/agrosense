@@ -60,6 +60,7 @@ export function plotStatus(
   badgeVariant: StatusVariant;
   reason: string;
   time: string | null;
+  assessment?: { alert: PlotAlert; event: EventCard };
 } {
   const current = currentAlert(data, plotId, now);
   if (current) {
@@ -67,22 +68,26 @@ export function plotStatus(
       ...riskPresentation[current.alert.riskLevel ?? "low"],
       reason: current.alert.reason,
       time: current.alert.generatedAt,
+      assessment: current,
     };
   }
   const previous = data.events
-    .flatMap((event) => event.alerts)
-    .filter(
-      (alert) =>
-        alert.plotId === plotId && alert.assessmentState === "evaluated",
-    )
-    .sort((a, b) => Date.parse(b.generatedAt) - Date.parse(a.generatedAt))[0];
+    .flatMap((event) => event.alerts.map((alert) => ({ event, alert })))
+    .filter(({ alert }) => alert.plotId === plotId)
+    .sort(
+      (a, b) =>
+        Date.parse(b.alert.generatedAt) - Date.parse(a.alert.generatedAt),
+    )[0];
   if (previous)
     return {
       label: "Risk unavailable",
       badgeVariant: "unknown",
       reason:
-        "The previous evaluation is no longer current. A current risk assessment is unavailable.",
-      time: previous.generatedAt,
+        previous.alert.assessmentState === "evaluated"
+          ? "The previous evaluation is no longer current. A current risk assessment is unavailable."
+          : previous.alert.reason,
+      time: previous.alert.generatedAt,
+      assessment: previous,
     };
   return {
     label: "Risk unavailable",
@@ -91,6 +96,13 @@ export function plotStatus(
       data.monitoring.status === "never_refreshed"
         ? "No weather evaluation is available for this field."
         : "No current evaluated alert is available. This does not establish safe conditions.",
-    time: data.monitoring.lastSuccessAt,
+    time: null,
   };
+}
+
+export function assessmentSource(status: ReturnType<typeof plotStatus>) {
+  if (!status.assessment) return "Unavailable";
+  return status.assessment.event.source.isDemo
+    ? "Demonstration weather and risk data"
+    : "Open-Meteo weather";
 }

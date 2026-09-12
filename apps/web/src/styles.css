@@ -3,7 +3,6 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
-@custom-variant dark (&:is(.dark *));
 :root {
   color-scheme: light;
   --space-1: 0.25rem;
@@ -89,7 +88,7 @@
 
 @layer base {
   * {
-    @apply border-border outline-ring/50;
+    @apply border-border outline-ring;
   }
   body {
     @apply bg-background text-foreground;
@@ -112,6 +111,7 @@
   h3,
   p {
     margin: 0;
+    overflow-wrap: anywhere;
   }
   h1 {
     font-size: 2rem;
@@ -135,6 +135,12 @@
   :focus-visible:not([data-slot]) {
     outline: 2px solid var(--ring);
     outline-offset: 2px;
+  }
+  a:not(p a):not([data-slot]) {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    min-width: 44px;
   }
   button,
   input,
@@ -192,6 +198,7 @@
     color: var(--muted-foreground);
     font-size: 0.875rem;
     line-height: 1.5;
+    font-variant-numeric: tabular-nums;
   }
   .workspace-status {
     display: flex;
@@ -292,6 +299,7 @@
   }
   .field-facts div {
     display: flex;
+    flex-wrap: wrap;
     justify-content: space-between;
     gap: var(--space-4);
   }
@@ -302,6 +310,8 @@
     margin: 0;
     font-variant-numeric: tabular-nums;
     text-align: right;
+    overflow-wrap: anywhere;
+    min-width: 0;
   }
   .satellite-controls {
     border-top: 1px solid var(--border);

@@ -21,7 +21,6 @@ export function DataState({
       {retry && (
         <Button
           variant="outline"
-          className="min-h-11 min-w-11"
           onClick={retry}
           disabled={pending}
           aria-busy={pending || undefined}

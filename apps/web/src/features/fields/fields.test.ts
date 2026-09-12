@@ -4,7 +4,12 @@ import {
 } from "@agrosense/contracts";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { subscribeToRiskClock } from "./clock";
-import { currentAlert, formatInstant, plotStatus } from "./presentation";
+import {
+  assessmentSource,
+  currentAlert,
+  formatInstant,
+  plotStatus,
+} from "./presentation";
 import { createLiveSource, dashboardOptions } from "./queries";
 
 function rectangle(west: number, south: number, east: number, north: number) {
@@ -293,5 +298,53 @@ it("rechecks immediately on visibility and focus after suspended timers, then re
   documentState.dispatchEvent(new Event("visibilitychange"));
   tab.dispatchEvent(new Event("focus"));
   expect(onTimeChange).toHaveBeenCalledTimes(2);
+  expect(vi.getTimerCount()).toBe(0);
+});
+
+it("preserves the supplied explanation and source for incomplete assessments", () => {
+  const data = createAlertDashboard();
+  const alert = data.events[0]?.alerts[0];
+  if (!alert) throw new Error("Missing test assessment");
+  alert.assessmentState = "insufficient_data";
+  alert.riskLevel = null;
+  alert.recommendation = null;
+  alert.reason = "Declared growth stage is unavailable.";
+  const status = plotStatus(data, alert.plotId);
+  expect(status).toMatchObject({
+    label: "Risk unavailable",
+    reason: alert.reason,
+    time: alert.generatedAt,
+  });
+  expect(status.assessment?.alert).toBe(alert);
+  expect(assessmentSource(status)).toBe("Demonstration weather and risk data");
+  expect(currentAlert(data, alert.plotId)).toBeUndefined();
+});
+it("retains expired evidence without restoring the recommendation", () => {
+  const data = createAlertDashboard();
+  const alert = data.events[0]?.alerts[0];
+  if (!alert) throw new Error("Missing test assessment");
+  vi.setSystemTime(new Date(alert.validUntil));
+  const status = plotStatus(data, alert.plotId);
+  expect(status.assessment?.alert.reason).toBe(alert.reason);
+  expect(status.label).toBe("Risk unavailable");
+  expect(currentAlert(data, alert.plotId)).toBeUndefined();
+});
+it("does not label a successful farm refresh as a plot evaluation", () => {
+  const data = structuredClone(dashboardFixture);
+  data.monitoring.lastSuccessAt = data.asOf;
+  const plot = data.plots[0];
+  if (!plot) throw new Error("Missing test plot");
+  expect(plotStatus(data, plot.id).time).toBeNull();
+});
+it("notifies when forecast freshness expires even without alerts", () => {
+  const data = structuredClone(dashboardFixture);
+  data.monitoring.forecastValidUntil = "2026-09-12T07:00:00Z";
+  vi.stubGlobal("window", new EventTarget());
+  vi.stubGlobal("document", new EventTarget());
+  const changed = vi.fn();
+  const stop = subscribeToRiskClock(data, changed);
+  vi.advanceTimersByTime(3600000);
+  expect(changed).toHaveBeenCalledExactlyOnceWith(Date.now());
+  stop();
   expect(vi.getTimerCount()).toBe(0);
 });

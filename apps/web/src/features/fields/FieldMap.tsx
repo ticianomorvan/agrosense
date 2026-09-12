@@ -131,21 +131,18 @@ export default function FieldMap({
       <div className="map-toolbar">
         <Button
           variant="outline"
-          className="min-h-11 min-w-11"
           onClick={() => map.current?.zoomIn(undefined, { animate: false })}
         >
           Zoom in
         </Button>
         <Button
           variant="outline"
-          className="min-h-11 min-w-11"
           onClick={() => map.current?.zoomOut(undefined, { animate: false })}
         >
           Zoom out
         </Button>
         <Button
           variant="outline"
-          className="min-h-11 min-w-11"
           onClick={() =>
             map.current?.fitBounds(farmBounds, {
               padding: [24, 24],
@@ -166,7 +163,7 @@ export default function FieldMap({
         <span className="legend-selected" aria-hidden="true" /> Selected field
       </div>
       <p className="metadata">
-        Declared field boundaries.{" "}
+        Field boundaries · Source and observation time unavailable.{" "}
         {satellite?.status === "available" && !imageError
           ? "True color · Missing pixels are transparent."
           : "Imagery unavailable · Field outlines remain visible."}

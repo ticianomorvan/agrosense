@@ -26,9 +26,11 @@ layout rules. Use Tailwind v4 through the Vite integration.
   palette MUST NOT replace the AgroSense tokens when adding components.
 - Compose application behavior around the primitives. Keep business rules and
   data-source assumptions out of generated component files.
-- Caller-side classes may adjust layout, width, minimum target size, readable text
-  size and wrapping. Use shared variants for visual states; MUST NOT add one-off
-  colors or create a different theme for an individual screen.
+- Shared primitives own the required target sizes, readable text, wrapping and
+  interaction states by default, including their size and status variants.
+  Caller-side classes may adjust layout and width; MUST NOT repeat corrective
+  sizing, focus, typography or color overrides at each usage. Use shared variants
+  for visual states; MUST NOT create a different theme for an individual screen.
 - Use the existing semantic CSS variables for app-authored surfaces and map
   overlays. MUST NOT introduce raw colors or duplicate theme tokens. Source
   imagery is exempt; authored overlays are not.

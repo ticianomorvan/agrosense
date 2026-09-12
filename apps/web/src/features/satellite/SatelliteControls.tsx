@@ -55,6 +55,7 @@ export function SatelliteControls({
       <form
         onSubmit={(e) => {
           e.preventDefault();
+          if (query.isFetching || !source.loadSatellite) return;
           const result = satelliteRequestSchema.safeParse({
             from: `${from}T00:00:00Z`,
             to: `${to}T23:59:59Z`,
@@ -76,11 +77,11 @@ export function SatelliteControls({
         <label htmlFor={`${id}-from`}>
           From (UTC)
           <Input
-            className="min-h-11"
             id={`${id}-from`}
             type="date"
             value={from}
             required
+            aria-invalid={!!error || undefined}
             aria-describedby={error ? `${id}-error` : undefined}
             onChange={(e) => {
               setFrom(e.target.value);
@@ -91,11 +92,11 @@ export function SatelliteControls({
         <label htmlFor={`${id}-to`}>
           To (UTC)
           <Input
-            className="min-h-11"
             id={`${id}-to`}
             type="date"
             value={to}
             required
+            aria-invalid={!!error || undefined}
             aria-describedby={error ? `${id}-error` : undefined}
             onChange={(e) => {
               setTo(e.target.value);
@@ -105,7 +106,6 @@ export function SatelliteControls({
         </label>
         <Button
           variant="default"
-          className="min-h-11 min-w-11"
           type="submit"
           disabled={!source.loadSatellite || query.isFetching}
           aria-busy={query.isFetching || undefined}
@@ -133,7 +133,7 @@ export function SatelliteControls({
       )}
       {query.data?.status === "available" && (
         <>
-          <Badge variant="info" className="h-auto whitespace-normal text-sm">
+          <Badge variant="info">
             Acquired {formatInstant(query.data.acquiredAt)} (UTC−3)
           </Badge>
           <p className="metadata">

@@ -67,6 +67,7 @@ export function FieldOverview({ source }: { source: FarmDataSource }) {
         <DataState
           title="Farm information unavailable"
           retry={() => void query.refetch()}
+          pending={query.isFetching}
         >
           {query.error?.message ?? "Please try again."}
         </DataState>
@@ -96,7 +97,7 @@ export function FieldOverview({ source }: { source: FarmDataSource }) {
           <label htmlFor={cropId}>Crop</label>
           <NativeSelect
             id={cropId}
-            className="w-full [&_select]:min-h-11"
+            className="w-full"
             value={crop}
             onChange={(e) => {
               setCrop(e.target.value as typeof crop);
@@ -114,32 +115,34 @@ export function FieldOverview({ source }: { source: FarmDataSource }) {
       </div>
       <div className="workspace-status" role="status">
         {data.farm.dataMode === "demo" && (
-          <Badge variant="info" className="h-auto whitespace-normal text-sm">
-            Demonstration weather and risk data
-          </Badge>
+          <Badge variant="info">Demonstration weather and risk data</Badge>
         )}
         <span>
           {data.monitoring.status === "never_refreshed"
             ? "Weather has not been evaluated."
             : `Monitoring at last update: ${data.monitoring.status.replaceAll("_", " ")}.`}{" "}
-          Last successful update: {formatInstant(data.monitoring.lastSuccessAt)}
+          Last successful update: {formatInstant(data.monitoring.lastSuccessAt)}{" "}
+          · Córdoba time (UTC−3)
         </span>
         {query.isError && (
-          <Button
-            variant="outline"
-            className="min-h-11 min-w-11"
-            onClick={() => void query.refetch()}
-          >
-            Retry update
-          </Button>
+          <>
+            <span>
+              Farm information could not be updated. Showing the last available
+              data.
+            </span>
+            <Button
+              variant="outline"
+              onClick={() => void query.refetch()}
+              disabled={query.isFetching}
+              aria-busy={query.isFetching || undefined}
+            >
+              {query.isFetching ? "Retrying update…" : "Retry update"}
+            </Button>
+          </>
         )}
       </div>
       <div className="phone-view-switch">
-        <Button
-          variant="outline"
-          className="min-h-11 min-w-11"
-          onClick={() => setPhoneMap((v) => !v)}
-        >
+        <Button variant="outline" onClick={() => setPhoneMap((v) => !v)}>
           {phoneMap ? "Back to priorities" : "View farm map"}
         </Button>
       </div>

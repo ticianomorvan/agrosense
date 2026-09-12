@@ -6,7 +6,7 @@ import {
 import { DataState } from "../../components/data-state";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
-import { formatInstant, plotStatus } from "./presentation";
+import { assessmentSource, formatInstant, plotStatus } from "./presentation";
 
 export function FieldList({
   data,
@@ -33,11 +33,7 @@ export function FieldList({
         </DataState>
       ) : plots.length === 0 ? (
         <DataState title="No fields match this filter">
-          <Button
-            variant="outline"
-            className="min-h-11 min-w-11"
-            onClick={onClear}
-          >
+          <Button variant="outline" onClick={onClear}>
             Clear filters
           </Button>
         </DataState>
@@ -48,25 +44,22 @@ export function FieldList({
             return (
               <li key={plot.id} className="field-list__item">
                 <h3>{plot.name}</h3>
+                <Badge variant={status.badgeVariant}>{status.label}</Badge>
+                <p>{status.reason}</p>
                 <p className="metadata">
                   {plot.activeCropCycle
                     ? `${cropLabels[plot.activeCropCycle.cropCode]} · ${plot.activeCropCycle.stageCode ?? "Stage unavailable"}`
                     : "Crop and stage unavailable"}{" "}
                   · {plot.declaredAreaHa} ha declared
                 </p>
-                <Badge
-                  variant={status.badgeVariant}
-                  className="h-auto whitespace-normal text-sm"
-                >
-                  {status.label}
-                </Badge>
-                <p>{status.reason}</p>
                 <p className="metadata">
-                  Evaluation: {formatInstant(status.time)}
+                  Evaluation: {formatInstant(status.time)} · Córdoba time
+                  (UTC−3)
+                  <br />
+                  Source: {assessmentSource(status)}
                 </p>
                 <Button
                   variant="outline"
-                  className="min-h-11 min-w-11"
                   id={`view-field-${plot.id}`}
                   onClick={() => onSelect(plot.id)}
                   aria-label={`View field: ${plot.name}`}
