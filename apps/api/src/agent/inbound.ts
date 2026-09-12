@@ -107,11 +107,7 @@ export function normalizeInbound(
     });
     if (normalized.success) result.push(normalized.data);
   }
-  return result.sort(
-    (a, b) =>
-      a.sentAt.localeCompare(b.sentAt) ||
-      a.messageId.localeCompare(b.messageId),
-  );
+  return result;
 }
 
 export async function messageFingerprint(

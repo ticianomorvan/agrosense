@@ -24,6 +24,16 @@ export type AgentResult = {
   modelSteps: number;
 };
 
+export class AgentRunError extends AgentError {
+  constructor(
+    code: AgentError["code"],
+    readonly trace: ToolTrace[],
+    readonly modelSteps: number,
+  ) {
+    super(code);
+  }
+}
+
 const instructions = `You are AgroSense's conversational assistant for an agricultural producer.
 Use the available tools to discover accessible farms and plots and to answer current farm or forecast questions. Never invent IDs, locations, weather, source timestamps, or crop risk. For ambiguous farm/plot selection, discover the available options and ask one concise clarifying question if needed.
 You can reason across multiple tool results. For current facts, fetch current evidence instead of relying on old conversation answers. A tool error means unavailable data, never zero rain or safe conditions. Live and demo data must remain distinct.
@@ -53,10 +63,12 @@ export async function runAgent(options: {
     ? AbortSignal.any([options.signal, controller.signal])
     : controller.signal;
   const trace: ToolTrace[] = [];
+  let modelSteps = 0;
   const callIds = new Set<string>();
   try {
     for (let step = 1; step <= 8; step++) {
       signal.throwIfAborted();
+      modelSteps = step;
       const output = await options.model.respond(
         input,
         options.tools.definitions,
@@ -119,8 +131,12 @@ export async function runAgent(options: {
     }
     throw new AgentError("AGENT_BUDGET_EXCEEDED");
   } catch (error) {
-    if (signal.aborted) throw new AgentError("AGENT_TIMEOUT");
-    throw error;
+    const code = signal.aborted
+      ? "AGENT_TIMEOUT"
+      : error instanceof AgentError
+        ? error.code
+        : "MODEL_UNAVAILABLE";
+    throw new AgentRunError(code, trace, modelSteps);
   } finally {
     clearTimeout(timer);
   }

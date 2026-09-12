@@ -1,13 +1,13 @@
 import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import type { Database } from "../lib/database.types";
+import { boundedFetch } from "../lib/http";
 import { readSupabaseConfig, type SupabaseBindings } from "../lib/supabase";
 import {
   FARM_TIMEZONE,
   getPlotForecast,
   InvalidForecastError,
 } from "./forecast";
-import { boundedFetch } from "./http";
 
 export type ToolResult =
   | { ok: true; data: unknown }

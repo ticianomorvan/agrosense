@@ -22,7 +22,7 @@ export function readAgentConfig(env: AgentBindings) {
   try {
     if (env.WHATSAPP_AGENT_ENABLED !== "true") throw new Error("Disabled");
     const kapso = readKapsoConfig(env);
-    const model = readModelConfig(env);
+    readModelConfig(env);
     readSupabaseConfig(env);
     z.string()
       .min(1)
@@ -31,7 +31,6 @@ export function readAgentConfig(env: AgentBindings) {
       .parse(env.SUPABASE_SECRET_KEY);
     return {
       kapso,
-      model,
       sender: phoneSchema.parse(env.WHATSAPP_AGENT_PHONE_NUMBER),
       webhookSecret: z
         .string()

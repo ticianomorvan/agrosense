@@ -24,33 +24,42 @@ describe("OpenRouter model boundary", () => {
     ).toThrow("MODEL_UNAVAILABLE");
   });
 
-  it("preserves provider reasoning fields and accepts a final message without phase", async () => {
-    const output = [
-      {
-        type: "reasoning",
-        id: "rs_test",
-        encrypted_content: null,
-        content: [{ type: "reasoning_text", text: "private reasoning" }],
-        summary: [],
-        signature: "opaque-signature",
-      },
-      {
-        type: "message",
-        role: "assistant",
-        content: [{ type: "output_text", text: "Which plot?" }],
-      },
-    ];
-    const fetcher = vi
-      .fn<typeof fetch>()
-      .mockResolvedValue(Response.json({ status: "completed", output }));
-    const model = createOpenRouterModel(
-      { OPENROUTER_API_KEY: "router_test" },
-      fetcher,
-    );
-    expect(
-      await model.respond([], [], "Instructions", new AbortController().signal),
-    ).toEqual(output);
-  });
+  it.each([undefined, null])(
+    "preserves reasoning and accepts phase %s",
+    async (phase) => {
+      const output = [
+        {
+          type: "reasoning",
+          id: "rs_test",
+          encrypted_content: null,
+          content: [{ type: "reasoning_text", text: "private reasoning" }],
+          summary: [],
+          signature: "opaque-signature",
+        },
+        {
+          type: "message",
+          role: "assistant",
+          phase,
+          content: [{ type: "output_text", text: "Which plot?" }],
+        },
+      ];
+      const fetcher = vi
+        .fn<typeof fetch>()
+        .mockResolvedValue(Response.json({ status: "completed", output }));
+      const model = createOpenRouterModel(
+        { OPENROUTER_API_KEY: "router_test" },
+        fetcher,
+      );
+      expect(
+        await model.respond(
+          [],
+          [],
+          "Instructions",
+          new AbortController().signal,
+        ),
+      ).toEqual(output);
+    },
+  );
 
   it.each([401, 402, 429, 503])(
     "does not retry OpenRouter HTTP %i or expose its body",

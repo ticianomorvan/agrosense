@@ -162,6 +162,7 @@ test("signed webhook → durable alarm → three chosen tools → WhatsApp reply
                   {
                     type: "reasoning",
                     id: `rs_${results.length}`,
+                    status: "completed",
                     encrypted_content: null,
                     content: [
                       {
@@ -173,6 +174,8 @@ test("signed webhook → durable alarm → three chosen tools → WhatsApp reply
                   },
                   {
                     type: "function_call",
+                    id: `fc_${name}`,
+                    status: "completed",
                     call_id: `call_${results.length}`,
                     name,
                     arguments: JSON.stringify(args),
@@ -197,8 +200,10 @@ test("signed webhook → durable alarm → three chosen tools → WhatsApp reply
               output: [
                 {
                   type: "message",
+                  id: "msg_final",
+                  status: "completed",
                   role: "assistant",
-                  phase: "final_answer",
+                  phase: null,
                   content: [{ type: "output_text", text: answer }],
                 },
               ],

@@ -1,11 +1,9 @@
-import {
-  whatsappAgentRunSchema,
-  whatsappWebhookResponseSchema,
-} from "@agrosense/contracts";
+import { whatsappWebhookResponseSchema } from "@agrosense/contracts";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { z } from "zod";
-import { type ApiEnv, requireAuth } from "../lib/auth";
+import type { ApiEnv } from "../env";
+import { requireAuth } from "../lib/auth";
 import {
   AgentConfigurationError,
   conversationName,
@@ -104,27 +102,11 @@ whatsappAgentRoutes.post(
         body: JSON.stringify({ ownerId: config.ownerId, messages }),
       });
       if (!admitted.ok) {
-        if (admitted.status === 409)
-          return c.json(
-            {
-              error: {
-                code: "MESSAGE_CONFLICT",
-                message: "Message ID reused with different content",
-              },
-            },
-            409,
-          );
-        if (admitted.status === 429) {
-          c.header("Retry-After", "60");
-          return c.json(
-            {
-              error: {
-                code: "RATE_LIMITED",
-                message: "Conversation capacity reached",
-              },
-            },
-            429,
-          );
+        if (admitted.status === 409 || admitted.status === 429) {
+          if (admitted.status === 429) c.header("Retry-After", "60");
+          return c.newResponse(await admitted.text(), admitted.status, {
+            "Content-Type": "application/json",
+          });
         }
         throw new AgentConfigurationError();
       }
@@ -189,13 +171,11 @@ whatsappAgentRoutes.get("/agent/runs/:messageId", requireAuth, async (c) => {
     const response = await stub.fetch(
       `https://conversation/run?${new URLSearchParams({ messageId })}`,
     );
-    if (response.status === 404)
-      return c.json(
-        { error: { code: "NOT_FOUND", message: "Run not found" } },
-        404,
-      );
-    if (!response.ok) throw new AgentConfigurationError();
-    return c.json(whatsappAgentRunSchema.parse(await response.json()));
+    if (response.status !== 200 && response.status !== 404)
+      throw new AgentConfigurationError();
+    return c.newResponse(await response.text(), response.status, {
+      "Content-Type": "application/json",
+    });
   } catch {
     return c.json(
       {

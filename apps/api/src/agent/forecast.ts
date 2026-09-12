@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { boundedFetch } from "./http";
+import { boundedFetch } from "../lib/http";
 
 export const FARM_TIMEZONE = "America/Argentina/Cordoba";
 const temperature = z.number().min(-100).max(70);

@@ -6,13 +6,9 @@ import {
 import { z } from "zod";
 import { KapsoError } from "../lib/kapso";
 import { AgentConfigurationError } from "./config";
-import {
-  type InboundMessage,
-  inboundMessageSchema,
-  messageFingerprint,
-} from "./inbound";
+import { type InboundMessage, messageFingerprint } from "./inbound";
 import { AgentError } from "./model";
-import type { AgentResult, ChatMessage } from "./runner";
+import { type AgentResult, AgentRunError, type ChatMessage } from "./runner";
 
 // This small storage boundary is implemented by Durable Object storage in production.
 export interface StoreTransaction {
@@ -81,10 +77,8 @@ export class Conversation {
   }
 
   async enqueue(messages: InboundMessage[], ownerId: string) {
-    const valid = z.array(inboundMessageSchema).min(1).max(20).parse(messages);
-    z.uuid().parse(ownerId);
     const prepared = await Promise.all(
-      valid.map(async (message) => ({
+      messages.map(async (message) => ({
         message,
         fingerprint: `${ownerId}:${await messageFingerprint(message)}`,
       })),
@@ -105,7 +99,10 @@ export class Conversation {
           duplicates++;
         } else unique.set(item.message.messageId, item);
       }
-      if (!unique.size) return { accepted: 0, duplicates };
+      if (!unique.size) {
+        if (queue.length) await store.setAlarm(this.now() + 1);
+        return { accepted: 0, duplicates };
+      }
       const now = this.now();
       let rate = await store.get<{ startedAt: number; count: number }>("rate");
       if (!rate || now - rate.startedAt >= 3600000)
@@ -147,14 +144,7 @@ export class Conversation {
   async status(messageId: string): Promise<WhatsappAgentRun | null> {
     const record = await this.store.get<Record>(`run:${messageId}`);
     if (!record || record.expiresAt <= this.now()) return null;
-    const {
-      input: _input,
-      reply: _reply,
-      fingerprint: _fingerprint,
-      expiresAt: _expiresAt,
-      ...status
-    } = record;
-    return whatsappAgentRunSchema.parse(status);
+    return whatsappAgentRunSchema.strip().parse(record);
   }
 
   processNext(): Promise<void> {
@@ -212,6 +202,10 @@ export class Conversation {
           record.trace = result.trace;
           record.modelSteps = result.modelSteps;
         } catch (error) {
+          if (error instanceof AgentRunError) {
+            record.trace = error.trace;
+            record.modelSteps = error.modelSteps;
+          }
           record.reply = fallbackReply;
           record.errorCode =
             error instanceof AgentError ? error.code : "AGENT_UNAVAILABLE";

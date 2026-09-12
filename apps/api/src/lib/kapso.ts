@@ -3,6 +3,7 @@ import type {
   WhatsappMessageResponse,
 } from "@agrosense/contracts";
 import { z } from "zod";
+import { boundedFetch, ProviderTimeoutError } from "./http";
 
 export type KapsoBindings = {
   KAPSO_API_KEY?: string;
@@ -60,15 +61,11 @@ export async function sendWhatsappText(
   message: WhatsappMessageRequest,
   fetcher: typeof fetch = fetch,
 ): Promise<WhatsappMessageResponse> {
-  const controller = new AbortController();
-  const deadline = setTimeout(() => controller.abort(), 8000);
   try {
-    const response = await fetcher(
+    const response = await boundedFetch(
       `https://api.kapso.ai/meta/whatsapp/v24.0/${config.KAPSO_PHONE_NUMBER_ID}/messages`,
       {
         method: "POST",
-        redirect: "manual",
-        signal: controller.signal,
         headers: {
           "X-API-Key": config.KAPSO_API_KEY,
           "Content-Type": "application/json",
@@ -81,10 +78,10 @@ export async function sendWhatsappText(
           text: { body: message.text, preview_url: false },
         }),
       },
+      { fetcher, timeoutMs: 8000, maxBytes: 16 * 1024 },
     );
     if (!response.ok) {
       // Do not expose or log upstream bodies; they can contain sensitive data.
-      await response.body?.cancel();
       if (response.status === 429)
         throw new KapsoError(
           "KAPSO_RATE_LIMITED",
@@ -109,10 +106,8 @@ export async function sendWhatsappText(
     if (error instanceof KapsoError) throw error;
     throw new KapsoError(
       "SEND_OUTCOME_UNKNOWN",
-      controller.signal.aborted ? 504 : 502,
+      error instanceof ProviderTimeoutError ? 504 : 502,
       "Message outcome is unknown; check Kapso before retrying",
     );
-  } finally {
-    clearTimeout(deadline);
   }
 }

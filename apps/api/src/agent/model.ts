@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { boundedFetch } from "./http";
+import { boundedFetch } from "../lib/http";
 import type { AgentTools } from "./tools";
 
 export type ModelBindings = {
@@ -60,7 +60,7 @@ const outputSchema = z.discriminatedUnion("type", [
     .object({
       type: z.literal("message"),
       role: z.literal("assistant"),
-      phase: z.enum(["commentary", "final_answer"]).optional(),
+      phase: z.enum(["commentary", "final_answer"]).nullish(),
       content: z
         .array(
           z

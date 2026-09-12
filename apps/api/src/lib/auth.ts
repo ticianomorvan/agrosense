@@ -1,16 +1,11 @@
 import { createMiddleware } from "hono/factory";
 import { errors } from "jose";
-import type { AgentBindings } from "../agent/config";
+import type { ApiEnv } from "../env";
 import {
   createTokenVerifier,
   createUserClient,
   readSupabaseConfig,
 } from "./supabase";
-
-export type ApiEnv = {
-  Bindings: AgentBindings;
-  Variables: { userId: string; supabase: ReturnType<typeof createUserClient> };
-};
 
 // Reuse public JWKS within a Worker isolate; user clients remain request-scoped.
 let cachedVerifier:

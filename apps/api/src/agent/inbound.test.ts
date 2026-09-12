@@ -97,9 +97,8 @@ describe("Kapso webhook primitives", () => {
     ).toEqual([]);
   });
 
-  it("supports a bounded batch in timestamp order", () => {
+  it("preserves Kapso batch order even when timestamps match and IDs sort differently", () => {
     const later = event("wamid.2", "And tomorrow?");
-    later.message.timestamp = String(now.getTime() / 1000 + 1);
     const batch = {
       type: "whatsapp.message.received",
       batch: true,
@@ -109,7 +108,7 @@ describe("Kapso webhook primitives", () => {
       normalizeInbound(batch, "whatsapp.message.received", config, now).map(
         (message) => message.messageId,
       ),
-    ).toEqual(["wamid.1", "wamid.2"]);
+    ).toEqual(["wamid.2", "wamid.1"]);
     expect(() =>
       normalizeInbound(
         { ...batch, data: Array.from({ length: 21 }, () => event()) },

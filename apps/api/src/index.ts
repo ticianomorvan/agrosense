@@ -1,7 +1,8 @@
 import type { HealthResponse, SessionResponse } from "@agrosense/contracts";
 import { Hono } from "hono";
 import { whatsappAgentRoutes } from "./agent/routes";
-import { type ApiEnv, requireAuth } from "./lib/auth";
+import type { ApiEnv } from "./env";
+import { requireAuth } from "./lib/auth";
 import { whatsapp } from "./whatsapp";
 
 const app = new Hono<ApiEnv>();

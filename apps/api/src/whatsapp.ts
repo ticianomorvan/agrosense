@@ -1,7 +1,8 @@
 import { whatsappMessageRequestSchema } from "@agrosense/contracts";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
-import { type ApiEnv, requireAuth } from "./lib/auth";
+import type { ApiEnv } from "./env";
+import { requireAuth } from "./lib/auth";
 import { KapsoError, readKapsoConfig, sendWhatsappText } from "./lib/kapso";
 
 export const whatsapp = new Hono<ApiEnv>();

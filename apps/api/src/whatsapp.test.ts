@@ -262,6 +262,19 @@ describe("outbound WhatsApp", () => {
     expect(provider).toHaveBeenCalledTimes(1);
   });
 
+  it("bounds successful provider bodies and leaves oversized responses as unknown outcomes", async () => {
+    const provider = mockProvider(async () =>
+      Response.json({
+        ...accepted,
+        extra: "x".repeat(16 * 1024),
+      }),
+    );
+    const response = await send();
+    expect(response.status).toBe(502);
+    expect((await response.json()).error.code).toBe("SEND_OUTCOME_UNKNOWN");
+    expect(provider).toHaveBeenCalledTimes(1);
+  });
+
   it("reports non-JSON success bodies as unknown outcomes", async () => {
     const provider = mockProvider(
       async () => new Response("<html>unexpected</html>"),

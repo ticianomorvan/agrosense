@@ -8,6 +8,8 @@ import {
   type StoreTransaction,
 } from "./conversation";
 import type { InboundMessage } from "./inbound";
+import { AgentError } from "./model";
+import { type AgentResult, runAgent } from "./runner";
 
 class MemoryStore implements ConversationStore {
   data = new Map<string, unknown>();
@@ -71,13 +73,15 @@ const message = (
 });
 function setup(store = new MemoryStore()) {
   let timestamp = baseTime;
-  const run = vi.fn(async (_input: RunInput) => ({
-    reply: "The forecast is available.",
-    trace: [
-      { tool: "get_forecast", ok: true, errorCode: null, durationMs: 12 },
-    ],
-    modelSteps: 2,
-  }));
+  const run = vi.fn(
+    async (_input: RunInput): Promise<AgentResult> => ({
+      reply: "The forecast is available.",
+      trace: [
+        { tool: "get_forecast", ok: true, errorCode: null, durationMs: 12 },
+      ],
+      modelSteps: 2,
+    }),
+  );
   const send = vi.fn(async (_input: SendInput) => ({
     messageId: "wamid.reply",
     status: "accepted" as const,
@@ -100,6 +104,52 @@ function setup(store = new MemoryStore()) {
 }
 
 describe("durable conversation processing", () => {
+  it("re-arms queued work when a duplicate arrives after alarm retries are exhausted", async () => {
+    const { conversation, store } = setup();
+    await conversation.enqueue([message()], ownerId);
+    store.alarm = null;
+    expect(await conversation.enqueue([message()], ownerId)).toEqual({
+      accepted: 0,
+      duplicates: 1,
+    });
+    expect(store.alarm).not.toBeNull();
+  });
+
+  it("retains completed tool outcomes when a later model request fails", async () => {
+    const { conversation, run, send } = setup();
+    run.mockImplementation(async () =>
+      runAgent({
+        text: message().text,
+        history: [],
+        tools: {
+          definitions: [],
+          execute: async () => ({ ok: true, data: { farms: [] } }),
+        },
+        model: {
+          respond: vi
+            .fn()
+            .mockResolvedValueOnce([
+              {
+                type: "function_call",
+                call_id: "call_1",
+                name: "list_farms",
+                arguments: "{}",
+              },
+            ])
+            .mockRejectedValueOnce(new AgentError("MODEL_UNAVAILABLE")),
+        },
+      }),
+    );
+    await conversation.enqueue([message()], ownerId);
+    await conversation.processNext();
+    expect(await conversation.status("wamid.1")).toMatchObject({
+      status: "accepted",
+      errorCode: "MODEL_UNAVAILABLE",
+      modelSteps: 2,
+      trace: [{ tool: "list_farms", ok: true, errorCode: null }],
+    });
+    expect(send).toHaveBeenCalledTimes(1);
+  });
   it("persists admission and an alarm before acknowledgement; duplicate deliveries invoke the agent once", async () => {
     const { conversation, store, run, send } = setup();
     const admitted = await Promise.all([
