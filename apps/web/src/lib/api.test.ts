@@ -1,7 +1,8 @@
 import { healthResponseSchema } from "@agrosense/contracts";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { ApiError, apiUrl, getJson, shouldRetry } from "./api";
 
+beforeEach(() => vi.stubEnv("VITE_API_BASE_URL", ""));
 afterEach(() => {
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();

@@ -5,7 +5,7 @@ import type {
   SatellitePreview,
 } from "@agrosense/contracts";
 import * as L from "leaflet";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "../../components/ui/button";
 
 export default function FieldMap({
@@ -25,7 +25,10 @@ export default function FieldMap({
   const map = useRef<L.Map | null>(null);
   const [ready, setReady] = useState(false);
   const [imageError, setImageError] = useState(false);
-  const farmBounds = polygonLayer(data.farm.boundary).getBounds();
+  const farmBounds = useMemo(
+    () => polygonLayer(data.farm.boundary).getBounds(),
+    [data.farm.boundary],
+  );
 
   useEffect(() => {
     if (!container.current) return;
@@ -40,17 +43,19 @@ export default function FieldMap({
       scrollWheelZoom: false,
     });
     map.current = instance;
-    instance.fitBounds(polygonLayer(data.farm.boundary).getBounds(), {
+    instance.fitBounds(farmBounds, {
       padding: [24, 24],
       animate: false,
     });
     const observer = new ResizeObserver(() => {
+      if (!container.current?.clientWidth) return;
       instance.invalidateSize({ animate: false });
-      if (container.current?.clientWidth)
-        instance.fitBounds(polygonLayer(data.farm.boundary).getBounds(), {
-          padding: [24, 24],
-          animate: false,
-        });
+      instance.fitBounds(farmBounds, {
+        padding: [24, 24],
+        animate: false,
+      });
+      // Labels created while the phone map was hidden need visible dimensions.
+      instance.eachLayer((layer) => layer.getTooltip()?.update());
     });
     observer.observe(container.current);
     setReady(true);
@@ -59,15 +64,13 @@ export default function FieldMap({
       instance.remove();
       map.current = null;
     };
-  }, [data.farm.boundary]);
+  }, [farmBounds]);
 
   useEffect(() => {
     if (!ready || !map.current) return;
     const group = L.layerGroup().addTo(map.current);
-    const token = (name: string) =>
-      getComputedStyle(document.documentElement)
-        .getPropertyValue(`--${name}`)
-        .trim();
+    const styles = getComputedStyle(document.documentElement);
+    const token = (name: string) => styles.getPropertyValue(`--${name}`).trim();
     polygonLayer(data.farm.boundary, {
       interactive: false,
       color: token("foreground"),

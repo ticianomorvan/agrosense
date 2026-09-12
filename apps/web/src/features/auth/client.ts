@@ -1,7 +1,7 @@
 import {
   type AuthConfigResponse,
   authConfigResponseSchema,
-} from "@agrosense/contracts";
+} from "@agrosense/contracts/auth";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { getJson } from "../../lib/api";
 

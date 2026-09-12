@@ -1,6 +1,6 @@
 import type { Session } from "@supabase/supabase-js";
 import { useEffect, useState } from "react";
-import { type AuthClient, getAuthClient } from "./client";
+import type { AuthClient } from "./client";
 
 export type AuthState =
   | { status: "loading"; client: null; session: null; message: null }
@@ -19,12 +19,15 @@ const initialState: AuthState = {
   message: null,
 };
 
-export function useAuth(): AuthState {
+export function useAuth(enabled: boolean): AuthState {
   const [state, setState] = useState<AuthState>(initialState);
+  const shouldInitialize = enabled || state.status !== "loading";
   useEffect(() => {
+    if (!shouldInitialize) return;
     let active = true;
     let unsubscribe: (() => void) | undefined;
-    getAuthClient()
+    import("./client")
+      .then(({ getAuthClient }) => getAuthClient())
       .then((client) => {
         if (!active) return;
         // INITIAL_SESSION, SIGNED_IN, TOKEN_REFRESHED and SIGNED_OUT all flow
@@ -53,6 +56,6 @@ export function useAuth(): AuthState {
       active = false;
       unsubscribe?.();
     };
-  }, []);
+  }, [shouldInitialize]);
   return state;
 }

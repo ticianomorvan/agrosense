@@ -4,10 +4,14 @@ import {
   farmListResponseSchema,
   type Polygon,
 } from "@agrosense/contracts";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { createOnboardingSource, farmsOptions } from "./queries";
 
-afterEach(() => vi.unstubAllGlobals());
+beforeEach(() => vi.stubEnv("VITE_API_BASE_URL", ""));
+afterEach(() => {
+  vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
+});
 
 const farmId = "11111111-1111-4111-8111-111111111111";
 const plotId = "22222222-2222-4222-8222-222222222222";
