@@ -316,7 +316,7 @@ agronomic thresholds**. Live evaluation permits approved rules with evidence URL
 only; if none exist, live events appear with no_applicable_rule and null risk.
 
 The default generation method is template. Optional LLM rewriting accepts only
-{reason,recommendation} strings with the same limits, cannot change risk, and
+{reason,recommendedActions} output with the same limits, cannot change risk, and
 falls back to the template on timeout/invalid output. Do not claim that wording
 alone satisfies the source document's AI-core track requirements.
 

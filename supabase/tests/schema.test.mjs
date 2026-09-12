@@ -43,6 +43,15 @@ before(async () => {
       "utf8",
     ),
   );
+  await db.exec(
+    await readFile(
+      new URL(
+        "../migrations/20260912081000_dashboard_snapshot_rpc.sql",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+  );
   farms = [];
   plots = [];
   events = [];

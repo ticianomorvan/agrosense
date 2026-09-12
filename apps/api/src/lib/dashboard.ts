@@ -235,39 +235,25 @@ export async function loadDashboard(
   farmId: string,
   asOf = new Date().toISOString(),
 ) {
-  const farmResult = await client
-    .from("farms")
-    .select("*")
-    .eq("id", farmId)
-    .maybeSingle();
-  if (farmResult.error) throw farmResult.error;
-  if (!farmResult.data) return null;
-  const farm = farmResult.data as FarmRow;
-
-  const [plotsResult, eventsResult] = await Promise.all([
-    client.from("plots").select("*").eq("farm_id", farmId),
-    client.from("events").select("*").eq("farm_id", farmId),
-  ]);
-  if (plotsResult.error) throw plotsResult.error;
-  if (eventsResult.error) throw eventsResult.error;
-  const plots = plotsResult.data as PlotRow[];
-  const plotIds = plots.map((plot) => plot.id);
-
-  const [cyclesResult, alertsResult] = await Promise.all([
-    plotIds.length
-      ? client.from("crop_cycles").select("*").in("plot_id", plotIds)
-      : Promise.resolve({ data: [], error: null }),
-    client.from("plot_alerts").select("*").eq("farm_id", farmId),
-  ]);
-  if (cyclesResult.error) throw cyclesResult.error;
-  if (alertsResult.error) throw alertsResult.error;
+  const snapshotResult = await client.rpc("get_farm_dashboard_snapshot", {
+    p_farm_id: farmId,
+  });
+  if (snapshotResult.error) throw snapshotResult.error;
+  const snapshot = json<{
+    farm: FarmRow | null;
+    plots: PlotRow[];
+    crop_cycles: CycleRow[];
+    events: EventRow[];
+    plot_alerts: AlertRow[];
+  }>(snapshotResult.data);
+  if (!snapshot.farm) return null;
 
   return projectDashboard(
-    farm,
-    plots,
-    cyclesResult.data as CycleRow[],
-    eventsResult.data as EventRow[],
-    alertsResult.data as AlertRow[],
+    snapshot.farm,
+    snapshot.plots,
+    snapshot.crop_cycles,
+    snapshot.events,
+    snapshot.plot_alerts,
     asOf,
   );
 }

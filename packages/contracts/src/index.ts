@@ -12,7 +12,7 @@ export type SessionResponse = z.infer<typeof sessionResponseSchema>;
 
 export const uuidSchema = z.uuid();
 
-const instantSchema = z.iso.datetime({ offset: true });
+const instantSchema = z.iso.datetime({ offset: false });
 const localDateSchema = z.iso.date();
 const positionSchema = z
   .tuple([z.number().min(-180).max(180), z.number().min(-90).max(90)])

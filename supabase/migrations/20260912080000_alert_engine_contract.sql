@@ -23,11 +23,15 @@ ALTER TABLE public.plot_alerts
   DROP CONSTRAINT plot_alerts_risk_level_check,
   ADD CONSTRAINT plot_alerts_risk_level_check
     CHECK (risk_level IN ('low', 'moderate', 'high', 'critical') OR risk_level IS NULL),
-  DROP CONSTRAINT plot_alerts_assessment_state_check,
-  ADD CONSTRAINT plot_alerts_assessment_state_check
+  DROP CONSTRAINT plot_alerts_check,
+  ADD CONSTRAINT plot_alerts_check
     CHECK (
       (assessment_state = 'evaluated' AND risk_level IS NOT NULL)
-      OR (assessment_state <> 'evaluated' AND risk_level IS NULL)
+      OR (
+        assessment_state <> 'evaluated'
+        AND risk_level IS NULL
+        AND recommended_actions = '[]'::jsonb
+      )
     ),
   DROP COLUMN recommendation;
 
