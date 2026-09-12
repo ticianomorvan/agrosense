@@ -9,6 +9,7 @@ export type KapsoBindings = {
   KAPSO_API_KEY?: string;
   KAPSO_PHONE_NUMBER_ID?: string;
   KAPSO_ALLOWED_USER_ID?: string;
+  KAPSO_WEBHOOK_SECRET?: string;
 };
 
 export const kapsoSendConfigSchema = z.object({
@@ -22,6 +23,9 @@ export const kapsoSendConfigSchema = z.object({
 const configSchema = kapsoSendConfigSchema.extend({
   KAPSO_ALLOWED_USER_ID: z.uuid(),
 });
+const webhookConfigSchema = kapsoSendConfigSchema
+  .pick({ KAPSO_PHONE_NUMBER_ID: true })
+  .extend({ KAPSO_WEBHOOK_SECRET: z.string().min(16).max(4096) });
 
 type KapsoConfig = z.infer<typeof configSchema>;
 
@@ -49,6 +53,20 @@ export function readKapsoConfig(env: KapsoBindings): KapsoConfig {
     );
   }
   return config.data;
+}
+
+export function readKapsoWebhookConfig(env: KapsoBindings) {
+  const config = webhookConfigSchema.safeParse(env);
+  if (!config.success)
+    throw new KapsoError(
+      "KAPSO_UNAVAILABLE",
+      503,
+      "WhatsApp webhooks are not configured",
+    );
+  return {
+    phoneNumberId: config.data.KAPSO_PHONE_NUMBER_ID,
+    webhookSecret: config.data.KAPSO_WEBHOOK_SECRET,
+  };
 }
 
 // Only consume the documented fields needed by our public response.

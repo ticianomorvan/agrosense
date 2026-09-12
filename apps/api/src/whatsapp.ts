@@ -12,10 +12,17 @@ import {
   readAgentConfig,
 } from "./agent/config";
 import { normalizeInbound, verifyWebhookSignature } from "./agent/inbound";
+import { normalizeReceipt } from "./automation/receipts";
 import type { ApiEnv } from "./env";
 import { requireAuth } from "./lib/auth";
 import { jsonError } from "./lib/http";
-import { KapsoError, readKapsoConfig, sendWhatsappText } from "./lib/kapso";
+import {
+  KapsoError,
+  readKapsoConfig,
+  readKapsoWebhookConfig,
+  sendWhatsappText,
+} from "./lib/kapso";
+import { createServiceClient } from "./lib/supabase";
 
 export const whatsapp = new Hono<ApiEnv>();
 
@@ -106,8 +113,7 @@ whatsapp.post(
   }),
   async (c) => {
     try {
-      const config = readAgentConfig(c.env);
-      if (!c.env.WHATSAPP_CONVERSATIONS) throw new AgentConfigurationError();
+      const webhookConfig = readKapsoWebhookConfig(c.env);
       const raw = new Uint8Array(await c.req.arrayBuffer());
       if (raw.byteLength > 128 * 1024)
         return jsonError(
@@ -120,7 +126,7 @@ whatsapp.post(
         !(await verifyWebhookSignature(
           raw,
           c.req.header("X-Webhook-Signature"),
-          config.webhookSecret,
+          webhookConfig.webhookSecret,
         ))
       )
         return jsonError(
@@ -137,9 +143,60 @@ whatsapp.post(
       } catch {
         throw new SyntaxError("Invalid webhook encoding or JSON");
       }
+      const envelope = z.object({ type: z.string().optional() }).parse(payload);
+      const headerEvent = c.req.header("X-Webhook-Event");
+      if (
+        envelope.type !== undefined &&
+        headerEvent !== undefined &&
+        envelope.type !== headerEvent
+      )
+        return jsonError(c, 400, "BAD_REQUEST", "Webhook event type mismatch");
+      const event = envelope.type ?? headerEvent;
+      if (event !== "whatsapp.message.received") {
+        let receipt: ReturnType<typeof normalizeReceipt>;
+        try {
+          receipt = normalizeReceipt(
+            payload,
+            event,
+            webhookConfig.phoneNumberId,
+          );
+        } catch {
+          return jsonError(
+            c,
+            400,
+            "BAD_REQUEST",
+            "Invalid notification receipt",
+          );
+        }
+        if (!receipt) return c.json({ received: true, ignored: true });
+        try {
+          const result = await createServiceClient(c.env)
+            .rpc("record_notification_receipt", {
+              p_phone_number_id: receipt.phoneNumberId,
+              p_message_id: receipt.messageId,
+              p_status: receipt.status,
+              p_occurred_at: receipt.occurredAt,
+              p_recipient: receipt.recipient,
+              p_notification_id: receipt.notificationId,
+              p_token: receipt.token,
+            })
+            .abortSignal(AbortSignal.timeout(5000));
+          if (result.error) throw new Error("Receipt persistence failed");
+          return c.json({ received: true, matched: result.data });
+        } catch {
+          return jsonError(
+            c,
+            503,
+            "RECEIPT_UNAVAILABLE",
+            "Could not persist the receipt",
+          );
+        }
+      }
+      const config = readAgentConfig(c.env);
+      if (!c.env.WHATSAPP_CONVERSATIONS) throw new AgentConfigurationError();
       const { messages, ignored } = normalizeInbound(
         payload,
-        c.req.header("X-Webhook-Event"),
+        headerEvent,
         config,
       );
       const admission = { accepted: 0, duplicates: 0 };
@@ -168,10 +225,19 @@ whatsapp.post(
           admission.duplicates += result.duplicates;
         }
       }
+      console.info(
+        JSON.stringify({
+          event: "whatsapp_webhook_admission",
+          ...admission,
+          ignored,
+        }),
+      );
       return c.json(
         whatsappWebhookResponseSchema.parse({ ...admission, ignored }),
       );
     } catch (error) {
+      if (error instanceof KapsoError)
+        return jsonError(c, error.status, error.code, error.message);
       if (error instanceof z.ZodError || error instanceof SyntaxError)
         return jsonError(
           c,

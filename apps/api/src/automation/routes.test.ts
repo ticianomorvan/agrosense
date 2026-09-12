@@ -1,4 +1,3 @@
-import { createHmac } from "node:crypto";
 import { afterEach, expect, it, vi } from "vitest";
 import { automationRoutes } from "./routes";
 
@@ -15,7 +14,6 @@ const env = {
   AUTOMATION_CRON_SECRET: secret,
   KAPSO_API_KEY: "test",
   KAPSO_PHONE_NUMBER_ID: "123456",
-  KAPSO_NOTIFICATION_WEBHOOK_SECRET: "test-notification-webhook-secret",
 };
 function configureRpcs() {
   rpc.mockImplementation((name: string) => ({
@@ -99,79 +97,6 @@ it("records failed work without leaking upstream error contents", async () => {
     p_succeeded: false,
     p_result: { errorCode: "AUTOMATION_RUN_FAILED" },
   });
-});
-
-it("authenticates raw webhook bytes independently of the conversation agent", async () => {
-  configureRpcs();
-  const body = JSON.stringify({
-    phone_number_id: "123456",
-    message: {
-      id: "wamid.test",
-      timestamp: "1789192800",
-      to: "5493515551234",
-      kapso: { direction: "outbound", status: "delivered" },
-    },
-  });
-  const headers = {
-    "X-Webhook-Event": "whatsapp.message.delivered",
-    "X-Webhook-Signature": createHmac(
-      "sha256",
-      env.KAPSO_NOTIFICATION_WEBHOOK_SECRET,
-    )
-      .update(body)
-      .digest("hex"),
-  };
-  const request = (text: string) =>
-    automationRoutes.request(
-      "/api/whatsapp/notifications/webhook",
-      { method: "POST", body: text, headers },
-      env,
-    );
-  expect((await request(`${body} `)).status).toBe(401);
-  expect(rpc).not.toHaveBeenCalled();
-  const response = await request(body);
-  expect(response.status).toBe(200);
-  expect(rpc).toHaveBeenCalledWith(
-    "record_notification_receipt",
-    expect.objectContaining({
-      p_message_id: "wamid.test",
-      p_status: "delivered",
-    }),
-  );
-});
-
-it("returns non-200 when receipt persistence fails so Kapso retries", async () => {
-  rpc.mockReturnValue({
-    abortSignal: () =>
-      Promise.resolve({ data: null, error: { message: "private DB failure" } }),
-  });
-  const body = JSON.stringify({
-    phone_number_id: "123456",
-    message: {
-      id: "wamid.test",
-      timestamp: "1789192800",
-      kapso: { direction: "outbound", status: "sent" },
-    },
-  });
-  const response = await automationRoutes.request(
-    "/api/whatsapp/notifications/webhook",
-    {
-      method: "POST",
-      body,
-      headers: {
-        "X-Webhook-Event": "whatsapp.message.sent",
-        "X-Webhook-Signature": createHmac(
-          "sha256",
-          env.KAPSO_NOTIFICATION_WEBHOOK_SECRET,
-        )
-          .update(body)
-          .digest("hex"),
-      },
-    },
-    env,
-  );
-  expect(response.status).toBe(503);
-  expect(await response.text()).not.toContain("private DB");
 });
 
 it("reports unsuccessful completion when the run acknowledgement is lost", async () => {

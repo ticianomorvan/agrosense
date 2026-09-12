@@ -3,10 +3,8 @@ import {
   uuidSchema,
 } from "@agrosense/contracts";
 import { Hono } from "hono";
-import { bodyLimit } from "hono/body-limit";
 import { createMiddleware } from "hono/factory";
 import { z } from "zod";
-import { verifyWebhookSignature } from "../agent/inbound";
 import type { ApiEnv } from "../env";
 import { requireAuth } from "../lib/auth";
 import type { Json } from "../lib/database.types";
@@ -16,7 +14,6 @@ import { readLimitedRequestBody } from "../lib/request-body";
 import { createServiceClient } from "../lib/supabase";
 import { dispatchNotifications, processWeather } from "./jobs";
 import { readNotificationConfig } from "./notification";
-import { normalizeReceipt } from "./receipts";
 
 export const automationRoutes = new Hono<ApiEnv>();
 automationRoutes.use("*", async (c, next) => {
@@ -148,77 +145,6 @@ for (const task of ["weather", "notifications"] as const) {
     return c.json({ runId, succeeded, result }, succeeded ? 200 : 503);
   });
 }
-
-automationRoutes.post(
-  "/api/whatsapp/notifications/webhook",
-  bodyLimit({
-    maxSize: 128 * 1024,
-    onError: (c) =>
-      jsonError(c, 413, "PAYLOAD_TOO_LARGE", "Request body is too large"),
-  }),
-  async (c) => {
-    const secret = c.env.KAPSO_NOTIFICATION_WEBHOOK_SECRET;
-    const phoneNumberId = c.env.KAPSO_PHONE_NUMBER_ID;
-    if (!secret || secret.length < 16 || !phoneNumberId)
-      return jsonError(
-        c,
-        503,
-        "NOTIFICATIONS_UNAVAILABLE",
-        "Notification webhooks are not configured",
-      );
-    const raw = new Uint8Array(await c.req.arrayBuffer());
-    if (raw.byteLength > 128 * 1024)
-      return jsonError(
-        c,
-        413,
-        "PAYLOAD_TOO_LARGE",
-        "Request body is too large",
-      );
-    if (
-      !(await verifyWebhookSignature(
-        raw,
-        c.req.header("X-Webhook-Signature"),
-        secret,
-      ))
-    )
-      return jsonError(
-        c,
-        401,
-        "UNAUTHORIZED",
-        "Valid webhook signature required",
-      );
-    let receipt: ReturnType<typeof normalizeReceipt>;
-    try {
-      receipt = normalizeReceipt(
-        JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(raw)),
-        c.req.header("X-Webhook-Event"),
-        phoneNumberId,
-      );
-    } catch {
-      return jsonError(c, 400, "BAD_REQUEST", "Invalid notification receipt");
-    }
-    if (!receipt) return c.json({ received: true, ignored: true });
-    const result = await createServiceClient(c.env)
-      .rpc("record_notification_receipt", {
-        p_phone_number_id: receipt.phoneNumberId,
-        p_message_id: receipt.messageId,
-        p_status: receipt.status,
-        p_occurred_at: receipt.occurredAt,
-        p_recipient: receipt.recipient,
-        p_notification_id: receipt.notificationId,
-        p_token: receipt.token,
-      })
-      .abortSignal(AbortSignal.timeout(5000));
-    if (result.error)
-      return jsonError(
-        c,
-        503,
-        "RECEIPT_UNAVAILABLE",
-        "Could not persist the receipt",
-      );
-    return c.json({ received: true, matched: result.data });
-  },
-);
 
 automationRoutes.get(
   "/api/farms/:farmId/notifications",

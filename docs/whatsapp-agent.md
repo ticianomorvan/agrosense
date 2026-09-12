@@ -45,7 +45,7 @@ Use the ignored `apps/api/.env` locally, based on
 | Binding | Value |
 | --- | --- |
 | `SUPABASE_SECRET_KEY` | Server key for the owner-scoped read adapter |
-| `KAPSO_WEBHOOK_SECRET` | Kapso subscription signing secret, at least 16 characters |
+| `KAPSO_WEBHOOK_SECRET` | Shared Kapso subscription signing secret for incoming messages and notification receipts, at least 16 characters |
 | `OPENROUTER_API_KEY` | OpenRouter inference key |
 | `OPENROUTER_MODEL` | Default `deepseek/deepseek-v4.1-flash` |
 | `OPENROUTER_REASONING_EFFORT` | `low`, `medium` (default), or `high` |
@@ -76,17 +76,23 @@ are unused.
    `pnpm --filter @agrosense/api exec wrangler secret put <NAME>`, then deploy
    with `pnpm deploy:api`. Wrangler creates the SQLite Durable Object via migration
    `whatsapp-agent-v1`; no Supabase migration is added by this feature.
-3. Create a phone-number-scoped Kapso v2 webhook for the configured business
-   `phone_number_id`, subscribing to `whatsapp.message.received` events at
-   `https://<your-worker-host>/api/whatsapp/webhook` with the same signing secret.
+3. Create or update one phone-number-scoped Kapso v2 webhook for the configured
+   business `phone_number_id` at
+   `https://<your-worker-host>/api/whatsapp/webhook`. Subscribe to
+   `whatsapp.message.received`, `whatsapp.message.sent`,
+   `whatsapp.message.delivered`, `whatsapp.message.read`, and
+   `whatsapp.message.failed`, using `KAPSO_WEBHOOK_SECRET` as its signing secret.
    Use unbuffered events or batches of at most 20 messages and 128 KiB.
 4. Enable the agent and message the business number from each demo participant's
    phone.
    Verify an actual tool-backed answer, a follow-up question in the same
    conversation, and the run's status.
 
-Setting `WHATSAPP_AGENT_ENABLED=false` stops admission and subsequent run/send
-operations. Current identity is checked again before processing and sending.
+Setting `WHATSAPP_AGENT_ENABLED=false` stops incoming conversation admission and
+subsequent agent run/send operations. Signed notification receipt processing at
+the shared webhook remains active and does not require the agent's model or
+Durable Object configuration. Current identity is checked again before processing
+and sending.
 Changing owner, contact sender or business number selects a different conversation
 store. Status inspection requires the full enabled configuration and the contact
 sender used to select that store.
@@ -94,14 +100,18 @@ sender used to select that store.
 ## HTTP and delivery behavior
 
 `POST /api/whatsapp/webhook` verifies the raw body using HMAC-SHA256 from the bare
-hex `X-Webhook-Signature` header. The event name is in `X-Webhook-Event`.
-No Supabase bearer token is required. Mismatched sender identities, wrong business
-IDs, outbound echoes, history imports, non-text events and messages older than 24
-hours are ignored.
+hex `X-Webhook-Signature` header. The event name comes from the signed body `type`,
+or `X-Webhook-Event` when the body omits it; if both are supplied, they must agree.
+No Supabase bearer token is required. The same endpoint routes received messages
+to the agent and sent/delivered/read/failed events to
+[notification receipt processing](weather-automation.md). Receipt events do not
+start an agent run. For incoming conversation admission, mismatched sender
+identities, wrong business IDs, outbound echoes, history imports, non-text events
+and messages older than 24 hours are ignored.
 BSUID-only contacts are unsupported.
 
-The Worker calls the Durable Object through typed RPC. HTTP 200 follows durable
-admission and wakeup scheduling:
+For incoming text messages, the Worker calls the Durable Object through typed
+RPC. HTTP 200 follows durable admission and wakeup scheduling:
 
 ```json
 {"accepted":1,"duplicates":0,"ignored":0}
@@ -111,6 +121,8 @@ This acknowledges queued work. Invalid signatures return 401, malformed bodies
 400, oversized bodies 413, conflicting message IDs 409, capacity limits 429, and
 configuration/storage failures 503. Ignored events return 200 with an ignored count.
 Deduplication uses signed message identity/content, independent of delivery headers.
+The `whatsapp_webhook_admission` log records only accepted, duplicate and ignored
+counts, without message contents or sender identities.
 
 `GET /api/whatsapp/agent/runs/<URL-encoded-message-id>?sender=<international-digits>`
 requires exactly one contact sender query parameter and the configured operator's

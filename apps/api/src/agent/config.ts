@@ -1,5 +1,9 @@
 import { z } from "zod";
-import { type KapsoBindings, readKapsoConfig } from "../lib/kapso";
+import {
+  type KapsoBindings,
+  readKapsoConfig,
+  readKapsoWebhookConfig,
+} from "../lib/kapso";
 import { readSupabaseConfig, type SupabaseBindings } from "../lib/supabase";
 import { hashIdentity } from "./identity";
 import { type ModelBindings, readModelConfig } from "./model";
@@ -9,7 +13,6 @@ export type AgentBindings = KapsoBindings &
   SupabaseBindings &
   ModelBindings & {
     WHATSAPP_AGENT_ENABLED?: string;
-    KAPSO_WEBHOOK_SECRET?: string;
     WHATSAPP_CONVERSATIONS?: DurableObjectNamespace<WhatsAppConversation>;
   };
 export class AgentConfigurationError extends Error {
@@ -30,13 +33,8 @@ export function readAgentConfig(env: AgentBindings) {
       .parse(env.SUPABASE_SECRET_KEY);
     return {
       kapso,
-      webhookSecret: z
-        .string()
-        .min(16)
-        .max(4096)
-        .parse(env.KAPSO_WEBHOOK_SECRET),
+      ...readKapsoWebhookConfig(env),
       ownerId: kapso.KAPSO_ALLOWED_USER_ID,
-      phoneNumberId: kapso.KAPSO_PHONE_NUMBER_ID,
     };
   } catch {
     throw new AgentConfigurationError();

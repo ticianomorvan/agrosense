@@ -90,12 +90,14 @@ export function normalizeInbound(
   const result: InboundMessage[] = [];
   for (const entry of entries) {
     const { message, conversation } = entry;
+    // Kapso enrichment can label an incoming received event as delivered.
     if (
       entry.phone_number_id !== config.phoneNumberId ||
       conversation.phone_number_id !== config.phoneNumberId ||
       (message.kapso
         ? message.kapso.direction !== "inbound" ||
-          message.kapso.status !== "received" ||
+          (message.kapso.status !== "received" &&
+            message.kapso.status !== "delivered") ||
           message.kapso.origin === "history_sync"
         : bodyEvent !== expectedEvent) ||
       message.type !== "text"

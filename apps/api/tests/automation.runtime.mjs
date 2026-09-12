@@ -37,7 +37,7 @@ test("Worker authenticates Supabase jobs, dispatches a text notification once an
         AUTOMATION_CRON_SECRET: secret,
         KAPSO_API_KEY: "kapso_test",
         KAPSO_PHONE_NUMBER_ID: "123456",
-        KAPSO_NOTIFICATION_WEBHOOK_SECRET: webhookSecret,
+        KAPSO_WEBHOOK_SECRET: webhookSecret,
       },
       outboundService: async (request) => {
         try {
@@ -157,10 +157,11 @@ test("Worker authenticates Supabase jobs, dispatches a text notification once an
         .digest("hex"),
     };
     const receipt = (text) =>
-      mf.dispatchFetch(
-        "https://worker.test/api/whatsapp/notifications/webhook",
-        { method: "POST", body: text, headers },
-      );
+      mf.dispatchFetch("https://worker.test/api/whatsapp/webhook", {
+        method: "POST",
+        body: text,
+        headers,
+      });
     assert.equal((await receipt(`${body} `)).status, 401);
     assert.equal((await receipt(body)).status, 200);
     assert.equal(state, "delivered");

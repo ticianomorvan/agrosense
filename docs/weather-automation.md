@@ -70,6 +70,13 @@ was delivered. Signed receipts advance sent/delivered/read or record failure.
 Unknown outcomes require receipt reconciliation or operator investigation; this
 system does not claim exactly-once delivery across a non-idempotent external API.
 
+Notification receipts share `POST /api/whatsapp/webhook` and
+`KAPSO_WEBHOOK_SECRET` with incoming conversation events. Receipt processing is
+independent of agent enablement and its model/Durable Object configuration;
+`WHATSAPP_AGENT_ENABLED=false` only stops incoming conversation admission and
+subsequent agent run/send operations. Notification dispatch remains controlled by
+its Supabase Cron job and provisioned owner contacts.
+
 ## Implementation and verification
 
 Backend code follows existing strict TypeScript, Hono and shared Zod contracts.
@@ -94,8 +101,8 @@ by that owner messaging the business first.
    project, and regenerate database types with `pnpm db:types`.
 2. Configure the existing Supabase credentials plus `AUTOMATION_CRON_SECRET`
    (64 random lowercase hex characters) as Worker secrets. Configure
-   `KAPSO_API_KEY`, `KAPSO_PHONE_NUMBER_ID` and
-   `KAPSO_NOTIFICATION_WEBHOOK_SECRET`. The conversation agent and its
+   `KAPSO_API_KEY`, `KAPSO_PHONE_NUMBER_ID` and the shared
+   `KAPSO_WEBHOOK_SECRET` (at least 16 characters). The conversation agent and its
    allowlisted owner are independent of automatic notifications.
 3. Connect the business number in Kapso. Immediately before enabling notification
    dispatch for the demo, have the provisioned owner send a message to that number
@@ -103,11 +110,13 @@ by that owner messaging the business first.
    text messages and do not require template approval. Once the window expires,
    another owner message is required before free-form notification delivery can
    resume.
-4. Register a **phone-number**, **Kapso v2** webhook to
-   `https://<worker-origin>/api/whatsapp/notifications/webhook` for
-   `whatsapp.message.sent`, `whatsapp.message.delivered`, `whatsapp.message.read`,
-   and `whatsapp.message.failed`. Set its signing secret to the notification
-   webhook secret. The separate conversation webhook can remain in place.
+4. Create or update one **phone-number**, **Kapso v2** webhook at
+   `https://<worker-origin>/api/whatsapp/webhook` for
+   `whatsapp.message.received`, `whatsapp.message.sent`,
+   `whatsapp.message.delivered`, `whatsapp.message.read`, and
+   `whatsapp.message.failed`. Set its signing secret to `KAPSO_WEBHOOK_SECRET`.
+   Use unbuffered incoming events or batches of at most 20 messages and 128 KiB.
+   Incoming conversations and notification receipts use this same subscription.
 5. Verify the owner's identity, phone and opt-in, then create an ignored local
    contact JSON file with exactly `ownerId`, `phoneNumber` (international digits),
    `consentedAt` (past UTC instant), and `enabled` (boolean). Run
@@ -178,7 +187,7 @@ pre/post data snapshots. The Worker has the notification send credentials and cr
 secret. Supabase Vault is configured; the weather and retention jobs are active,
 while notification dispatch is paused. One owner contact is enabled and there is
 currently no pending notification. Deploy the plain-text implementation, configure
-and register the signed receipt webhook, and have the owner open a customer-service
+the shared signed webhook subscription, and have the owner open a customer-service
 window before activating notification dispatch.
 
 ## Verification results — 2026-09-12

@@ -13,7 +13,6 @@ import {
 
 export type AutomationBindings = {
   AUTOMATION_CRON_SECRET?: string;
-  KAPSO_NOTIFICATION_WEBHOOK_SECRET?: string;
   OPEN_METEO_API_KEY?: string;
 };
 

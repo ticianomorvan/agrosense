@@ -137,9 +137,10 @@ custom CSS is limited to tokens, global defaults and Leaflet-generated markup.
 On desktop, the selected plot's land/crop facts, the largest Sentinel-2 map, and
 its newest-first weather-event timeline form three columns. At narrow widths the
 facts and event record lead and the map becomes an explicit alternate view. The
-web timeline does not render `PlotAlert` risk or recommendations; notification
-alerts are a WhatsApp surface. Map rendering loads lazily and the initial imagery
-request uses the previous 30-day UTC window. Add primitives with
+selected plot’s current recommendations and potential-loss estimate appear in a
+neutral assessment panel above the timeline, without a red alert border.
+Expired assessments show an unavailable state. Notifications also use WhatsApp.
+Map rendering loads lazily and the initial imagery request uses the previous 30-day UTC window. Add primitives with
 `pnpm dlx shadcn@latest add` from `apps/web`; the CLI and unused animation styles
 are not application dependencies.
 

@@ -122,8 +122,11 @@ sizes below may be expressed as equivalent rem values, except breakpoints.
 
 Desktop map MUST be the largest content region, minimum height 480px; allow
 page scrolling. Selecting a plot updates the facts, map outline, and filtered
-newest-first event timeline together. Phone map minimum height is 320px and
-includes an obvious way back to the plot overview. Preserve selection.
+newest-first event timeline together. Show the selected plot’s current recommended
+actions and potential production loss in a neutral panel above the timeline.
+MUST NOT surround this assessment with a red alert border or banner. Label
+synthetic estimates and unavailable or expired assessments explicitly. Phone map
+minimum height is 320px and includes an obvious way back to the plot overview. Preserve selection.
 
 Header minimum height: 64px desktop, 56px below 1024px. Let it grow with wrapped
 content. MUST NOT lock the page to `100vh`, clip text to preserve dimensions,

@@ -14,6 +14,7 @@ import { DataState } from "../../components/data-state";
 import { Button } from "../../components/ui/button";
 import { EventTimeline } from "../events/EventTimeline";
 import { SatelliteControls } from "../satellite/SatelliteControls";
+import { PlotAssessment } from "./PlotAssessment";
 import { PlotFacts } from "./PlotFacts";
 import { dashboardOptions, type FarmDataSource } from "./queries";
 
@@ -174,7 +175,13 @@ export function FieldOverview({
                 onImage={setSatellite}
               />
             </section>
-            <div className={cn(phoneMap && "hidden md:block")}>
+            <div
+              className={cn(
+                "min-w-0 space-y-4 md:space-y-6",
+                phoneMap && "hidden md:block",
+              )}
+            >
+              <PlotAssessment data={data} plotId={selected.id} />
               <EventTimeline data={data} plotId={selected.id} />
             </div>
           </div>

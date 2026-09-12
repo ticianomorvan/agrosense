@@ -21,6 +21,14 @@ binding with `pnpm --filter @agrosense/api exec wrangler secret put <NAME>`.
 Removing the Kapso key or operator binding disables manual sending; the agent's
 separate enable flag does not disable this endpoint.
 
+Incoming conversations and automatic notification receipts share one
+phone-number-scoped Kapso v2 subscription at `POST /api/whatsapp/webhook`, signed
+with `KAPSO_WEBHOOK_SECRET`. Subscribe to `whatsapp.message.received`,
+`whatsapp.message.sent`, `whatsapp.message.delivered`, `whatsapp.message.read`, and
+`whatsapp.message.failed`. See [agent enablement](whatsapp-agent.md#enablement) and
+[notification activation](weather-automation.md#activation). Disabling the agent
+stops conversation admission/run/send; signed notification receipts remain active.
+
 ## Manual send
 
 `POST /api/whatsapp/messages` requires a verified Supabase bearer token belonging

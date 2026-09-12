@@ -134,6 +134,17 @@ describe("Kapso webhook primitives", () => {
     ).toHaveLength(1);
   });
 
+  it.each(["sent", "read", "failed", "pending", "unknown"])(
+    "ignores inbound messages with unsupported status %s",
+    (status) => {
+      const payload = event();
+      payload.message.kapso.status = status;
+      expect(
+        normalizeInbound(payload, "whatsapp.message.received", config, now),
+      ).toEqual({ messages: [], ignored: 1 });
+    },
+  );
+
   it("preserves Kapso batch order even when timestamps match and IDs sort differently", () => {
     const later = event("wamid.2", "And tomorrow?");
     const batch = {
@@ -190,6 +201,28 @@ describe("Kapso webhook primitives", () => {
       message: {
         ...event().message,
         kapso: { direction: "outbound", status: "sent", origin: "cloud_api" },
+      },
+    },
+    {
+      ...event(),
+      message: {
+        ...event().message,
+        kapso: {
+          direction: "outbound",
+          status: "delivered",
+          origin: "cloud_api",
+        },
+      },
+    },
+    {
+      ...event(),
+      message: {
+        ...event().message,
+        kapso: {
+          direction: "inbound",
+          status: "delivered",
+          origin: "history_sync",
+        },
       },
     },
     {
