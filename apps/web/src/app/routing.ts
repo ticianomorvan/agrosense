@@ -11,3 +11,11 @@ export const routePaths = {
   "sign-in": "/sign-in",
   workspace: "/app",
 } satisfies Record<AppRoute, string>;
+
+export function workspaceNeedsSignIn(
+  route: AppRoute,
+  authStatus: "loading" | "unavailable" | "ready",
+  hasSession: boolean,
+) {
+  return route === "workspace" && authStatus !== "loading" && !hasSession;
+}

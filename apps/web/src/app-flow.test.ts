@@ -1,6 +1,6 @@
 import type { EventCard } from "@agrosense/contracts";
 import { describe, expect, it } from "vitest";
-import { routeFromPath } from "./app/routing";
+import { routeFromPath, workspaceNeedsSignIn } from "./app/routing";
 import { timelineEventsForPlot } from "./features/events/timeline";
 import { rectangleFromBounds } from "./features/onboarding/geometry";
 
@@ -13,6 +13,14 @@ describe("application route", () => {
     ["/unknown", "landing"],
   ] as const)("maps %s to %s", (path, expected) => {
     expect(routeFromPath(path)).toBe(expected);
+  });
+
+  it("leaves loading alone and redirects every settled sessionless workspace", () => {
+    expect(workspaceNeedsSignIn("workspace", "loading", false)).toBe(false);
+    expect(workspaceNeedsSignIn("workspace", "ready", true)).toBe(false);
+    expect(workspaceNeedsSignIn("workspace", "ready", false)).toBe(true);
+    expect(workspaceNeedsSignIn("workspace", "unavailable", false)).toBe(true);
+    expect(workspaceNeedsSignIn("sign-in", "unavailable", false)).toBe(false);
   });
 });
 

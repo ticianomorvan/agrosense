@@ -5,7 +5,12 @@ import { SignInPage } from "../features/auth/SignInPage";
 import { useAuth } from "../features/auth/use-auth";
 import { LandingPage } from "../pages/LandingPage";
 import { WorkspacePage } from "../pages/WorkspacePage";
-import { type AppRoute, routeFromPath, routePaths } from "./routing";
+import {
+  type AppRoute,
+  routeFromPath,
+  routePaths,
+  workspaceNeedsSignIn,
+} from "./routing";
 
 export function App() {
   const queryClient = useQueryClient();
@@ -26,7 +31,7 @@ export function App() {
     return () => removeEventListener("popstate", onPopState);
   }, []);
   useEffect(() => {
-    if (route === "workspace" && auth.status === "ready" && !auth.session)
+    if (workspaceNeedsSignIn(route, auth.status, Boolean(auth.session)))
       navigate("sign-in", true);
   }, [auth, navigate, route]);
 
