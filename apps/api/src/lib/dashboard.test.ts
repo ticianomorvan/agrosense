@@ -406,6 +406,52 @@ describe("dashboard freshness", () => {
         .status,
     ).toBe(status);
   });
+
+  it.each([
+    [null, "2026-09-12T01:00:00.123456Z"],
+    ["2026-09-11T18:30:00.123456Z", "2026-09-12T00:30:00.123456Z"],
+  ])(
+    "preserves the exact forecast deadline for issuance %s",
+    (issuedAt, deadline) => {
+      const preciseSource = {
+        ...source,
+        retrievedAt: "2026-09-12T00:00:00.123456Z",
+        issuedAt,
+      };
+      const preciseFarm: Farm = {
+        ...refreshedFarm,
+        forecast_summary: {
+          schemaVersion: 1,
+          fetchedAt: preciseSource.retrievedAt,
+          windowStart: "2026-09-12T02:00:00Z",
+          windowEnd: "2026-09-12T03:00:00Z",
+          plots: [
+            {
+              plotId,
+              samplePoint: point,
+              source: preciseSource,
+              temperatureHeightM: 2,
+              hours: evidence.hours,
+            },
+          ],
+        },
+      };
+      const before = projectDashboard(
+        preciseFarm,
+        [plot],
+        [],
+        [],
+        [],
+        deadline.replace("123456", "123455"),
+      );
+      expect(before.monitoring.forecastValidUntil).toBe(deadline);
+      expect(before.monitoring.status).toBe("fresh");
+      expect(
+        projectDashboard(preciseFarm, [plot], [], [], [], deadline).monitoring
+          .status,
+      ).toBe("stale");
+    },
+  );
 });
 
 describe("dashboard payload limits", () => {

@@ -158,11 +158,13 @@ app.get("/api/farms/:farmId/dashboard", requireAuth, async (c) => {
 
 app.post("/api/farms/:farmId/refresh", requireAuth, async (c) => {
   c.header("Cache-Control", "private, no-store");
-  if (
-    Object.keys(c.req.query()).length > 0 ||
-    (await c.req.text()).trim().length > 0
-  )
+  if (Object.keys(c.req.query()).length > 0)
     return jsonError(c, 400, "BAD_REQUEST", "Query parameters are unsupported");
+  const rawBody = await readLimitedRequestBody(c.req.raw, 16 * 1024);
+  if (rawBody === null)
+    return jsonError(c, 413, "PAYLOAD_TOO_LARGE", "Request body is too large");
+  if (rawBody.trim().length > 0)
+    return jsonError(c, 400, "BAD_REQUEST", "Request body is unsupported");
   const farmId = c.req.param("farmId");
   if (!uuidSchema.safeParse(farmId).success)
     return jsonError(c, 400, "BAD_REQUEST", "farmId must be a UUID");
