@@ -18,7 +18,7 @@ local runtime checks for API responses and SPA fallback.
 | Contracts | Shared Zod schemas | Runtime response validation and inferred TypeScript types |
 | Hosting | Workers Static Assets + API Worker | One deployment and origin; explicit `/api` routing |
 | Quality | Biome + Vitest | Formatting, linting, and API contract tests |
-| Persistence | Supabase Postgres, provisional | Add when the first persistent feature defines the schema |
+| Persistence | Supabase Postgres + Auth | Typed Data API client, JWT verification, and owner-scoped RLS |
 
 Use Node 24 and the pnpm version pinned in package.json. Exact dependency
 resolutions live in pnpm-lock.yaml. Add routing, server-state caching, and a UI
@@ -50,17 +50,17 @@ tests with each feature rather than imposing an arbitrary coverage percentage.
 
 ## Persistence boundary
 
-Supabase is not provisioned or required by this starter. If selected, keep SQL
-migrations in `supabase/migrations`, generate database types, and start with
-`supabase-js` over its HTTP Data API in the Worker. Decide Auth and tenant
-boundaries before building data routes. Forward verified user identity to a
-user-scoped client and enforce row-level security. Restrict privileged clients
-to explicit administrative operations. Never put a secret/service-role key in
-Vite environment variables or the browser bundle.
+Supabase is provisioned with the five-table schema in `supabase/migrations`.
+See [Supabase setup](supabase.md) for credentials, migrations, types, and commands.
+The Worker uses `supabase-js` over the HTTP Data API. `requireAuth` verifies user
+JWTs against Supabase JWKS and provides a request-scoped client that preserves
+row-level security. Secret-key operations are reserved for explicit administration.
+Never put a secret/service-role key in Vite variables or a browser bundle.
 
-Always keep shared contracts browser-safe, validate external input, and verify
-changes. Never commit credentials or generated build output. Provisioning,
-production deployment, authentication, and domain schemas are separate work.
+Shared contracts stay browser-safe. Database row types live in the API; product
+response projections belong in shared Zod contracts. The session endpoint proves
+the authentication boundary. Demo imports, product routes, mutation RPCs, forecast
+adapters, and sign-in UI are subsequent feature slices.
 
 ## References
 

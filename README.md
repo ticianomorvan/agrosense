@@ -1,8 +1,7 @@
 # AgroSense
 
 TypeScript monorepo: React + Vite SPA, Hono API on Cloudflare Workers, and shared
-Zod contracts. See [stack decisions](docs/stack.md) for boundaries and the optional
-Supabase persistence plan.
+Zod contracts. See [stack decisions](docs/stack.md) for boundaries and [Supabase setup](docs/supabase.md).
 
 See [product context](PRODUCT.md) for the intended audience and core job, and the
 [frontend implementation contract](docs/style-guide.md) for required visual
@@ -19,8 +18,8 @@ pnpm dev
 ```
 
 Open http://localhost:5173. The SPA calls `/api/health` through Vite's proxy to
-Wrangler at http://127.0.0.1:8787. No cloud account or database credentials are
-required locally. The initial web build supplies Wrangler's static asset directory;
+Wrangler at http://127.0.0.1:8787. The starter health screen needs no cloud credentials. Authenticated API routes
+use the Supabase settings in `apps/api/.env`. The initial web build supplies Wrangler's static asset directory;
 Vite provides live frontend changes at port 5173.
 
 ```sh
@@ -42,5 +41,7 @@ This publishes one Worker named `agrosense` with the built SPA as static assets.
 API paths run the Worker first, including unknown routes; other navigation paths
 use the SPA fallback. `pnpm build` only produces a dry run and does not deploy.
 
-Supabase has not been provisioned. Add persistence and environment configuration
-with the first data feature. Keep credentials out of Git and client bundles.
+Supabase is provisioned with the five-table domain schema and owner-scoped RLS.
+See [Supabase setup](docs/supabase.md) for the ignored API `.env`, authentication
+boundary, migration commands, and the remaining product slices. Keep credentials
+out of Git and client bundles.

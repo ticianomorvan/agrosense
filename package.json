@@ -13,12 +13,20 @@
     "typecheck": "pnpm -r typecheck",
     "lint": "biome check .",
     "format": "biome check --write .",
-    "test": "pnpm --filter @agrosense/api test",
+    "test": "pnpm --filter @agrosense/api test && pnpm db:test",
     "check": "pnpm typecheck && pnpm lint && pnpm test && pnpm build",
-    "deploy": "pnpm build && pnpm --filter @agrosense/api deploy"
+    "deploy": "pnpm build && pnpm --filter @agrosense/api deploy",
+    "db:test": "node --test supabase/tests/*.test.mjs",
+    "db:start": "supabase start",
+    "db:stop": "supabase stop",
+    "db:reset": "supabase db reset --local",
+    "db:push": "supabase db push --linked",
+    "db:types": "node scripts/db-types.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.13",
+    "@electric-sql/pglite": "^0.5.8",
+    "supabase": "^2.117.0",
     "typescript": "7.0.2"
   }
 }

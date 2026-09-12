@@ -12,7 +12,9 @@
   },
   "dependencies": {
     "@agrosense/contracts": "workspace:*",
-    "hono": "4.13.7"
+    "@supabase/supabase-js": "^2.116.0",
+    "hono": "4.13.7",
+    "jose": "^6.2.12"
   },
   "devDependencies": {
     "vitest": "5.0.0",
