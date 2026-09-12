@@ -45,6 +45,9 @@ erDiagram
 - Every listed response property is required, even when its value is null.
   Objects reject unknown keys. PATCH is the only partial object.
 - SQL instants are timestamptz; API instants are RFC3339 UTC strings ending in Z.
+  Projected SQL instants and freshness comparisons preserve PostgreSQL's
+  microsecond precision, normalizing to six fractional digits rather than
+  truncating crop-cycle change tokens to JavaScript milliseconds.
   Dates are YYYY-MM-DD. Display timezone is fixed to America/Argentina/Cordoba.
 - JSON numbers are finite. Area is numeric(12,2) in SQL and a JSON number in
   hectares; serialize as a number, not a database decimal string. Values round
@@ -685,7 +688,7 @@ Additional conditional validation:
 | temporalState | upcoming, ongoing, recent | required | — |
 | source | Source | required | — |
 | evidence | EventEvidence | required | — |
-| alerts | array of PlotAlert | required | 1–10 items; each item: — |
+| alerts | array of PlotAlert | required | 0–10 items; each item: — |
 
 ### Monitoring
 
@@ -704,7 +707,7 @@ Additional conditional validation:
 | schemaVersion | 1 (constant) | required | — |
 | asOf | Instant | required | — |
 | farm | Farm | required | — |
-| plots | array of Plot | required | 1–10 items; each item: — |
+| plots | array of Plot | required | 0–10 items; each item: — |
 | basemap | Basemap | required | — |
 | forecast | ForecastSummary or null | required | —; — |
 | events | array of EventCard | required | 0–50 items; each item: — |

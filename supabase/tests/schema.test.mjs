@@ -34,6 +34,24 @@ before(async () => {
       "utf8",
     ),
   );
+  await db.exec(
+    await readFile(
+      new URL(
+        "../migrations/20260912080000_alert_engine_contract.sql",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+  );
+  await db.exec(
+    await readFile(
+      new URL(
+        "../migrations/20260912081000_dashboard_snapshot_rpc.sql",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+  );
   farms = [];
   plots = [];
   events = [];
@@ -150,6 +168,15 @@ test("rejects cross-farm alerts and invalid risk state", async () => {
     db.query(`UPDATE plot_alerts SET risk_level='high' WHERE plot_id=$1`, [
       plots[0],
     ]),
+    /check constraint/,
+  );
+  await db.query(
+    `UPDATE plot_alerts SET assessment_state='evaluated', risk_level='critical', recommended_actions='["Suspend spraying"]' WHERE plot_id=$1`,
+    [plots[0]],
+  );
+  await db.query(`UPDATE events SET kind='hail' WHERE id=$1`, [events[0]]);
+  await assert.rejects(
+    db.query(`UPDATE events SET kind='tornado' WHERE id=$1`, [events[0]]),
     /check constraint/,
   );
 });
