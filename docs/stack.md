@@ -153,11 +153,14 @@ and merged with the system rules before evaluation.
 The authenticated `POST /api/farms/:farmId/satellite` accepts `{from, to}` UTC
 instants within a past window of at most 31 days. It uses owner-scoped stored farm
 bounds and server-only `COPERNICUS_CLIENT_ID` / `COPERNICUS_CLIENT_SECRET` secrets.
-It returns the newest Sentinel-2 L2A true-color acquisition as a georeferenced PNG
-with scene/source/time metadata, or an explicit unavailable state. Missing pixels
-are transparent; scene cloud cover is not plot cloud coverage or crop risk.
+It returns one Sentinel-2 L2A true-color acquisition as a georeferenced PNG with
+scene/source/time metadata, or an explicit unavailable state. When a window has
+multiple acquisitions, a bounded daily SCL sample prefers the least-obscured farm
+view; reported scene cloud cover and recency break ties and provide the fallback
+when local statistics are unavailable. Missing pixels are transparent; reported
+scene cloud cover is not plot cloud coverage or crop risk.
 
-The Worker uses Copernicus [Catalog and Process APIs](https://documentation.dataspace.copernicus.eu/APIs/SentinelHub/Overview.html).
+The Worker uses Copernicus [Catalog, Statistical and Process APIs](https://documentation.dataspace.copernicus.eu/APIs/SentinelHub/Overview.html).
 Requests have 8-second deadlines and bounded bodies; redirects are rejected.
 Preview bounds are limited to 0.25 degrees per axis and output to 1024×1024 pixels.
 Private responses are not stored. Production rate limiting and shared server caching
