@@ -31,7 +31,10 @@ function fires(rule: RiskRule, evidence: EventEvidence): boolean {
   let run = 0;
   for (const hour of evidence.hours) {
     const matches =
-      (rule.thresholdC === null || hour.temperatureC >= rule.thresholdC) &&
+      (rule.thresholdC === null ||
+        (rule.hazardKind === "frost"
+          ? hour.temperatureC <= rule.thresholdC
+          : hour.temperatureC >= rule.thresholdC)) &&
       (rule.windGustThresholdKmh === null ||
         (hour.windGustKmh !== null &&
           hour.windGustKmh >= rule.windGustThresholdKmh)) &&

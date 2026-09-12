@@ -323,6 +323,32 @@ export type Database = {
         };
         Returns: Json;
       };
+      admit_farm_refresh: {
+        Args: { p_farm_id: string; p_attempt_at: string };
+        Returns: Json;
+      };
+      publish_farm_refresh: {
+        Args: {
+          p_farm_id: string;
+          p_expected_data_version: number;
+          p_attempt_at: string;
+          p_published_at: string;
+          p_forecast: Json;
+          p_events: Json;
+          p_alerts: Json;
+        };
+        Returns: Json;
+      };
+      fail_farm_refresh: {
+        Args: {
+          p_farm_id: string;
+          p_expected_data_version: number;
+          p_attempt_at: string;
+          p_completed_at: string;
+          p_error_code: string;
+        };
+        Returns: boolean;
+      };
     };
     Enums: { [_ in never]: never };
     CompositeTypes: { [_ in never]: never };

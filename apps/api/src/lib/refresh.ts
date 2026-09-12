@@ -7,8 +7,12 @@ import {
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "./database.types";
 import { json } from "./database-utils";
+import { buildPublication } from "./publication";
 import type { createServiceClient } from "./supabase";
-import { fetchOpenMeteoPlotForecast } from "./weather-provider";
+import {
+  detectThreatEvents,
+  fetchOpenMeteoPlotForecast,
+} from "./weather-provider";
 
 type UserClient = SupabaseClient<Database>;
 type ServiceClient = ReturnType<typeof createServiceClient>;
@@ -17,7 +21,13 @@ export type RefreshFailure =
   | { kind: "not_found" }
   | { kind: "rate_limited"; retryAfter: number }
   | { kind: "conflict" }
-  | { kind: "unavailable"; code: "PROVIDER_UNAVAILABLE" };
+  | {
+      kind: "unavailable";
+      code:
+        | "PROVIDER_TIMEOUT"
+        | "PROVIDER_UNAVAILABLE"
+        | "INVALID_PROVIDER_DATA";
+    };
 
 export class RefreshError extends Error {
   constructor(public readonly failure: RefreshFailure) {
@@ -25,7 +35,15 @@ export class RefreshError extends Error {
   }
 }
 
-const REFRESH_COOLDOWN_MS = 60_000;
+function classifyProviderFailure(error: unknown): RefreshFailure {
+  if (error instanceof DOMException && error.name === "AbortError")
+    return { kind: "unavailable", code: "PROVIDER_TIMEOUT" };
+  if (error instanceof Error && error.name === "ZodError")
+    return { kind: "unavailable", code: "INVALID_PROVIDER_DATA" };
+  if (error instanceof Error)
+    return { kind: "unavailable", code: "PROVIDER_UNAVAILABLE" };
+  throw error;
+}
 
 function syntheticForecast(
   plots: Database["public"]["Tables"]["plots"]["Row"][],
@@ -42,7 +60,7 @@ function syntheticForecast(
     windowEnd: windowEnd.toISOString(),
     plots: plots.map((plot) => ({
       plotId: plot.id,
-      samplePoint: plot.sample_point_geojson,
+      samplePoint: json<PlotForecast["samplePoint"]>(plot.sample_point_geojson),
       source: {
         code: "demo" as const,
         url: null,
@@ -69,33 +87,35 @@ function syntheticForecast(
 
 export async function refreshFarm(
   userClient: UserClient,
-  serviceClient: ServiceClient,
+  _serviceClient: ServiceClient,
   farmId: string,
   now = new Date(),
 ): Promise<RefreshResponse> {
-  const { data: farm, error: farmError } = await userClient
-    .from("farms")
-    .select("id,data_mode,data_version,last_attempt_at")
-    .eq("id", farmId)
-    .maybeSingle();
-  if (farmError) throw farmError;
-  if (!farm) throw new RefreshError({ kind: "not_found" });
-
-  if (farm.last_attempt_at) {
-    const elapsed = now.getTime() - new Date(farm.last_attempt_at).getTime();
-    if (elapsed < REFRESH_COOLDOWN_MS)
+  const refreshedAt = now.toISOString();
+  const admission = await userClient.rpc("admit_farm_refresh", {
+    p_farm_id: farmId,
+    p_attempt_at: refreshedAt,
+  });
+  if (admission.error) {
+    if (admission.error.message === "NOT_FOUND")
+      throw new RefreshError({ kind: "not_found" });
+    if (admission.error.message.startsWith("RATE_LIMITED:"))
       throw new RefreshError({
         kind: "rate_limited",
-        retryAfter: Math.ceil((REFRESH_COOLDOWN_MS - elapsed) / 1000),
+        retryAfter: Number(
+          admission.error.message.slice("RATE_LIMITED:".length),
+        ),
       });
+    throw admission.error;
   }
+  const admitted = json<{ dataVersion: number; dataMode: "demo" | "live" }>(
+    admission.data,
+  );
   const { data: plots, error: plotsError } = await userClient
     .from("plots")
     .select("*")
     .eq("farm_id", farmId);
   if (plotsError) throw plotsError;
-  const refreshedAt = now.toISOString();
-  const nextVersion = farm.data_version + 1;
   let forecast:
     | ReturnType<typeof syntheticForecast>
     | {
@@ -107,7 +127,7 @@ export async function refreshFarm(
       };
   try {
     const fetched =
-      farm.data_mode === "live"
+      admitted.dataMode === "live"
         ? await Promise.all(
             (plots ?? []).map((plot) =>
               fetchOpenMeteoPlotForecast({
@@ -143,42 +163,56 @@ export async function refreshFarm(
       forecastSummarySchema.parse(candidate);
       forecast = candidate;
     } else forecast = syntheticForecast(plots ?? [], refreshedAt);
-  } catch {
-    await serviceClient
-      .from("farms")
-      .update({
-        last_attempt_at: refreshedAt,
-        last_error_code: "PROVIDER_UNAVAILABLE",
-      })
-      .eq("id", farmId)
-      .eq("data_version", farm.data_version);
+  } catch (error) {
+    const failure = classifyProviderFailure(error);
+    await userClient.rpc("fail_farm_refresh", {
+      p_farm_id: farmId,
+      p_expected_data_version: admitted.dataVersion,
+      p_attempt_at: refreshedAt,
+      p_completed_at: now.toISOString(),
+      p_error_code:
+        failure.kind === "unavailable" ? failure.code : "PROVIDER_UNAVAILABLE",
+    });
+    throw new RefreshError(failure);
+  }
+  const publications = buildPublication({
+    forecasts: forecast.plots,
+    cycles: [],
+    now: refreshedAt,
+    detect: detectThreatEvents,
+  });
+  const published = await userClient.rpc("publish_farm_refresh", {
+    p_farm_id: farmId,
+    p_expected_data_version: admitted.dataVersion,
+    p_attempt_at: refreshedAt,
+    p_published_at: refreshedAt,
+    p_forecast: forecast as unknown as Json,
+    p_events: publications as unknown as Json,
+    p_alerts: [],
+  });
+  if (published.error) {
+    if (published.error.message === "VERSION_CONFLICT")
+      throw new RefreshError({ kind: "conflict" });
+    throw published.error;
+  }
+  const publicationResult = json<{ dataVersion?: number; errorCode?: string }>(
+    published.data,
+  );
+  if (publicationResult.errorCode === "PUBLISH_FAILED")
     throw new RefreshError({
       kind: "unavailable",
       code: "PROVIDER_UNAVAILABLE",
     });
-  }
-  const { data: updatedFarm, error: updateError } = await serviceClient
-    .from("farms")
-    .update({
-      forecast_summary: forecast as unknown as Json,
-      last_attempt_at: refreshedAt,
-      last_success_at: refreshedAt,
-      last_error_code: null,
-      data_version: nextVersion,
-    })
-    .eq("id", farmId)
-    .eq("data_version", farm.data_version)
-    .select("id")
-    .maybeSingle();
-  if (updateError) throw updateError;
-  if (!updatedFarm) throw new RefreshError({ kind: "conflict" });
 
   return refreshResponseSchema.parse({
     farmId,
-    dataVersion: nextVersion,
+    dataVersion: publicationResult.dataVersion ?? admitted.dataVersion + 1,
     refreshedAt,
-    dataMode: farm.data_mode,
-    eventCount: 0,
-    alertCount: 0,
+    dataMode: admitted.dataMode,
+    eventCount: publications.length,
+    alertCount: publications.reduce(
+      (count, event) => count + event.alerts.length,
+      0,
+    ),
   });
 }
