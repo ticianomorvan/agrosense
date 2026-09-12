@@ -11,3 +11,5 @@ dist/
 coverage/
 .DS_Store
 .playwright-mcp/
+scripts/contact.json
+supabase/apply-pending-migrations.sql

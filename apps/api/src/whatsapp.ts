@@ -141,6 +141,11 @@ whatsapp.post(
         c.req.header("X-Webhook-Event"),
         config,
       );
+      console.log("[webhook:inbound]", {
+        event: c.req.header("X-Webhook-Event"),
+        accepted: messages.length,
+        ignored,
+      });
       let admission = { accepted: 0, duplicates: 0 };
       if (messages.length) {
         const stub = c.env.WHATSAPP_CONVERSATIONS.getByName(

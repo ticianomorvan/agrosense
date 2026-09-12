@@ -64,7 +64,11 @@ export function normalizeInbound(
   now = new Date(),
 ): { messages: InboundMessage[]; ignored: number } {
   const envelope = envelopeSchema.safeParse(payload);
-  if (event !== "whatsapp.message.received")
+  if (event !== "whatsapp.message.received") {
+    console.log("[inbound:skip] event mismatch:", {
+      received: event,
+      expected: "whatsapp.message.received",
+    });
     return {
       messages: [],
       ignored:
@@ -74,6 +78,7 @@ export function normalizeInbound(
           ? envelope.data.data.length
           : 1,
     };
+  }
   if (!envelope.success) throw envelope.error;
   const entries = envelope.data.batch
     ? batchSchema.parse(payload).data
@@ -83,13 +88,30 @@ export function normalizeInbound(
     const { message, conversation } = entry;
     if (
       entry.phone_number_id !== config.phoneNumberId ||
-      conversation.phone_number_id !== config.phoneNumberId ||
+      conversation.phone_number_id !== config.phoneNumberId
+    ) {
+      console.log("[inbound:skip] phone_number_id mismatch:", {
+        entry: entry.phone_number_id,
+        conv: conversation.phone_number_id,
+        expected: config.phoneNumberId,
+      });
+      continue;
+    }
+    if (
       message.kapso.direction !== "inbound" ||
-      message.kapso.status !== "received" ||
+      (message.kapso.status !== "received" &&
+        message.kapso.status !== "delivered") ||
       message.kapso.origin === "history_sync" ||
       message.type !== "text"
-    )
+    ) {
+      console.log("[inbound:skip] message metadata mismatch:", {
+        direction: message.kapso.direction,
+        status: message.kapso.status,
+        origin: message.kapso.origin,
+        type: message.type,
+      });
       continue;
+    }
     const from = whatsappPhoneSchema.safeParse(
       message.from ?? conversation.phone_number,
     );
@@ -101,8 +123,14 @@ export function normalizeInbound(
       !contact.success ||
       from.data !== contact.data ||
       from.data !== config.sender
-    )
+    ) {
+      console.log("[inbound:skip] sender mismatch:", {
+        from: from.success ? from.data : from.error.message,
+        contact: contact.success ? contact.data : contact.error.message,
+        expectedSender: config.sender,
+      });
       continue;
+    }
     const timestamp = Number(message.timestamp) * 1000;
     if (
       timestamp > now.getTime() + 5 * 60000 ||
