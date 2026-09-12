@@ -5,7 +5,9 @@ import {
 } from "@agrosense/contracts";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useId, useState } from "react";
-import { Button, StatusLabel } from "../../components/ui";
+import { Badge } from "../../components/ui/badge";
+import { Button } from "../../components/ui/button";
+import { Input } from "../../components/ui/input";
 import { formatInstant } from "../fields/presentation";
 import type { FarmDataSource } from "../fields/queries";
 
@@ -73,7 +75,8 @@ export function SatelliteControls({
       >
         <label htmlFor={`${id}-from`}>
           From (UTC)
-          <input
+          <Input
+            className="min-h-11"
             id={`${id}-from`}
             type="date"
             value={from}
@@ -87,7 +90,8 @@ export function SatelliteControls({
         </label>
         <label htmlFor={`${id}-to`}>
           To (UTC)
-          <input
+          <Input
+            className="min-h-11"
             id={`${id}-to`}
             type="date"
             value={to}
@@ -100,9 +104,11 @@ export function SatelliteControls({
           />
         </label>
         <Button
+          variant="outline"
+          className="min-h-11 min-w-11"
           type="submit"
-          disabled={!source.loadSatellite}
-          pending={query.isFetching}
+          disabled={!source.loadSatellite || query.isFetching}
+          aria-busy={query.isFetching || undefined}
         >
           {query.isFetching ? "Loading imagery…" : "Load imagery"}
         </Button>
@@ -127,9 +133,12 @@ export function SatelliteControls({
       )}
       {query.data?.status === "available" && (
         <>
-          <StatusLabel tone="info">
+          <Badge
+            variant="secondary"
+            className="h-auto whitespace-normal text-sm"
+          >
             Acquired {formatInstant(query.data.acquiredAt)} (UTC−3)
-          </StatusLabel>
+          </Badge>
           <p className="metadata">
             {query.data.source} · Scene cloud cover:{" "}
             {query.data.cloudCoverPercent === null

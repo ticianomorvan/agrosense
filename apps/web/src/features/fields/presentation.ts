@@ -3,15 +3,16 @@ import type {
   EventCard,
   PlotAlert,
 } from "@agrosense/contracts";
-import type { Tone } from "../../components/ui";
+
+type StatusVariant = "destructive" | "secondary" | "outline";
 
 const riskPresentation = {
-  high: { label: "High risk", tone: "critical" },
-  moderate: { label: "Moderate risk", tone: "warning" },
-  low: { label: "Low risk", tone: "ok" },
+  high: { label: "High risk", badgeVariant: "destructive" },
+  moderate: { label: "Moderate risk", badgeVariant: "secondary" },
+  low: { label: "Low risk", badgeVariant: "outline" },
 } satisfies Record<
   NonNullable<PlotAlert["riskLevel"]>,
-  { label: string; tone: Tone }
+  { label: string; badgeVariant: StatusVariant }
 >;
 
 export function formatInstant(value: string | null) {
@@ -54,7 +55,12 @@ export function plotStatus(
   data: DashboardResponse,
   plotId: string,
   now = Date.now(),
-): { label: string; tone: Tone; reason: string; time: string | null } {
+): {
+  label: string;
+  badgeVariant: StatusVariant;
+  reason: string;
+  time: string | null;
+} {
   const current = currentAlert(data, plotId, now);
   if (current) {
     return {
@@ -73,14 +79,14 @@ export function plotStatus(
   if (previous)
     return {
       label: "Risk unavailable",
-      tone: "unknown",
+      badgeVariant: "outline",
       reason:
         "The previous evaluation is no longer current. A current risk assessment is unavailable.",
       time: previous.generatedAt,
     };
   return {
     label: "Risk unavailable",
-    tone: "unknown",
+    badgeVariant: "outline",
     reason:
       data.monitoring.status === "never_refreshed"
         ? "No weather evaluation is available for this field."

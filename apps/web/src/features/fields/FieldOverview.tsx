@@ -7,15 +7,17 @@ import {
   Suspense,
   useCallback,
   useEffect,
+  useId,
   useRef,
   useState,
 } from "react";
+import { DataState } from "../../components/data-state";
+import { Badge } from "../../components/ui/badge";
+import { Button } from "../../components/ui/button";
 import {
-  Button,
-  DataState,
-  SelectField,
-  StatusLabel,
-} from "../../components/ui";
+  NativeSelect,
+  NativeSelectOption,
+} from "../../components/ui/native-select";
 import { SatelliteControls } from "../satellite/SatelliteControls";
 import { useRiskClock } from "./clock";
 import { FieldDetails } from "./FieldDetails";
@@ -25,6 +27,7 @@ import { dashboardOptions, type FarmDataSource } from "./queries";
 
 const FieldMap = lazy(() => import("./FieldMap"));
 export function FieldOverview({ source }: { source: FarmDataSource }) {
+  const cropId = useId();
   const query = useQuery(dashboardOptions(source));
   const now = useRiskClock(query.data);
   const [crop, setCrop] = useState<CropCode | "all" | "unknown">("all");
@@ -89,25 +92,34 @@ export function FieldOverview({ source }: { source: FarmDataSource }) {
           <h1>{data.farm.name}</h1>
           <p>Understand your fields. Decide what needs attention.</p>
         </div>
-        <SelectField
-          label="Crop"
-          value={crop}
-          onChange={(e) => {
-            setCrop(e.target.value as typeof crop);
-            setSelectedId(null);
-          }}
-        >
-          <option value="all">All crops</option>
-          <option value="maize">Maize</option>
-          <option value="soybean">Soybean</option>
-          <option value="unknown">Crop unavailable</option>
-        </SelectField>
+        <div className="select-field">
+          <label htmlFor={cropId}>Crop</label>
+          <NativeSelect
+            id={cropId}
+            className="w-full [&_select]:min-h-11"
+            value={crop}
+            onChange={(e) => {
+              setCrop(e.target.value as typeof crop);
+              setSelectedId(null);
+            }}
+          >
+            <NativeSelectOption value="all">All crops</NativeSelectOption>
+            <NativeSelectOption value="maize">Maize</NativeSelectOption>
+            <NativeSelectOption value="soybean">Soybean</NativeSelectOption>
+            <NativeSelectOption value="unknown">
+              Crop unavailable
+            </NativeSelectOption>
+          </NativeSelect>
+        </div>
       </div>
       <div className="workspace-status" role="status">
         {data.farm.dataMode === "demo" && (
-          <StatusLabel tone="info">
+          <Badge
+            variant="secondary"
+            className="h-auto whitespace-normal text-sm"
+          >
             Demonstration weather and risk data
-          </StatusLabel>
+          </Badge>
         )}
         <span>
           {data.monitoring.status === "never_refreshed"
@@ -116,11 +128,21 @@ export function FieldOverview({ source }: { source: FarmDataSource }) {
           Last successful update: {formatInstant(data.monitoring.lastSuccessAt)}
         </span>
         {query.isError && (
-          <Button onClick={() => void query.refetch()}>Retry update</Button>
+          <Button
+            variant="outline"
+            className="min-h-11 min-w-11"
+            onClick={() => void query.refetch()}
+          >
+            Retry update
+          </Button>
         )}
       </div>
       <div className="phone-view-switch">
-        <Button onClick={() => setPhoneMap((v) => !v)}>
+        <Button
+          variant="outline"
+          className="min-h-11 min-w-11"
+          onClick={() => setPhoneMap((v) => !v)}
+        >
           {phoneMap ? "Back to priorities" : "View farm map"}
         </Button>
       </div>

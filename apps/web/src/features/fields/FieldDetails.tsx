@@ -3,7 +3,8 @@ import {
   type DashboardResponse,
   type Plot,
 } from "@agrosense/contracts";
-import { Button, StatusLabel } from "../../components/ui";
+import { Badge } from "../../components/ui/badge";
+import { Button } from "../../components/ui/button";
 import { currentAlert, formatInstant, plotStatus } from "./presentation";
 
 export function FieldDetails({
@@ -23,11 +24,18 @@ export function FieldDetails({
   const forecast = data.forecast?.plots.find((p) => p.plotId === plot.id);
   return (
     <>
-      <Button onClick={onBack}>Back to fields</Button>
+      <Button variant="outline" className="min-h-11 min-w-11" onClick={onBack}>
+        Back to fields
+      </Button>
       <h2 tabIndex={-1} id="field-detail-title">
         {plot.name}
       </h2>
-      <StatusLabel tone={status.tone}>{status.label}</StatusLabel>
+      <Badge
+        variant={status.badgeVariant}
+        className="h-auto whitespace-normal text-sm"
+      >
+        {status.label}
+      </Badge>
       <p>{status.reason}</p>
       <dl className="field-facts">
         <div>

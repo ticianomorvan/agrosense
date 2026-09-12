@@ -22,7 +22,8 @@ local runtime checks for API responses and SPA fallback.
 
 Use Node 24 and the pnpm version pinned in package.json. Exact dependency
 resolutions live in pnpm-lock.yaml. The frontend foundation uses TanStack Query for server state, Leaflet for maps,
-and a small local component library styled with the fixed plain CSS tokens.
+and shadcn/ui with the default neutral preset and Tailwind v4. The explicit user
+choice supersedes the earlier plain-CSS-only restriction; no custom theme is applied.
 Routing is deferred while there is only one workspace screen.
 
 ## Layout and implementation order
@@ -83,7 +84,8 @@ available. Remount the overview on identity/farm changes and clear the QueryClie
 on sign-out. Tokens stay in memory; requests are same-origin, cancellable and
 validated with shared Zod schemas. Failed requests never substitute sample data.
 Risk expires on assessment/event deadlines and tab resume without a network fetch.
-Shared controls use semantic HTML and the fixed plain CSS tokens; maps load lazily.
+Shared controls use stock shadcn Button, Badge, NativeSelect and Input components;
+maps load lazily. Only layout, control target size and readable wrapping are adjusted.
 
 The authenticated `POST /api/farms/:farmId/satellite` accepts `{from, to}` UTC
 instants within a past window of at most 31 days. It uses owner-scoped stored farm

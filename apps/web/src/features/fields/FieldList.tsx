@@ -3,7 +3,9 @@ import {
   type DashboardResponse,
   type Plot,
 } from "@agrosense/contracts";
-import { Button, DataState, StatusLabel } from "../../components/ui";
+import { DataState } from "../../components/data-state";
+import { Badge } from "../../components/ui/badge";
+import { Button } from "../../components/ui/button";
 import { formatInstant, plotStatus } from "./presentation";
 
 export function FieldList({
@@ -31,7 +33,13 @@ export function FieldList({
         </DataState>
       ) : plots.length === 0 ? (
         <DataState title="No fields match this filter">
-          <Button onClick={onClear}>Clear filters</Button>
+          <Button
+            variant="outline"
+            className="min-h-11 min-w-11"
+            onClick={onClear}
+          >
+            Clear filters
+          </Button>
         </DataState>
       ) : (
         <ul className="field-list">
@@ -46,12 +54,19 @@ export function FieldList({
                     : "Crop and stage unavailable"}{" "}
                   · {plot.declaredAreaHa} ha declared
                 </p>
-                <StatusLabel tone={status.tone}>{status.label}</StatusLabel>
+                <Badge
+                  variant={status.badgeVariant}
+                  className="h-auto whitespace-normal text-sm"
+                >
+                  {status.label}
+                </Badge>
                 <p>{status.reason}</p>
                 <p className="metadata">
                   Evaluation: {formatInstant(status.time)}
                 </p>
                 <Button
+                  variant="outline"
+                  className="min-h-11 min-w-11"
                   id={`view-field-${plot.id}`}
                   onClick={() => onSelect(plot.id)}
                   aria-label={`View field: ${plot.name}`}

@@ -5,8 +5,7 @@ import type {
 } from "@agrosense/contracts";
 import * as L from "leaflet";
 import { useEffect, useRef, useState } from "react";
-import { Button } from "../../components/ui";
-import "leaflet/dist/leaflet.css";
+import { Button } from "../../components/ui/button";
 
 export default function FieldMap({
   data,
@@ -66,23 +65,28 @@ export default function FieldMap({
     const group = L.layerGroup().addTo(map.current);
     const token = (name: string) =>
       getComputedStyle(document.documentElement)
-        .getPropertyValue(`--color-${name}`)
+        .getPropertyValue(`--${name}`)
         .trim();
     L.geoJSON(data.farm.boundary, {
       interactive: false,
-      style: { color: token("text"), weight: 2, fill: false, dashArray: "6 6" },
+      style: {
+        color: token("foreground"),
+        weight: 2,
+        fill: false,
+        dashArray: "6 6",
+      },
     }).addTo(group);
     for (const plot of plots) {
       const selected = plot.id === selectedId;
       L.geoJSON(plot.boundary, {
         interactive: false,
-        style: { color: token("surface"), weight: 4, fill: false },
+        style: { color: token("card"), weight: 4, fill: false },
       }).addTo(group);
       const shape = L.geoJSON(plot.boundary, {
         style: {
-          color: token(selected ? "brand" : "control-border"),
+          color: token(selected ? "primary" : "muted-foreground"),
           weight: 2,
-          fillColor: token("subtle"),
+          fillColor: token("muted"),
           fillOpacity: selected ? 0.4 : 0.15,
         },
       });
@@ -126,16 +130,22 @@ export default function FieldMap({
     <>
       <div className="map-toolbar">
         <Button
+          variant="outline"
+          className="min-h-11 min-w-11"
           onClick={() => map.current?.zoomIn(undefined, { animate: false })}
         >
           Zoom in
         </Button>
         <Button
+          variant="outline"
+          className="min-h-11 min-w-11"
           onClick={() => map.current?.zoomOut(undefined, { animate: false })}
         >
           Zoom out
         </Button>
         <Button
+          variant="outline"
+          className="min-h-11 min-w-11"
           onClick={() =>
             map.current?.fitBounds(farmBounds, {
               padding: [24, 24],

@@ -3,6 +3,7 @@
   "files": {
     "includes": ["**", "!**/dist", "!**/.wrangler", "!**/.worktrees"]
   },
+  "css": { "parser": { "tailwindDirectives": true } },
   "formatter": { "indentStyle": "space" },
   "linter": { "rules": { "preset": "recommended" } }
 }

@@ -22,6 +22,14 @@ Character: calm, credible, approachable, and agricultural.
 restrained controls. MUST NOT copy its marketing layout, logo, copy, or imagery
 into the operational workspace.
 
+User override — 2026-09-12: use shadcn/ui with its stock default styling and
+neutral preset, without a custom AgroSense theme. This supersedes the UI-kit/CSS
+framework prohibition and the fixed palette, typography, radius, and control-style
+rules below where they conflict with shadcn defaults. Keep responsive structure,
+honest data states, keyboard behavior, 44px control targets, readable labels and
+reduced-motion support. Component sizing and text wrapping are accessibility/layout
+adjustments; do not recolor or restyle the generated primitives.
+
 ## 2. Fixed tokens
 
 Light theme only for this version; MUST NOT add a theme switch or automatic dark

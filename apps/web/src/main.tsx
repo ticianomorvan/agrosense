@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { DataState } from "./components/ui";
+import { DataState } from "./components/data-state";
 import { FieldOverview } from "./features/fields/FieldOverview";
 import type { FarmDataSource } from "./features/fields/queries";
 import { shouldRetry } from "./lib/api";
