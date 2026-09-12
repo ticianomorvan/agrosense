@@ -15,8 +15,7 @@ CREATE TABLE public.notification_receipts (
   CHECK ((notification_id IS NULL) = (attempt_token IS NULL))
 );
 ALTER TABLE public.notification_receipts ENABLE ROW LEVEL SECURITY;
-REVOKE ALL ON public.notification_receipts FROM PUBLIC, anon, authenticated;
-GRANT ALL ON public.notification_receipts TO service_role;
+REVOKE ALL ON public.notification_receipts FROM PUBLIC, anon, authenticated, service_role;
 
 CREATE FUNCTION public.notification_delivery_rank(p_status text) RETURNS integer
 LANGUAGE sql IMMUTABLE SET search_path = '' AS $$
@@ -131,6 +130,6 @@ REVOKE ALL ON FUNCTION public.complete_notification_send(uuid,uuid,text,text,tex
 REVOKE ALL ON FUNCTION public.get_farm_notification_status(uuid) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.record_notification_receipt(text,text,text,timestamptz,text,uuid,uuid) TO service_role;
 GRANT EXECUTE ON FUNCTION public.complete_notification_send(uuid,uuid,text,text,text,timestamptz) TO service_role;
-GRANT EXECUTE ON FUNCTION public.get_farm_notification_status(uuid) TO authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.get_farm_notification_status(uuid) TO authenticated;
 
 COMMIT;

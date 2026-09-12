@@ -11,8 +11,7 @@ CREATE TABLE public.automation_runs (
 );
 CREATE INDEX automation_runs_recent ON public.automation_runs(started_at DESC);
 ALTER TABLE public.automation_runs ENABLE ROW LEVEL SECURITY;
-REVOKE ALL ON public.automation_runs FROM PUBLIC, anon, authenticated;
-GRANT ALL ON public.automation_runs TO service_role;
+REVOKE ALL ON public.automation_runs FROM PUBLIC, anon, authenticated, service_role;
 
 CREATE FUNCTION public.start_automation_run(p_task text) RETURNS uuid
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$

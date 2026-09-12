@@ -9,8 +9,7 @@ CREATE TABLE public.notification_contacts (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 ALTER TABLE public.notification_contacts ENABLE ROW LEVEL SECURITY;
-REVOKE ALL ON public.notification_contacts FROM PUBLIC, anon, authenticated;
-GRANT ALL ON public.notification_contacts TO service_role;
+REVOKE ALL ON public.notification_contacts FROM PUBLIC, anon, authenticated, service_role;
 
 CREATE TABLE public.notification_outbox (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -46,8 +45,7 @@ CREATE INDEX notification_outbox_due ON public.notification_outbox(next_attempt_
 CREATE INDEX notification_outbox_farm ON public.notification_outbox(farm_id, created_at DESC);
 CREATE INDEX notification_outbox_alert ON public.notification_outbox(alert_id);
 ALTER TABLE public.notification_outbox ENABLE ROW LEVEL SECURITY;
-REVOKE ALL ON public.notification_outbox FROM PUBLIC, anon, authenticated;
-GRANT ALL ON public.notification_outbox TO service_role;
+REVOKE ALL ON public.notification_outbox FROM PUBLIC, anon, authenticated, service_role;
 GRANT SELECT (id, farm_id, plot_id, kind, status, attempts, last_error_code, created_at, updated_at)
   ON public.notification_outbox TO authenticated;
 CREATE POLICY notification_owner_read ON public.notification_outbox FOR SELECT TO authenticated

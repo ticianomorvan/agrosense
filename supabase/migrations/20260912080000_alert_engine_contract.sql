@@ -10,7 +10,7 @@ ALTER TABLE public.plot_alerts
   ADD COLUMN recommended_actions jsonb NOT NULL DEFAULT '[]'::jsonb
     CHECK (
       jsonb_typeof(recommended_actions) = 'array'
-      AND jsonb_array_length(recommended_actions) <= 20
+      AND jsonb_array_length(recommended_actions) <= 10
     );
 
 UPDATE public.plot_alerts
@@ -26,7 +26,11 @@ ALTER TABLE public.plot_alerts
   DROP CONSTRAINT plot_alerts_check,
   ADD CONSTRAINT plot_alerts_check
     CHECK (
-      (assessment_state = 'evaluated' AND risk_level IS NOT NULL)
+      (
+        assessment_state = 'evaluated'
+        AND risk_level IS NOT NULL
+        AND jsonb_array_length(recommended_actions) BETWEEN 1 AND 10
+      )
       OR (
         assessment_state <> 'evaluated'
         AND risk_level IS NULL

@@ -1,7 +1,13 @@
 {
   "$schema": "https://biomejs.dev/schemas/2.5.13/schema.json",
   "files": {
-    "includes": ["**", "!**/dist", "!**/.wrangler", "!.worktrees"]
+    "includes": [
+      "**",
+      "!**/dist",
+      "!**/.wrangler",
+      "!.worktrees",
+      "!supabase/.temp"
+    ]
   },
   "css": { "parser": { "tailwindDirectives": true } },
   "formatter": { "indentStyle": "space" },

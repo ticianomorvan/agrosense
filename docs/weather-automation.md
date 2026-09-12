@@ -172,14 +172,16 @@ status is **PENDING**. The initial submission on the previously selected Klasty
 sender was rejected and subsequently deleted at the user's request; deletion was
 verified against Kapso. No messages were sent.
 
-Application migrations, Worker deployment, notification secrets, receipt webhook,
-owner contact provisioning and Supabase Cron activation have not been applied to
-production by this task. Do not activate notification dispatch until the template
-is approved and the intended owner's phone and opt-in are configured.
+Application migrations through `20260912121000_privilege_hardening.sql` are applied
+to production and verified against the remote migration ledger, schema cache and
+pre/post data snapshots. Worker deployment, notification secrets, receipt webhook,
+owner contact provisioning and Supabase Cron activation remain incomplete. Do not
+activate notification dispatch until the template is approved and the intended
+owner's phone and opt-in are configured.
 
 ## Verification results — 2026-09-12
 
-`pnpm check` passed: TypeScript, Biome, 288 API tests, 20 frontend tests, 43 SQL
+`pnpm check` passed: TypeScript, Biome, 295 API tests, 43 frontend tests, 48 SQL
 tests, production builds and two workerd runtime tests. The runtime tests use
 intercepted provider traffic and send no real messages. The end-to-end publication
 test uses real PGlite migrations and Supabase RPC calls with mocked Open-Meteo
@@ -188,7 +190,10 @@ dispatch, delivery and duplicate invocations. Further SQL tests cover lease expi
 unknown sends, rate limits across evidence updates, escalation/withdrawal,
 contact revocation, changed ownership/rules and owner-scoped status.
 
-Final review also restricted cron-history retention to these three AgroSense jobs.
-`git diff --check` passed. No UI changes were made; browser screenshots are not
-applicable. Hosted pg_cron/pg_net/Vault execution, template approval, provider
-acceptance and actual WhatsApp delivery remain unverified until activation.
+Final review also restricted cron-history retention to these three AgroSense jobs
+and removed implicit hosted Data API grants from current and future objects. The
+production migration was rehearsed against a restored pre-migration dump; core row
+counts and foreign keys were preserved. `git diff --check` passed. No UI changes
+were made; browser screenshots are not applicable. Hosted pg_cron/pg_net/Vault
+execution, template approval, provider acceptance and actual WhatsApp delivery
+remain unverified until activation.

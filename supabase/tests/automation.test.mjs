@@ -29,6 +29,9 @@ before(async () => {
     CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$ SELECT nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
     GRANT USAGE ON SCHEMA public, auth TO anon, authenticated, service_role;
     GRANT EXECUTE ON FUNCTION auth.uid() TO authenticated;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated, service_role;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON FUNCTIONS TO anon, authenticated, service_role;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authenticated, service_role;
     INSERT INTO auth.users VALUES ('${owner}'), ('${otherOwner}');`);
   const dir = new URL("../migrations/", import.meta.url);
   for (const name of (await readdir(dir))
@@ -144,6 +147,122 @@ test("scheduler functions cannot be executed by an authenticated or anonymous us
   ).rows;
   assert.equal(rows.length, 2);
   assert.ok(rows.every((row) => !row.permitted));
+});
+
+test("service automation uses narrow RPCs instead of direct table privileges", async () => {
+  const tablePrivileges = (
+    await db.query(`SELECT relation_name, privilege,
+      has_table_privilege('service_role', relation_name, privilege) AS permitted
+    FROM unnest(ARRAY[
+      'public.weather_schedules',
+      'public.notification_contacts',
+      'public.notification_outbox',
+      'public.notification_receipts',
+      'public.automation_runs'
+    ]) AS relations(relation_name)
+    CROSS JOIN unnest(ARRAY[
+      'SELECT', 'INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'REFERENCES', 'TRIGGER'
+    ]) AS privileges(privilege)`)
+  ).rows;
+  assert.ok(tablePrivileges.every((row) => !row.permitted));
+
+  const rpcPrivileges = (
+    await db.query(`SELECT proname,
+      has_function_privilege('service_role', oid, 'EXECUTE') AS permitted
+    FROM pg_proc
+    WHERE pronamespace = 'public'::regnamespace
+      AND proname IN (
+        'claim_weather_farm',
+        'fail_weather_schedule',
+        'configure_notification_contact',
+        'claim_notification',
+        'begin_notification_send',
+        'record_notification_receipt',
+        'complete_notification_send',
+        'start_automation_run',
+        'finish_automation_run',
+        'prune_automation_history'
+      )`)
+  ).rows;
+  assert.equal(rpcPrivileges.length, 10);
+  assert.ok(rpcPrivileges.every((row) => row.permitted));
+
+  assert.equal(
+    await scalar(
+      `SELECT has_function_privilege(
+        'service_role', 'public.get_farm_notification_status(uuid)', 'EXECUTE'
+      ) AS result`,
+    ),
+    false,
+  );
+});
+
+test("hosted defaults and helper objects cannot widen the explicit API", async () => {
+  const baseTablePrivileges = (
+    await db.query(`SELECT relation_name, privilege,
+      has_table_privilege('service_role', relation_name, privilege) AS permitted
+    FROM unnest(ARRAY[
+      'public.farms', 'public.plots', 'public.crop_cycles', 'public.events', 'public.plot_alerts'
+    ]) AS relations(relation_name)
+    CROSS JOIN unnest(ARRAY[
+      'SELECT', 'INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'REFERENCES', 'TRIGGER'
+    ]) AS privileges(privilege)`)
+  ).rows;
+  assert.ok(
+    baseTablePrivileges.every((row) =>
+      row.privilege === "SELECT" ? row.permitted : !row.permitted,
+    ),
+  );
+
+  const helpers = (
+    await db.query(`SELECT proname, role_name,
+      has_function_privilege(role_name, oid, 'EXECUTE') AS permitted
+    FROM pg_proc
+    CROSS JOIN unnest(ARRAY['anon', 'authenticated', 'service_role']) AS roles(role_name)
+    WHERE pronamespace = 'public'::regnamespace
+      AND proname IN (
+        'set_mvp_updated_at',
+        'schedule_farm_weather',
+        'enqueue_plot_notification',
+        'notification_is_current',
+        'notification_delivery_rank',
+        'apply_notification_receipts'
+      )`)
+  ).rows;
+  assert.equal(helpers.length, 18);
+  assert.ok(helpers.every((row) => !row.permitted));
+
+  await rollback(async () => {
+    await db.exec(`CREATE TABLE public.future_private_table(id bigint);
+      CREATE SEQUENCE public.future_private_sequence;
+      CREATE FUNCTION public.future_private_function() RETURNS integer
+        LANGUAGE sql AS $$ SELECT 1 $$;`);
+    for (const role of ["anon", "authenticated", "service_role"]) {
+      assert.equal(
+        await scalar(
+          `SELECT has_table_privilege($1, 'public.future_private_table', 'SELECT') AS result`,
+          [role],
+        ),
+        false,
+      );
+      assert.equal(
+        await scalar(
+          `SELECT has_sequence_privilege($1, 'public.future_private_sequence', 'USAGE') AS result`,
+          [role],
+        ),
+        false,
+      );
+      assert.equal(
+        await scalar(
+          `SELECT has_function_privilege(
+            $1, 'public.future_private_function()', 'EXECUTE'
+          ) AS result`,
+          [role],
+        ),
+        false,
+      );
+    }
+  });
 });
 
 async function alertFixture() {
