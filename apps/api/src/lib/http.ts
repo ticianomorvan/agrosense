@@ -58,6 +58,7 @@ export async function boundedFetch(
           controller.enqueue(chunk);
         },
       }),
+      { signal },
     );
     const body = await new Response(limited).arrayBuffer();
     signal.throwIfAborted();
