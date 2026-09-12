@@ -33,4 +33,14 @@ describe("createDemoDashboard", () => {
     expect(alertSoybean?.lossEstimate?.estimatedLossUsd).toBeGreaterThan(0);
     expect(alertSoybean?.lossEstimate?.damageRate).toBe(0.2);
   });
+
+  it("includes the three demo plots in the dashboard", () => {
+    const dashboard = createDemoDashboard();
+
+    expect(dashboard.plots.map((plot) => plot.name)).toEqual([
+      "Lote Norte",
+      "Lote Centro",
+      "Lote Sur",
+    ]);
+  });
 });

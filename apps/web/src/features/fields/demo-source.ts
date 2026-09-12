@@ -240,7 +240,7 @@ export function createDemoDashboard(now = new Date()): DashboardResponse {
     plots: [
       {
         id: plot1Id,
-        name: "Field 1 (Maize V6 - High Risk)",
+        name: "Lote Norte",
         boundary: rectangle(-64.17, -31.46, -64.154, -31.44),
         samplePoint: { type: "Point", coordinates: [-64.162, -31.45] },
         declaredAreaHa: plot1Area,
@@ -248,7 +248,7 @@ export function createDemoDashboard(now = new Date()): DashboardResponse {
       },
       {
         id: plot2Id,
-        name: "Field 2 (Soybean R4 - High Risk)",
+        name: "Lote Centro",
         boundary: rectangle(-64.154, -31.47, -64.14, -31.45),
         samplePoint: { type: "Point", coordinates: [-64.147, -31.46] },
         declaredAreaHa: plot2Area,
@@ -256,7 +256,7 @@ export function createDemoDashboard(now = new Date()): DashboardResponse {
       },
       {
         id: plot3Id,
-        name: "Field 3 (Maize V3 - No Alert)",
+        name: "Lote Sur",
         boundary: rectangle(-64.154, -31.45, -64.14, -31.44),
         samplePoint: { type: "Point", coordinates: [-64.147, -31.445] },
         declaredAreaHa: plot3Area,
