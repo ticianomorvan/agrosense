@@ -98,6 +98,7 @@ function withdrawalEvidence(
 export function buildPublication(params: {
   forecasts: PlotForecast[];
   cycles: CropCycle[];
+  plotAreasHa?: ReadonlyMap<string, number>;
   now: string;
   ruleSet?: RuleSet;
   previousEvents?: PreviousEvent[];
@@ -155,7 +156,11 @@ export function buildPublication(params: {
     .map((event) => {
       const alerts = event.evidence.plotIds.map((plotId) =>
         evaluatePlotAlert({
-          plot: { id: plotId, activeCropCycle: cycles.get(plotId) ?? null },
+          plot: {
+            id: plotId,
+            areaHa: params.plotAreasHa?.get(plotId),
+            activeCropCycle: cycles.get(plotId) ?? null,
+          },
           event: {
             id: pendingId,
             kind: event.kind,
@@ -195,6 +200,7 @@ export function buildPublication(params: {
           validUntil: alert.validUntil,
           generationMethod: alert.generationMethod,
           inputSnapshot: alert.inputSnapshot,
+          lossEstimate: alert.lossEstimate,
         })),
       };
     });

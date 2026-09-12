@@ -97,7 +97,8 @@ configured API origin.
 
 [Automatic monitoring](weather-automation.md) centralizes scheduling and operations
 in Supabase Cron, pg_net and Vault. Authenticated Worker job endpoints reuse the
-refresh engine and send Kapso templates. Postgres owns due-work leases, the
+refresh engine and send Kapso text messages while the owner's customer-service
+window is active. Postgres owns due-work leases, the
 transactional notification outbox, contacts, delivery receipts and execution
 history. A daily source event key and per-owner/plot risk level deduplicate
 notification intent. Unknown external send outcomes remain explicit for

@@ -59,9 +59,10 @@ const sendResponseSchema = z.object({
 
 /** One attempt only: a lost response may still represent an accepted message. */
 export async function sendWhatsappText(
-  config: KapsoConfig,
-  message: WhatsappMessageRequest,
+  config: z.infer<typeof kapsoSendConfigSchema>,
+  message: WhatsappMessageRequest & { callbackData?: string },
   fetcher: typeof fetch = fetch,
+  signal?: AbortSignal,
 ): Promise<WhatsappMessageResponse> {
   return sendWhatsappRequest(
     config,
@@ -70,49 +71,10 @@ export async function sendWhatsappText(
       recipient_type: "individual",
       to: message.to,
       type: "text",
+      ...(message.callbackData
+        ? { biz_opaque_callback_data: message.callbackData }
+        : {}),
       text: { body: message.text, preview_url: false },
-    },
-    fetcher,
-  );
-}
-
-export async function sendWhatsappTemplate(
-  config: z.infer<typeof kapsoSendConfigSchema>,
-  message: {
-    to: string;
-    name: string;
-    language: string;
-    parameters: Record<string, string>;
-    callbackData: string;
-  },
-  fetcher: typeof fetch = fetch,
-  signal?: AbortSignal,
-): Promise<WhatsappMessageResponse> {
-  // Named parameters and callback data follow Kapso's Meta proxy contract.
-  return sendWhatsappRequest(
-    config,
-    {
-      messaging_product: "whatsapp",
-      recipient_type: "individual",
-      to: message.to,
-      type: "template",
-      biz_opaque_callback_data: message.callbackData,
-      template: {
-        name: message.name,
-        language: { code: message.language },
-        components: [
-          {
-            type: "body",
-            parameters: Object.entries(message.parameters).map(
-              ([parameter_name, text]) => ({
-                type: "text",
-                parameter_name,
-                text,
-              }),
-            ),
-          },
-        ],
-      },
     },
     fetcher,
     signal,

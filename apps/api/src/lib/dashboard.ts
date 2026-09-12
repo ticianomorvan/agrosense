@@ -70,6 +70,9 @@ export function projectDashboard(
   for (const alert of alerts) {
     if (!plotIds.has(alert.plot_id)) continue;
     const cycle = currentCycles.get(alert.plot_id);
+    const inputSnapshot = json<
+      DashboardResponse["events"][number]["alerts"][number]["inputSnapshot"]
+    >(alert.input_snapshot);
     const projected = {
       id: alert.id,
       plotId: alert.plot_id,
@@ -90,9 +93,8 @@ export function projectDashboard(
       generatedAt: iso(alert.generated_at),
       validUntil: iso(alert.valid_until),
       generationMethod: alert.generation_method as "template" | "llm",
-      inputSnapshot: json<
-        DashboardResponse["events"][number]["alerts"][number]["inputSnapshot"]
-      >(alert.input_snapshot),
+      inputSnapshot,
+      lossEstimate: inputSnapshot.lossEstimate ?? null,
       isStale: alertIsStale(alert, cycle, asOf),
     };
     const eventAlerts = projectedAlerts.get(alert.event_id) ?? [];

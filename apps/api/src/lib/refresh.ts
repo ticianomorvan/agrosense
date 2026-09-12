@@ -274,6 +274,9 @@ export async function refreshFarm(
     }));
     const publications = buildPublication({
       forecasts: forecast.plots,
+      plotAreasHa: new Map(
+        snapshot.plots.map((plot) => [plot.id, plot.declared_area_ha]),
+      ),
       cycles: snapshot.crop_cycles
         .filter((c) => c.ended_on === null)
         .map(projectPublicationCycle),

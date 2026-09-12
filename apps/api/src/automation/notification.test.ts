@@ -1,7 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { KapsoError } from "../lib/kapso";
 import {
-  notificationTemplate,
+  notificationContent,
   readNotificationConfig,
   sendNotification,
 } from "./notification";
@@ -9,8 +9,6 @@ import {
 const env = {
   KAPSO_API_KEY: "test-key",
   KAPSO_PHONE_NUMBER_ID: "123456",
-  KAPSO_NOTIFICATION_TEMPLATE_NAME: "agrosense_weather_alert",
-  KAPSO_NOTIFICATION_TEMPLATE_LANGUAGE: "es_AR",
 };
 const job = {
   id: "11111111-1111-4111-8111-111111111111",
@@ -35,7 +33,7 @@ const job = {
 };
 afterEach(() => vi.unstubAllGlobals());
 
-it("sends a proactive named template to the persisted recipient with a callback token", async () => {
+it("sends a plain text notification to the persisted recipient with a callback token", async () => {
   const fetcher = vi.fn(async () =>
     Response.json({
       messaging_product: "whatsapp",
@@ -51,25 +49,18 @@ it("sends a proactive named template to the persisted recipient with a callback 
   expect(url).toBe("https://api.kapso.ai/meta/whatsapp/v24.0/123456/messages");
   const body = JSON.parse(String(init.body));
   expect(body.to).toBe(job.recipient);
-  expect(body.type).toBe("template");
+  expect(body.type).toBe("text");
   expect(body.biz_opaque_callback_data).toBe(
     `agrosense:${job.id}:${job.token}`,
   );
-  expect(
-    body.template.components[0].parameters.map(
-      (p: { parameter_name: string }) => p.parameter_name,
-    ),
-  ).toEqual(["farm", "plot", "hazard", "details"]);
-  expect(JSON.stringify(body)).toContain("Riesgo del cultivo no disponible");
+  expect(body.text.body).toContain("AgroSense: Aviso meteorológico");
+  expect(body.text.body).toContain("Riesgo del cultivo no disponible");
   expect(init.redirect).toBe("manual");
   expect(fetcher).toHaveBeenCalledTimes(1);
 });
 
 it("does not require the conversation agent's allowlisted owner or model config", () => {
   expect(() => readNotificationConfig(env)).not.toThrow();
-  expect(() =>
-    readNotificationConfig({ ...env, KAPSO_NOTIFICATION_TEMPLATE_NAME: "" }),
-  ).toThrow();
 });
 
 it.each([408, 500, 503])(
@@ -106,11 +97,11 @@ it("never turns malformed success into a retryable rejection", async () => {
   ).rejects.toMatchObject({ code: "SEND_OUTCOME_UNKNOWN" });
 });
 
-it("bounds template parameters and states withdrawal without declaring the plot safe", () => {
-  const template = notificationTemplate({ ...job, kind: "withdrawal" });
-  expect(template.details).toContain("retirado");
-  expect(template.details).not.toContain("seguro");
-  const lengthy = notificationTemplate({
+it("bounds notification content and states withdrawal without declaring the plot safe", () => {
+  const content = notificationContent({ ...job, kind: "withdrawal" });
+  expect(content.details).toContain("retirado");
+  expect(content.details).not.toContain("seguro");
+  const lengthy = notificationContent({
     ...job,
     payload: {
       ...job.payload,

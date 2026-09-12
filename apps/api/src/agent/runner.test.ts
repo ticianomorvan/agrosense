@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createOpenRouterModel } from "./model";
-import { runAgent } from "./runner";
+import { formatForWhatsapp, runAgent } from "./runner";
 import { call, chatResponse, testTools } from "./test-helpers";
 
 const now = () => new Date("2026-09-12T12:00:00Z");
@@ -276,6 +276,33 @@ describe("AI SDK agent through OpenRouter", () => {
     },
   );
 
+  it("logs only a stable code when the model provider exposes private details", async () => {
+    const errorLog = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    const fetcher = vi.fn<typeof fetch>(async () =>
+      Response.json(
+        { error: { message: "private upstream details" } },
+        { status: 401 },
+      ),
+    );
+    const { tools } = testTools();
+
+    await expect(run(fetcher, tools)).rejects.toMatchObject({
+      code: "MODEL_UNAVAILABLE",
+    });
+
+    expect(errorLog).toHaveBeenCalledWith(
+      JSON.stringify({
+        event: "whatsapp_agent_run_failed",
+        code: "MODEL_UNAVAILABLE",
+      }),
+    );
+    expect(JSON.stringify(errorLog.mock.calls)).not.toContain(
+      "private upstream details",
+    );
+  });
+
   it("bounds stalled requests and never retries them", async () => {
     vi.useFakeTimers();
     let started!: () => void;
@@ -323,5 +350,28 @@ describe("AI SDK agent through OpenRouter", () => {
     await vi.advanceTimersByTimeAsync(60000);
     await assertion;
     expect(fetcher).toHaveBeenCalledTimes(4);
+  });
+
+  describe("formatForWhatsapp", () => {
+    it("converts double asterisks markdown bold to single asterisk WhatsApp bold", () => {
+      const input = "El pronóstico para **Lote Norte** tiene riesgo **alto**.";
+      expect(formatForWhatsapp(input)).toBe(
+        "El pronóstico para *Lote Norte* tiene riesgo *alto*.",
+      );
+    });
+
+    it("converts markdown headings to bold labels", () => {
+      const input = "### Pronóstico próximos 3 días\nTemperatura: 22°C";
+      expect(formatForWhatsapp(input)).toBe(
+        "*Pronóstico próximos 3 días*\nTemperatura: 22°C",
+      );
+    });
+
+    it("strips markdown table divider rows and trims whitespace", () => {
+      const input = "Día | Temp\n|---|---|\n12/09 | 20°C\n\n\nFin";
+      expect(formatForWhatsapp(input)).toBe(
+        "Día | Temp\n\n12/09 | 20°C\n\nFin",
+      );
+    });
   });
 });

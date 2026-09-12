@@ -4,7 +4,7 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { convertV4MiniflareOptions, Miniflare, Response } from "miniflare";
 
-test("Worker authenticates Supabase jobs, dispatches a template once and verifies delivery receipts", {
+test("Worker authenticates Supabase jobs, dispatches a text notification once and verifies delivery receipts", {
   timeout: 30000,
 }, async () => {
   const secret = "a".repeat(64);
@@ -37,8 +37,6 @@ test("Worker authenticates Supabase jobs, dispatches a template once and verifie
         AUTOMATION_CRON_SECRET: secret,
         KAPSO_API_KEY: "kapso_test",
         KAPSO_PHONE_NUMBER_ID: "123456",
-        KAPSO_NOTIFICATION_TEMPLATE_NAME: "agrosense_weather_alert",
-        KAPSO_NOTIFICATION_TEMPLATE_LANGUAGE: "es",
         KAPSO_NOTIFICATION_WEBHOOK_SECRET: webhookSecret,
       },
       outboundService: async (request) => {
@@ -106,8 +104,8 @@ test("Worker authenticates Supabase jobs, dispatches a template once and verifie
           );
           assert.equal(request.headers.get("X-API-Key"), "kapso_test");
           assert.equal(state, "sending");
-          assert.equal(body.type, "template");
-          assert.equal(body.template.name, "agrosense_weather_alert");
+          assert.equal(body.type, "text");
+          assert.match(body.text.body, /AgroSense: Aviso meteorológico/);
           assert.equal(
             body.biz_opaque_callback_data,
             `agrosense:${id}:${token}`,

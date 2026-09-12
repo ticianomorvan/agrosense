@@ -8,27 +8,16 @@ import { z } from "zod";
 import {
   type KapsoBindings,
   kapsoSendConfigSchema,
-  sendWhatsappTemplate,
+  sendWhatsappText,
 } from "../lib/kapso";
 
 export type AutomationBindings = {
   AUTOMATION_CRON_SECRET?: string;
-  KAPSO_NOTIFICATION_TEMPLATE_NAME?: string;
-  KAPSO_NOTIFICATION_TEMPLATE_LANGUAGE?: string;
   KAPSO_NOTIFICATION_WEBHOOK_SECRET?: string;
   OPEN_METEO_API_KEY?: string;
 };
 
-const notificationConfigSchema = kapsoSendConfigSchema.extend({
-  KAPSO_NOTIFICATION_TEMPLATE_NAME: z
-    .string()
-    .min(1)
-    .max(512)
-    .regex(/^[a-z0-9_]+$/),
-  KAPSO_NOTIFICATION_TEMPLATE_LANGUAGE: z
-    .string()
-    .regex(/^[a-z]{2,3}(?:_[A-Z]{2})?$/),
-});
+const notificationConfigSchema = kapsoSendConfigSchema;
 
 export function readNotificationConfig(
   env: AutomationBindings & KapsoBindings,
@@ -80,7 +69,7 @@ function compact(text: string, limit: number) {
   return clean.length > limit ? `${clean.slice(0, limit - 1)}…` : clean;
 }
 
-export function notificationTemplate(job: NotificationJob) {
+export function notificationContent(job: NotificationJob) {
   const { payload } = job;
   const window = `${dateFormatter.format(new Date(payload.startsAt))}–${dateFormatter.format(new Date(payload.endsAt))} (Córdoba).`;
   const details =
@@ -97,19 +86,30 @@ export function notificationTemplate(job: NotificationJob) {
   };
 }
 
+export function formatNotificationText(job: NotificationJob): string {
+  const params = notificationContent(job);
+  return [
+    `*AgroSense: Aviso meteorológico*`,
+    `Finca: ${params.farm}`,
+    `Lote: ${params.plot}`,
+    `Evento previsto: ${params.hazard}`,
+    `Detalles: ${params.details}`,
+    ``,
+    `Consultá AgroSense para revisar el pronóstico y la evaluación del lote.`,
+  ].join("\n");
+}
+
 export function sendNotification(
   config: z.infer<typeof notificationConfigSchema>,
   job: NotificationJob,
   fetcher: typeof fetch = fetch,
   signal?: AbortSignal,
 ) {
-  return sendWhatsappTemplate(
+  return sendWhatsappText(
     config,
     {
       to: job.recipient,
-      name: config.KAPSO_NOTIFICATION_TEMPLATE_NAME,
-      language: config.KAPSO_NOTIFICATION_TEMPLATE_LANGUAGE,
-      parameters: notificationTemplate(job),
+      text: formatNotificationText(job),
       callbackData: `agrosense:${job.id}:${job.token}`,
     },
     fetcher,

@@ -7,7 +7,8 @@ deterministic risk engine. Implementation order:
    complete per-plot refresh. Supabase remains the authority for due work.
 2. **alert-outbox** → atomically persist notification intent with current alerts;
    resolve the recipient from the farm owner and a provisioned, opted-in contact.
-3. **notification-delivery** → approved Kapso templates, durable send state,
+3. **notification-delivery** → Kapso text messages within an active
+   customer-service window, durable send state,
    authenticated delivery callbacks, and owner-scoped delivery status.
 4. **verification** → exercise real SQL migrations, provider boundaries, cron
    wiring and recovery paths; document provisioning and operational limits.

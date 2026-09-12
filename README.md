@@ -5,8 +5,8 @@ Zod contracts. See [stack decisions](docs/stack.md) for boundaries, [Supabase se
 
 [Automatic weather monitoring](docs/weather-automation.md) uses Supabase Cron to
 refresh live plots, publish rule-based alerts and dispatch deduplicated owner
-notifications through Kapso. Its setup guide covers contacts, approved templates,
-job activation, delivery tracking and recovery.
+notifications through Kapso. Its setup guide covers contacts, the required
+customer-service window, job activation, delivery tracking and recovery.
 
 See [product context](PRODUCT.md) for the intended audience and core job, and the
 [frontend implementation contract](docs/style-guide.md) for required visual

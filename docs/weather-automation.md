@@ -28,7 +28,7 @@ supabase-js 2.116.x and Zod 4.6.2.
 | [Supabase database functions](https://supabase.com/docs/guides/database/functions) | RPCs run database functions; definer functions require a fixed search path and restricted execution grants. | Keep privileged writes service-only, with explicit owner checks and owner-scoped reads. Publication and outbox insertion share a transaction. |
 | [Open-Meteo forecast API](https://open-meteo.com/en/docs) | Hourly values include 2 m temperature, gusts, precipitation and WMO codes; forecasts are model output. | Preserve units, UTC hourly coverage, nullable measurements and actual retrieval time. Detect the repository's four hazards; do not claim observational measurements or agronomic validation. |
 | [Kapso message API](https://docs.kapso.ai/api/meta/whatsapp/messages/send-a-message) | Accepted messages return a provider ID; biz_opaque_callback_data is echoed in callbacks. The documented send API does not promise client-key deduplication. | Record an attempt before the HTTP call. Timeouts, malformed success responses and server errors become unknown outcomes; do not blindly resend. Correlate signed receipts by provider ID or callback token. |
-| [Kapso templates](https://docs.kapso.ai/docs/whatsapp/templates/simple-text) | Approved named templates support proactive notifications. | Use a named Spanish utility template with bounded parameters, independent of the 24-hour free-form conversation window. |
+| [Kapso message API](https://docs.kapso.ai/api/meta/whatsapp/messages/send-a-message) | Free-form text messages can be sent during WhatsApp's customer-service window after the recipient messages the business. | Send a bounded Spanish text notification for the demo. The owner must message the AgroSense number first; template approval is not part of this path. |
 | [Kapso webhook security](https://docs.kapso.ai/docs/platform/webhooks/security), [message events](https://docs.kapso.ai/docs/platform/webhooks/message-events), [delivery](https://docs.kapso.ai/docs/platform/webhooks/advanced) | Raw-body HMAC authentication; sent, delivered, read and failed events; duplicates and retries are possible. | Verify before parsing or persisting, keep monotonic delivery state, and handle callbacks that arrive before the send response. |
 
 ## Scheduling contract
@@ -85,7 +85,8 @@ publication after worker interruption, correct recipient resolution, idempotent
 receipts, cancellation, stale data and uncertain sends. No frontend change is
 required. Do not send real messages from automated tests or invent approved
 agronomic rules. Production activation requires applied migrations, server-side
-secrets, an approved template and a provisioned owner contact.
+secrets, a provisioned owner contact and an active customer-service window opened
+by that owner messaging the business first.
 
 ## Activation
 
@@ -93,18 +94,15 @@ secrets, an approved template and a provisioned owner contact.
    project, and regenerate database types with `pnpm db:types`.
 2. Configure the existing Supabase credentials plus `AUTOMATION_CRON_SECRET`
    (64 random lowercase hex characters) as Worker secrets. Configure
-   `KAPSO_API_KEY`, `KAPSO_PHONE_NUMBER_ID`,
-   `KAPSO_NOTIFICATION_TEMPLATE_NAME`, `KAPSO_NOTIFICATION_TEMPLATE_LANGUAGE`
-   and `KAPSO_NOTIFICATION_WEBHOOK_SECRET`. The conversation agent and its
+   `KAPSO_API_KEY`, `KAPSO_PHONE_NUMBER_ID` and
+   `KAPSO_NOTIFICATION_WEBHOOK_SECRET`. The conversation agent and its
    allowlisted owner are independent of automatic notifications.
-3. Connect the business number in Kapso. Submit the
-   [named utility template](assets/kapso-weather-template.json) for review, then
-   set the name and language to the exact approved values. This file uses the
-   installed Kapso CLI/SDK camelCase input (`parameterFormat`,
-   `bodyTextNamedParams`, `paramName`); raw Meta JSON uses different field names.
-   Submit with `kapso whatsapp templates new --project <project-id> --phone-number-id <sender-id> --input docs/assets/kapso-weather-template.json`.
-   Template review and
-   business account approval are external prerequisites, not outcomes of a test.
+3. Connect the business number in Kapso. Immediately before enabling notification
+   dispatch for the demo, have the provisioned owner send a message to that number
+   to open WhatsApp's 24-hour customer-service window. Notifications are ordinary
+   text messages and do not require template approval. Once the window expires,
+   another owner message is required before free-form notification delivery can
+   resume.
 4. Register a **phone-number**, **Kapso v2** webhook to
    `https://<worker-origin>/api/whatsapp/notifications/webhook` for
    `whatsapp.message.sent`, `whatsapp.message.delivered`, `whatsapp.message.read`,
@@ -169,20 +167,23 @@ The selected production sender is **AgroSense +1 204-400-0468**, phone number ID
 `1242340842303957`, in Kapso project `8ca28301-d96f-4868-82f6-6affb94c6050`.
 Template `agrosense_weather_alert` (`es`, UTILITY), ID `3327227480790131`, was
 submitted and read back with its four named parameters intact. Its last verified
-status is **PENDING**. The initial submission on the previously selected Klasty
+status is **PENDING**, but it is not used by the demo notification path and no
+longer blocks activation. The initial submission on the previously selected Klasty
 sender was rejected and subsequently deleted at the user's request; deletion was
-verified against Kapso. No messages were sent.
+verified against Kapso. No messages were sent during provisioning.
 
 Application migrations through `20260912121000_privilege_hardening.sql` are applied
 to production and verified against the remote migration ledger, schema cache and
-pre/post data snapshots. Worker deployment, notification secrets, receipt webhook,
-owner contact provisioning and Supabase Cron activation remain incomplete. Do not
-activate notification dispatch until the template is approved and the intended
-owner's phone and opt-in are configured.
+pre/post data snapshots. The Worker has the notification send credentials and cron
+secret. Supabase Vault is configured; the weather and retention jobs are active,
+while notification dispatch is paused. One owner contact is enabled and there is
+currently no pending notification. Deploy the plain-text implementation, configure
+and register the signed receipt webhook, and have the owner open a customer-service
+window before activating notification dispatch.
 
 ## Verification results — 2026-09-12
 
-`pnpm check` passed: TypeScript, Biome, 295 API tests, 43 frontend tests, 48 SQL
+`pnpm check` passed: TypeScript, Biome, 309 API tests, 45 frontend tests, 48 SQL
 tests, production builds and two workerd runtime tests. The runtime tests use
 intercepted provider traffic and send no real messages. The end-to-end publication
 test uses real PGlite migrations and Supabase RPC calls with mocked Open-Meteo
@@ -194,7 +195,7 @@ contact revocation, changed ownership/rules and owner-scoped status.
 Final review also restricted cron-history retention to these three AgroSense jobs
 and removed implicit hosted Data API grants from current and future objects. The
 production migration was rehearsed against a restored pre-migration dump; core row
-counts and foreign keys were preserved. `git diff --check` passed. No UI changes
-were made; browser screenshots are not applicable. Hosted pg_cron/pg_net/Vault
-execution, template approval, provider acceptance and actual WhatsApp delivery
-remain unverified until activation.
+counts and foreign keys were preserved. `git diff --check` passed. The automation
+slice itself has no UI acceptance surface. Hosted notification execution, provider
+acceptance, signed receipt handling and actual WhatsApp delivery remain unverified
+until activation.
