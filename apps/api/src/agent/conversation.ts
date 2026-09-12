@@ -175,7 +175,10 @@ export class Conversation {
       return;
     }
     if (record.status === "queued" || record.status === "running") {
-      if (record.attempts >= 2) {
+      // Re-entering with a running marker means the prior alarm was interrupted.
+      // Do not repeat slow reasoning at the head of the per-sender FIFO queue:
+      // terminate it honestly so later messages can make progress.
+      if (record.status === "running" || record.attempts >= 2) {
         record.reply = fallbackReply;
         record.errorCode = "AGENT_RECOVERY_EXHAUSTED";
       } else {

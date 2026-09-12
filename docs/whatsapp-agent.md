@@ -124,8 +124,10 @@ A run moves through `queued`, `running`, `reply_pending`, `sending`, then
 `accepted`, `failed` or `send_unknown`. The generated reply and then a sending
 marker are persisted before calling Kapso. A crash during sending or an uncertain
 provider response is never automatically resent. Interrupted read-only reasoning
-gets at most two attempts. These semantics avoid duplicate replies at the cost
-of possibly missing a reply after a crash; they do not guarantee exactly-once delivery.
+is terminated with the fixed unavailable reply instead of repeating a slow model
+call at the head of the per-sender queue. These semantics avoid duplicate replies
+at the cost of possibly missing a reply after a crash; they do not guarantee
+exactly-once delivery.
 
 `accepted` means Kapso accepted the message, not that it was delivered. An agent
 failure may send a fixed English unavailable reply and retain its error code.
