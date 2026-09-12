@@ -52,6 +52,15 @@ before(async () => {
       "utf8",
     ),
   );
+  await db.exec(
+    await readFile(
+      new URL(
+        "../migrations/20260912090000_crop_cycle_mutation.sql",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+  );
   farms = [];
   plots = [];
   events = [];
@@ -154,6 +163,44 @@ test("rejects duplicate open cycles, invalid stages, and incomplete refresh stat
       [farms[0]],
     ),
     /check constraint/,
+  );
+});
+test("updates the owned open cycle with compare-and-swap semantics", async () => {
+  await asRole("authenticated", a, async () => {
+    const result = await db.query(
+      `SELECT public.update_crop_cycle($1,$2,1,$3) AS response`,
+      [
+        farms[0],
+        plots[0],
+        JSON.stringify({
+          expectedDataVersion: 1,
+          sownOn: "2026-09-10",
+          stageCode: "V3",
+          stageAsOf: "2026-09-11",
+        }),
+      ],
+    );
+    assert.equal(result.rows[0].response.dataVersion, 2);
+    assert.equal(result.rows[0].response.cropCycle.sownOn, "2026-09-10");
+    assert.equal(result.rows[0].response.cropCycle.stageCode, "V3");
+  });
+  await assert.rejects(
+    db.query(`SELECT public.update_crop_cycle($1,$2,1,$3)`, [
+      farms[0],
+      plots[0],
+      JSON.stringify({ expectedDataVersion: 1, sownOn: null }),
+    ]),
+    /VERSION_CONFLICT/,
+  );
+  await asRole("authenticated", b, async () =>
+    assert.rejects(
+      db.query(`SELECT public.update_crop_cycle($1,$2,2,$3)`, [
+        farms[0],
+        plots[0],
+        JSON.stringify({ expectedDataVersion: 2, sownOn: null }),
+      ]),
+      /NOT_FOUND/,
+    ),
   );
 });
 test("rejects cross-farm alerts and invalid risk state", async () => {
