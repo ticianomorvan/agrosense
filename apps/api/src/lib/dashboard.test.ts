@@ -193,3 +193,132 @@ describe("dashboard projection", () => {
     expect(response.events[0]?.alerts[0]?.isStale).toBe(true);
   });
 });
+
+describe("dashboard freshness", () => {
+  const snapshotCycle = {
+    id: cycle.id,
+    plotId,
+    cropCode: cycle.crop_code,
+    seasonLabel: cycle.season_label,
+    sownOn: null,
+    stageCode: null,
+    stageAsOf: null,
+    endedOn: null,
+    updatedAt: cycle.updated_at,
+  };
+  const snapshot = {
+    schemaVersion: 1,
+    plotId,
+    cropCycle: snapshotCycle,
+    event: {
+      id: eventId,
+      status: event.status,
+      startsAt: event.starts_at,
+      endsAt: event.ends_at,
+      evidence,
+    },
+    ruleSetVersion: "demo-v1",
+    matchedRuleCodes: [],
+    generation: { method: "template", modelId: null, promptVersion: null },
+  };
+
+  it.each([
+    ["2026-09-11T00:00:00Z", "2026-09-11T00:00:00.000+00:00", false],
+    ["2026-09-11T00:00:00.123456Z", "2026-09-10T21:00:00.123456-03:00", false],
+    ["2026-09-11T00:00:00.123456Z", "2026-09-11T00:00:00.123457+00:00", true],
+  ])("compares snapshot %s with stored %s", (savedAt, updatedAt, stale) => {
+    const response = projectDashboard(
+      farm,
+      [plot],
+      [{ ...cycle, updated_at: updatedAt }],
+      [event],
+      [
+        {
+          ...alert,
+          input_snapshot: {
+            ...snapshot,
+            cropCycle: { ...snapshotCycle, updatedAt: savedAt },
+          },
+        },
+      ],
+      "2026-09-12T00:30:00Z",
+    );
+    expect(response.events[0]?.alerts[0]?.isStale).toBe(stale);
+  });
+
+  it("preserves microseconds in the public cycle timestamp", () => {
+    const response = projectDashboard(
+      farm,
+      [plot],
+      [{ ...cycle, updated_at: "2026-09-11T00:00:00.123456+00:00" }],
+      [],
+      [],
+    );
+    expect(response.plots[0]?.activeCropCycle?.updatedAt).toBe(
+      "2026-09-11T00:00:00.123456Z",
+    );
+  });
+
+  it.each([
+    ["2026-09-12T00:30:00.123455Z", false],
+    ["2026-09-12T00:30:00.123456Z", true],
+    ["2026-09-12T00:30:00.123457Z", true],
+  ])("expires an alert at its exact deadline: %s", (asOf, stale) => {
+    const response = projectDashboard(
+      farm,
+      [plot],
+      [],
+      [event],
+      [{ ...alert, valid_until: "2026-09-11T21:30:00.123456-03:00" }],
+      asOf,
+    );
+    expect(response.events[0]?.alerts[0]?.isStale).toBe(stale);
+  });
+
+  const refreshedFarm: Farm = {
+    ...farm,
+    last_attempt_at: source.retrievedAt,
+    last_success_at: source.retrievedAt,
+    forecast_summary: {
+      schemaVersion: 1,
+      fetchedAt: source.retrievedAt,
+      windowStart: "2026-09-12T02:00:00Z",
+      windowEnd: "2026-09-12T03:00:00Z",
+      plots: [
+        {
+          plotId,
+          samplePoint: point,
+          source,
+          temperatureHeightM: 2,
+          hours: evidence.hours,
+        },
+      ],
+    },
+  };
+
+  it.each(["insufficient_data", "no_applicable_rule"])(
+    "marks monitoring stale when a %s assessment loses its crop context",
+    (assessmentState) => {
+      const response = projectDashboard(
+        refreshedFarm,
+        [plot],
+        [cycle],
+        [event],
+        [{ ...alert, assessment_state: assessmentState }],
+        "2026-09-12T00:30:00Z",
+      );
+      expect(response.events[0]?.alerts[0]?.isStale).toBe(true);
+      expect(response.monitoring.status).toBe("stale");
+    },
+  );
+
+  it.each([
+    ["2026-09-12T00:59:59.999Z", "fresh"],
+    ["2026-09-12T01:00:00Z", "stale"],
+  ])("derives forecast freshness at %s", (asOf, status) => {
+    expect(
+      projectDashboard(refreshedFarm, [plot], [], [], [], asOf).monitoring
+        .status,
+    ).toBe(status);
+  });
+});

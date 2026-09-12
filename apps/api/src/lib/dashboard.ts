@@ -32,10 +32,10 @@ function alertIsStale(
     ruleSetVersion: string;
   }>(alert.input_snapshot);
   return (
-    asOf >= alert.valid_until ||
+    asOf >= iso(alert.valid_until) ||
     snapshot.ruleSetVersion !== alert.rule_version ||
     snapshot.cropCycle?.id !== currentCycle?.id ||
-    snapshot.cropCycle?.updatedAt !==
+    (snapshot.cropCycle ? iso(snapshot.cropCycle.updatedAt) : undefined) !==
       (currentCycle ? iso(currentCycle.updated_at) : undefined)
   );
 }
@@ -48,6 +48,7 @@ export function projectDashboard(
   alerts: AlertRow[],
   asOf = new Date().toISOString(),
 ): DashboardResponse {
+  asOf = iso(asOf);
   const currentCycles = new Map(
     cycles
       .filter((cycle) => cycle.ended_on === null)
@@ -137,11 +138,12 @@ export function projectDashboard(
             : null;
           if (issuedDeadline)
             issuedDeadline.setHours(issuedDeadline.getHours() + 6);
-          return (
-            issuedDeadline && issuedDeadline < retrievedDeadline
+          return iso(
+            (issuedDeadline && issuedDeadline < retrievedDeadline
               ? issuedDeadline
               : retrievedDeadline
-          ).toISOString();
+            ).toISOString(),
+          );
         })
         .sort()[0] ?? null)
     : null;
@@ -149,9 +151,7 @@ export function projectDashboard(
     (event) =>
       event.status === "active" &&
       event.temporalState !== "recent" &&
-      event.alerts.some(
-        (alert) => alert.isStale && alert.assessmentState === "evaluated",
-      ),
+      event.alerts.some((alert) => alert.isStale),
   );
   const status =
     farm.last_error_code !== null

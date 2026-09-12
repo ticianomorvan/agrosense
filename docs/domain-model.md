@@ -45,6 +45,9 @@ erDiagram
 - Every listed response property is required, even when its value is null.
   Objects reject unknown keys. PATCH is the only partial object.
 - SQL instants are timestamptz; API instants are RFC3339 UTC strings ending in Z.
+  Projected SQL instants and freshness comparisons preserve PostgreSQL's
+  microsecond precision, normalizing to six fractional digits rather than
+  truncating crop-cycle change tokens to JavaScript milliseconds.
   Dates are YYYY-MM-DD. Display timezone is fixed to America/Argentina/Cordoba.
 - JSON numbers are finite. Area is numeric(12,2) in SQL and a JSON number in
   hectares; serialize as a number, not a database decimal string. Values round
