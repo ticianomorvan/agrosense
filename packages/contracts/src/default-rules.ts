@@ -1,4 +1,31 @@
 import type { RiskRule, RuleSet } from "./agronomic";
+import type { EventKind } from "./dashboard";
+
+/**
+ * Recommended preventive actions by hazard kind for demonstration and operational use.
+ */
+export const HAZARD_RECOMMENDED_ACTIONS: Record<EventKind, string[]> = {
+  frost: [
+    "Aplicar riego previo si el lote cuenta con equipo para aumentar la inercia térmica del suelo.",
+    "Suspender aplicaciones de herbicidas post-emergentes y fertilizantes foliares hasta la recuperación térmica.",
+    "Monitorear ápice de crecimiento y daño foliar a las 48–72 hs posteriores a la helada.",
+  ],
+  "extreme-heat": [
+    "Priorizar turnos de riego de alivio durante etapas de floración (VT/R1) para sostener el cuaje de granos.",
+    "Suspender pulverizaciones diurnas con temperaturas superiores a 32 °C para evitar deriva y fitotoxicidad.",
+    "Programar aplicaciones en ventanas nocturnas o matutinas con coadyuvantes antievaporantes.",
+  ],
+  "severe-storm": [
+    "Resguardar pulverizadoras, tolvas y maquinaria en galpones antes del inicio de ráfagas intensas.",
+    "Suspender tratamientos fitosanitarios para evitar el lavado de producto por lluvias torrenciales.",
+    "Revisar y despejar canales aliviadores o vías de escurrimiento para prevenir anegamientos prolongados.",
+  ],
+  hail: [
+    "Verificar la vigencia y cobertura de las pólizas de seguro agrícola para los lotes afectados.",
+    "Resguardar vehículos y maquinaria móvil en áreas cubiertas antes del inicio de la tormenta.",
+    "Planificar recorrida a campo post-tormenta para evaluar porcentaje de defoliación y viabilidad de nudos.",
+  ],
+};
 
 /**
  * Synthetic initial agronomic rule catalog (version demo-v1)
@@ -20,9 +47,7 @@ export const DEMO_V1_RULES: RiskRule[] = [
     reviewState: "synthetic",
     evidenceUrl: null,
     reasonTemplate: "Escenario sintético: la regla {code} coincide.",
-    recommendedActionTemplates: [
-      "Demostración: revisar el lote; no es asesoramiento agronómico.",
-    ],
+    recommendedActionTemplates: HAZARD_RECOMMENDED_ACTIONS.frost,
   },
   {
     code: "demo-maize-v6",
@@ -39,9 +64,7 @@ export const DEMO_V1_RULES: RiskRule[] = [
     reviewState: "synthetic",
     evidenceUrl: null,
     reasonTemplate: "Escenario sintético: la regla {code} coincide.",
-    recommendedActionTemplates: [
-      "Demostración: revisar el lote; no es asesoramiento agronómico.",
-    ],
+    recommendedActionTemplates: HAZARD_RECOMMENDED_ACTIONS.frost,
   },
   {
     code: "demo-soybean-r4",
@@ -58,9 +81,7 @@ export const DEMO_V1_RULES: RiskRule[] = [
     reviewState: "synthetic",
     evidenceUrl: null,
     reasonTemplate: "Escenario sintético: la regla {code} coincide.",
-    recommendedActionTemplates: [
-      "Demostración: revisar el lote; no es asesoramiento agronómico.",
-    ],
+    recommendedActionTemplates: HAZARD_RECOMMENDED_ACTIONS.frost,
   },
   {
     code: "demo-maize-heat",
@@ -77,9 +98,7 @@ export const DEMO_V1_RULES: RiskRule[] = [
     reviewState: "synthetic",
     evidenceUrl: null,
     reasonTemplate: "Escenario sintético: la regla {code} coincide.",
-    recommendedActionTemplates: [
-      "Demostración: revisar el lote; no es asesoramiento agronómico.",
-    ],
+    recommendedActionTemplates: HAZARD_RECOMMENDED_ACTIONS["extreme-heat"],
   },
   {
     code: "demo-storm-v",
@@ -96,9 +115,7 @@ export const DEMO_V1_RULES: RiskRule[] = [
     reviewState: "synthetic",
     evidenceUrl: null,
     reasonTemplate: "Escenario sintético: la regla {code} coincide.",
-    recommendedActionTemplates: [
-      "Demostración: revisar el lote; no es asesoramiento agronómico.",
-    ],
+    recommendedActionTemplates: HAZARD_RECOMMENDED_ACTIONS["severe-storm"],
   },
 ];
 

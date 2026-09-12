@@ -154,7 +154,9 @@ export function createDemoDashboard(now = new Date()): DashboardResponse {
     reason:
       "Escenario sintético: la regla demo-maize-v6 coincide (-1°C en maíz V6).",
     recommendedActions: [
-      "Demostración: monitorear ápice vegetativo y hojas expuestas; no es asesoramiento agronómico.",
+      "Aplicar riego suplementario previo al evento para aumentar la inercia térmica del suelo.",
+      "Suspender aplicaciones de fitosanitarios y fertilizantes foliares hasta la recuperación térmica.",
+      "Monitorear ápice vegetativo y daño en hojas expuestas 48–72 hs post-helada.",
     ],
     ruleVersion: "demo-v1",
     generatedAt: asOf,
@@ -187,7 +189,9 @@ export function createDemoDashboard(now = new Date()): DashboardResponse {
     reason:
       "Escenario sintético: la regla demo-soybean-r4 coincide (-1°C en soja R4).",
     recommendedActions: [
-      "Demostración: revisar daño en flores/vainas; no es asesoramiento agronómico.",
+      "Aplicar riego previo si el lote cuenta con equipo para mitigar la caída de temperatura.",
+      "Suspender tratamientos químicos foliares para evitar fitotoxicidad bajo estrés por frío.",
+      "Monitorear daño en flores, nudos y vainas en desarrollo post-evento.",
     ],
     ruleVersion: "demo-v1",
     generatedAt: asOf,

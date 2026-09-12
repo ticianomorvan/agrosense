@@ -1,16 +1,30 @@
 import {
   cropLabels,
   type DashboardResponse,
+  type EventKind,
+  HAZARD_RECOMMENDED_ACTIONS,
   type Plot,
 } from "@agrosense/contracts";
+import { useId, useState } from "react";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
+import {
+  NativeSelect,
+  NativeSelectOption,
+} from "../../components/ui/native-select";
 import {
   assessmentSource,
   forecastFreshness,
   formatInstant,
   plotStatus,
 } from "./presentation";
+
+const hazardLabels: Record<EventKind, string> = {
+  frost: "Frost (Heladas)",
+  "extreme-heat": "Extreme heat (Ola de calor)",
+  "severe-storm": "Severe storm (Tormenta severa)",
+  hail: "Hail (Granizo)",
+};
 
 export function FieldDetails({
   data,
@@ -28,6 +42,11 @@ export function FieldDetails({
   const actions = status.isCurrent
     ? status.assessment?.alert.recommendedActions
     : undefined;
+  const currentHazard = status.assessment?.event.kind;
+  const hazardSelectId = useId();
+  const [selectedHazard, setSelectedHazard] = useState<EventKind>(
+    currentHazard ?? "frost",
+  );
   const facts = [
     ["Crop", crop ? cropLabels[crop.cropCode] : "Unavailable"],
     ["Growth stage", crop?.stageCode ?? "Unavailable"],
@@ -68,7 +87,7 @@ export function FieldDetails({
       </dl>
       <h3>Recommended actions</h3>
       {actions?.length ? (
-        <ul className="space-y-2 pl-6 wrap-anywhere">
+        <ul className="space-y-2 pl-6 wrap-anywhere list-disc">
           {actions.map((action, index) => (
             // biome-ignore lint/suspicious/noArrayIndexKey: Ordered read-only strings have no IDs and may repeat.
             <li key={index}>{action}</li>
@@ -80,6 +99,44 @@ export function FieldDetails({
           evaluation.
         </p>
       )}
+      <div className="my-6 space-y-3">
+        <h4 className="text-sm font-semibold">
+          Preventive actions by hazard type
+        </h4>
+        <div className="grid gap-2">
+          <label
+            htmlFor={hazardSelectId}
+            className="text-sm text-muted-foreground"
+          >
+            Hazard type
+          </label>
+          <NativeSelect
+            id={hazardSelectId}
+            className="w-full"
+            value={selectedHazard}
+            onChange={(e) => setSelectedHazard(e.target.value as EventKind)}
+          >
+            <NativeSelectOption value="frost">
+              {hazardLabels.frost}
+            </NativeSelectOption>
+            <NativeSelectOption value="extreme-heat">
+              {hazardLabels["extreme-heat"]}
+            </NativeSelectOption>
+            <NativeSelectOption value="severe-storm">
+              {hazardLabels["severe-storm"]}
+            </NativeSelectOption>
+            <NativeSelectOption value="hail">
+              {hazardLabels.hail}
+            </NativeSelectOption>
+          </NativeSelect>
+        </div>
+        <ul className="space-y-2 pl-6 text-sm wrap-anywhere list-disc">
+          {HAZARD_RECOMMENDED_ACTIONS[selectedHazard].map((item, idx) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: Ordered read-only strings have no IDs and may repeat.
+            <li key={idx}>{item}</li>
+          ))}
+        </ul>
+      </div>
       {status.assessment?.alert.lossEstimate ? (
         <>
           <h3>Estimated production loss</h3>
