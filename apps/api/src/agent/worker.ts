@@ -8,7 +8,7 @@ import {
 } from "./config";
 import { AdmissionError, Conversation, type RunInput } from "./conversation";
 import { inboundMessageSchema } from "./inbound";
-import { createOpenAIModel } from "./model";
+import { createOpenRouterModel } from "./model";
 import { runAgent } from "./runner";
 import { createAgentTools } from "./tools";
 
@@ -41,7 +41,7 @@ export class WhatsAppConversation {
           text: input.message.text,
           history: input.history,
           tools: createAgentTools({ env: this.env, ownerId: input.ownerId }),
-          model: createOpenAIModel(this.env),
+          model: createOpenRouterModel(this.env),
         });
       },
       send: async (input) => {

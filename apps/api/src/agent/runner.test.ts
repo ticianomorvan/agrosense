@@ -1,12 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createOpenAIModel } from "./model";
+import { createOpenRouterModel } from "./model";
 import { runAgent } from "./runner";
 import type { AgentTools } from "./tools";
 
 const now = () => new Date("2026-09-12T12:00:00Z");
 const modelEnv = {
-  OPENAI_API_KEY: "test_model_key",
-  OPENAI_MODEL: "gpt-5.6-terra",
+  OPENROUTER_API_KEY: "test_model_key",
+  OPENROUTER_MODEL: "openai/gpt-5.4-mini",
 };
 const call = (name: string, args = "{}", id = "call_1") => ({
   type: "function_call",
@@ -45,7 +45,10 @@ describe("reasoning and tool loop", () => {
     };
     const requests: Record<string, unknown>[] = [];
     const fetcher = vi.fn<typeof fetch>(async (url, init) => {
-      expect(String(url)).toBe("https://api.openai.com/v1/responses");
+      expect(String(url)).toBe("https://openrouter.ai/api/v1/responses");
+      expect(new Headers(init?.headers).get("Authorization")).toBe(
+        `Bearer ${modelEnv.OPENROUTER_API_KEY}`,
+      );
       requests.push(JSON.parse(String(init?.body)));
       if (requests.length === 1)
         return response([reasoning, call("list_farms")]);
@@ -66,7 +69,7 @@ describe("reasoning and tool loop", () => {
       text: "How is the forecast for the next three days?",
       history: [],
       tools: registry,
-      model: createOpenAIModel(modelEnv, fetcher),
+      model: createOpenRouterModel(modelEnv, fetcher),
       now,
     });
     expect(result.modelSteps).toBe(4);
@@ -84,12 +87,18 @@ describe("reasoning and tool loop", () => {
     });
     for (const request of requests) {
       expect(request.store).toBe(false);
+      expect(request.model).toBe("openai/gpt-5.4-mini");
+      expect(request.provider).toEqual({
+        require_parameters: true,
+        allow_fallbacks: false,
+      });
+      expect(request.include).toEqual(["reasoning.encrypted_content"]);
       expect(request.reasoning).toEqual({ effort: "medium" });
       expect(request.parallel_tool_calls).toBe(false);
       expect(request.max_output_tokens).toBe(4096);
     }
     expect(JSON.stringify(result)).not.toContain("opaque_reasoning");
-    expect(JSON.stringify(result)).not.toContain(modelEnv.OPENAI_API_KEY);
+    expect(JSON.stringify(result)).not.toContain(modelEnv.OPENROUTER_API_KEY);
   });
 
   it("returns tool errors to the model so it can recover", async () => {
@@ -112,7 +121,7 @@ describe("reasoning and tool loop", () => {
       text: "My farm?",
       history: [],
       tools: registry,
-      model: createOpenAIModel(modelEnv, fetcher),
+      model: createOpenRouterModel(modelEnv, fetcher),
       now,
     });
     const secondInput = JSON.parse(
@@ -144,7 +153,7 @@ describe("reasoning and tool loop", () => {
       text: "And tomorrow?",
       history,
       tools: tools(),
-      model: createOpenAIModel(modelEnv, fetcher),
+      model: createOpenRouterModel(modelEnv, fetcher),
       now,
     });
     expect(JSON.parse(String(fetcher.mock.calls[0]?.[1]?.body)).input).toEqual([
@@ -163,7 +172,7 @@ describe("reasoning and tool loop", () => {
         text: "Check",
         history: [],
         tools: tools(),
-        model: createOpenAIModel(modelEnv, fetcher),
+        model: createOpenRouterModel(modelEnv, fetcher),
         now,
       }),
     ).rejects.toMatchObject({ code: "AGENT_BUDGET_EXCEEDED" });
@@ -184,7 +193,7 @@ describe("reasoning and tool loop", () => {
       text: "Check",
       history: [],
       tools: tools(),
-      model: createOpenAIModel(modelEnv, fetcher),
+      model: createOpenRouterModel(modelEnv, fetcher),
       now,
     });
     expect(result.reply).toBe("No farm is available.");
@@ -213,7 +222,7 @@ describe("reasoning and tool loop", () => {
           text: "Check",
           history: [],
           tools: registry,
-          model: createOpenAIModel(modelEnv, fetcher),
+          model: createOpenRouterModel(modelEnv, fetcher),
           now,
         }),
       ).rejects.toMatchObject({ code: "MODEL_UNAVAILABLE" });
@@ -243,7 +252,7 @@ describe("reasoning and tool loop", () => {
       text: "Check",
       history: [],
       tools: tools(),
-      model: createOpenAIModel(modelEnv, fetcher),
+      model: createOpenRouterModel(modelEnv, fetcher),
       now,
     });
     const assertion = expect(task).rejects.toMatchObject({

@@ -29,11 +29,17 @@ Use existing TypeScript, Hono, Zod and Vitest conventions and native fetch.
 
 ## Agent behavior
 
-Use the OpenAI Responses API with a configurable reasoning model and explicit
+Use the OpenRouter Responses API with a configurable reasoning model and explicit
 reasoning effort. Tool choice is made by the model. The application executes
 only registered tools and returns their results through `function_call_output`.
-Preserve response items, including encrypted reasoning, between steps of one
-run. Do not expose or log private reasoning. Return only the final answer.
+Preserve response items, including provider reasoning fields and encrypted
+reasoning, between steps of one run. Do not expose or log private reasoning.
+Return only the final answer. Requests use the fixed
+`https://openrouter.ai/api/v1/responses` endpoint and require providers to support
+all supplied parameters (`provider.require_parameters=true`), including tools
+and reasoning. Provider fallbacks are disabled; errors follow the existing
+bounded failure path. The endpoint is stateless: every step sends the complete
+in-run context, without `previous_response_id`.
 
 Initial tools:
 
@@ -101,7 +107,7 @@ names/outcomes and message IDs, never reasoning, credentials or message bodies.
 
 ## Configuration and enablement
 
-The agent runs in the AgroSense Worker using OpenAI; Kapso supplies WhatsApp
+The agent runs in the AgroSense Worker using OpenRouter; Kapso supplies WhatsApp
 transport. It is disabled by default. Fill `apps/api/.env` using the checked-in
 example for local development. In production, configure the same bindings using
 Wrangler secret prompts; never commit keys or put them in `VITE_*` variables.
@@ -115,15 +121,21 @@ Wrangler secret prompts; never commit keys or put them in `VITE_*` variables.
 | `KAPSO_ALLOWED_USER_ID` | Supabase Auth UUID owning the accessible farms and allowed to inspect runs |
 | `WHATSAPP_AGENT_PHONE_NUMBER` | Producer's verified WhatsApp number, 7–15 international digits; optional leading `+` |
 | `KAPSO_WEBHOOK_SECRET` | Subscription signing secret, at least 16 characters |
-| `OPENAI_API_KEY` | OpenAI project API credential |
-| `OPENAI_MODEL` | Responses reasoning model; default `gpt-5.6-terra` |
-| `OPENAI_REASONING_EFFORT` | `low`, `medium` (default), or `high`; model must support the choice |
+| `OPENROUTER_API_KEY` | OpenRouter API credential |
+| `OPENROUTER_MODEL` | Responses reasoning model; default `openai/gpt-5.4-mini` |
+| `OPENROUTER_REASONING_EFFORT` | `low`, `medium` (default), or `high`; model must support the choice |
 | `WHATSAPP_AGENT_ENABLED` | Literal `true` to enable; `false` to disable |
+
+Use a provider-qualified model ID (`provider/model`) supporting both reasoning
+and function calling. The default is GPT-5.4 Mini through OpenRouter; changing
+`OPENROUTER_MODEL` requires no agent-loop change. Direct `OPENAI_*` settings are
+no longer read, and an OpenAI API key cannot substitute for an OpenRouter key.
+No new SDK or frontend configuration is required.
 
 Example interactive configuration command (repeat for each required binding):
 
 ```sh
-pnpm --filter @agrosense/api exec wrangler secret put OPENAI_API_KEY
+pnpm --filter @agrosense/api exec wrangler secret put OPENROUTER_API_KEY
 ```
 
 Confirm the operator owns a farm and plot with a valid stored sample point.
@@ -186,7 +198,7 @@ fallback is currently English; successful replies follow the user's language.
 No message text, tool-result bodies or private reasoning are exposed in run
 status. Completed bodies remain only in the bounded local conversation history.
 The Responses API uses `store:false`; provider-side logging/retention remains
-subject to the provider account's settings.
+subject to OpenRouter's and the routed provider's policies and account settings.
 
 ## Local verification
 
@@ -205,12 +217,12 @@ It never loads `.env` or sends a real WhatsApp message. Provider mocks verify
 transport and orchestration; they do not establish live model quality or delivery.
 
 Verified on 2026-09-12 with Node 24.19.0 and pnpm 11.21.0: `pnpm check` passed
-type checking, Biome, 107 API tests, four database tests, Vite and Wrangler dry-run
+type checking, Biome, 113 API tests, four database tests, Vite and Wrangler dry-run
 builds, and the local workerd integration test. `pnpm audit --prod` reported no
 known vulnerabilities. Runtime verification caught and fixed native fetch
 receiver binding and redirect-mode incompatibilities; provider redirects are
 rejected without following them. No UI files changed, so no visual acceptance
-claim is made. Live webhook delivery, OpenAI answers and WhatsApp delivery remain
+claim is made. Live webhook delivery, OpenRouter answers and WhatsApp delivery remain
 unverified; deployment and real credentials are still required.
 
 ## Acceptance and verification
@@ -225,13 +237,16 @@ unverified; deployment and real credentials are still required.
   history, restart recovery, terminal failures and uncertain sends.
 - `pnpm check` passes. Verify the durable route in a local Worker with fake
   provider responses. No real WhatsApp send is needed for automated tests.
-- Live enablement requires actual Kapso/OpenAI keys, a linked sender, operator
+- Live enablement requires actual Kapso/OpenRouter keys, a linked sender, operator
   UUID, populated farm data and a public webhook deployment.
 
 Reference documentation:
 
-- [OpenAI function calling](https://developers.openai.com/api/docs/guides/function-calling)
-- [Reasoning and stateless continuation](https://developers.openai.com/api/docs/guides/reasoning)
+- [OpenRouter Responses API](https://openrouter.ai/docs/api_reference/responses/overview)
+- [OpenRouter tool calling](https://openrouter.ai/docs/api_reference/responses/tool-calling)
+- [OpenRouter reasoning](https://openrouter.ai/docs/api_reference/responses/reasoning)
+- [OpenRouter parameter-aware routing](https://openrouter.ai/docs/guides/routing/provider-selection)
+- [Default model](https://openrouter.ai/openai/gpt-5.4-mini)
 - [Kapso event shapes](https://docs.kapso.ai/docs/platform/webhooks/message-events)
 - [Kapso webhook signatures](https://docs.kapso.ai/docs/platform/webhooks/security)
 - [Kapso delivery and batches](https://docs.kapso.ai/docs/platform/webhooks/advanced)

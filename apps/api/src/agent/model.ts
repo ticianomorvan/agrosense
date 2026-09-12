@@ -3,23 +3,25 @@ import { boundedFetch } from "./http";
 import type { AgentTools } from "./tools";
 
 export type ModelBindings = {
-  OPENAI_API_KEY?: string;
-  OPENAI_MODEL?: string;
-  OPENAI_REASONING_EFFORT?: string;
+  OPENROUTER_API_KEY?: string;
+  OPENROUTER_MODEL?: string;
+  OPENROUTER_REASONING_EFFORT?: string;
 };
 const configSchema = z.object({
-  OPENAI_API_KEY: z
+  OPENROUTER_API_KEY: z
     .string()
     .min(1)
     .max(4096)
     .regex(/^[\x21-\x7e]+$/),
-  OPENAI_MODEL: z
+  OPENROUTER_MODEL: z
     .string()
     .min(1)
     .max(100)
-    .regex(/^[\w.-]+$/)
-    .default("gpt-5.6-terra"),
-  OPENAI_REASONING_EFFORT: z.enum(["low", "medium", "high"]).default("medium"),
+    .regex(/^[\w.-]+\/[\w.:-]+$/)
+    .default("openai/gpt-5.4-mini"),
+  OPENROUTER_REASONING_EFFORT: z
+    .enum(["low", "medium", "high"])
+    .default("medium"),
 });
 export class AgentError extends Error {
   constructor(
@@ -51,7 +53,7 @@ const outputSchema = z.discriminatedUnion("type", [
       encrypted_content: z
         .string()
         .max(512 * 1024)
-        .optional(),
+        .nullish(),
     })
     .passthrough(),
   z
@@ -88,7 +90,7 @@ export type ReasoningModel = {
   ): Promise<ModelOutput[]>;
 };
 
-export function createOpenAIModel(
+export function createOpenRouterModel(
   env: ModelBindings,
   fetcher: typeof fetch = fetch,
 ): ReasoningModel {
@@ -97,17 +99,19 @@ export function createOpenAIModel(
       const config = readModelConfig(env);
       try {
         const response = await boundedFetch(
-          "https://api.openai.com/v1/responses",
+          "https://openrouter.ai/api/v1/responses",
           {
             method: "POST",
             headers: {
-              Authorization: `Bearer ${config.OPENAI_API_KEY}`,
+              Authorization: `Bearer ${config.OPENROUTER_API_KEY}`,
               "Content-Type": "application/json",
             },
             body: JSON.stringify({
-              model: config.OPENAI_MODEL,
-              reasoning: { effort: config.OPENAI_REASONING_EFFORT },
+              model: config.OPENROUTER_MODEL,
+              reasoning: { effort: config.OPENROUTER_REASONING_EFFORT },
               store: false,
+              include: ["reasoning.encrypted_content"],
+              provider: { require_parameters: true, allow_fallbacks: false },
               input,
               instructions,
               tools: definitions,

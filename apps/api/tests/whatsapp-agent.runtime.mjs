@@ -62,7 +62,7 @@ test("signed webhook → durable alarm → three chosen tools → WhatsApp reply
         WHATSAPP_AGENT_ENABLED: "true",
         WHATSAPP_AGENT_PHONE_NUMBER: sender,
         KAPSO_WEBHOOK_SECRET: secret,
-        OPENAI_API_KEY: "openai_test",
+        OPENROUTER_API_KEY: "openrouter_test",
       },
       // All upstream traffic is intercepted; an unexpected URL fails this test.
       outboundService: async (request) => {
@@ -130,9 +130,18 @@ test("signed webhook → durable alarm → three chosen tools → WhatsApp reply
               },
             });
           }
-          if (url.href === "https://api.openai.com/v1/responses") {
+          if (url.href === "https://openrouter.ai/api/v1/responses") {
             const body = await request.json();
             requests.push(body);
+            assert.equal(
+              request.headers.get("Authorization"),
+              "Bearer openrouter_test",
+            );
+            assert.equal(body.model, "openai/gpt-5.4-mini");
+            assert.deepEqual(body.provider, {
+              require_parameters: true,
+              allow_fallbacks: false,
+            });
             assert.equal(body.store, false);
             assert.equal(body.reasoning.effort, "medium");
             const results = body.input.filter(
