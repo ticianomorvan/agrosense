@@ -1,3 +1,4 @@
+import type { WhatsappAgentRun } from "@agrosense/contracts";
 import {
   isStepCount,
   type LanguageModel,
@@ -19,12 +20,7 @@ export const historySchema = z
   )
   .max(12);
 export type ChatMessage = z.infer<typeof historySchema>[number];
-export type ToolTrace = {
-  tool: string;
-  ok: boolean;
-  errorCode: string | null;
-  durationMs: number;
-};
+export type ToolTrace = WhatsappAgentRun["trace"][number];
 export type AgentResult = {
   reply: string;
   trace: ToolTrace[];

@@ -348,7 +348,20 @@ test("signed webhook → durable alarm → three chosen tools → WhatsApp reply
     );
     const changed = structuredClone(initial);
     changed.message.text.body = "Changed content";
-    assert.equal((await webhook(changed)).status, 409);
+    const conflict = await webhook(changed);
+    assert.equal(conflict.status, 409);
+    assert.deepEqual(await conflict.json(), {
+      error: {
+        code: "MESSAGE_CONFLICT",
+        message: "Message ID reused with different content",
+      },
+    });
+    const missing = await status("wamid.absent");
+    assert.equal(missing.status, 404);
+    assert.deepEqual(await missing.json(), {
+      error: { code: "NOT_FOUND", message: "Run not found" },
+    });
+    assert.match(missing.headers.get("cache-control"), /no-store/);
     assert.equal(sends.length, 1);
     assert.equal((await webhook(event("wamid.2"))).status, 200);
     await waitAccepted("wamid.2");

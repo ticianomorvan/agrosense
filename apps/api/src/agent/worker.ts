@@ -50,7 +50,7 @@ export class WhatsAppConversation extends DurableObject<AgentBindings> {
     return config;
   }
 
-  // The Worker validates the signed payload before making this private RPC call.
+  // The Worker validates the signed payload before making this internal RPC call.
   async enqueue(messages: InboundMessage[], ownerId: string) {
     try {
       this.#authorize(ownerId, messages);

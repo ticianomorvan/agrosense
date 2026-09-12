@@ -63,7 +63,6 @@ export class AdmissionError extends Error {
 export class Conversation {
   private readonly store: ConversationStore;
   private readonly now: () => number;
-  private processing: Promise<void> | undefined;
   constructor(
     private readonly options: {
       store: ConversationStore;
@@ -147,15 +146,8 @@ export class Conversation {
     return whatsappAgentRunSchema.strip().parse(record);
   }
 
-  processNext(): Promise<void> {
-    // Alarms are serial per Durable Object; also guard accidental local re-entry.
-    this.processing ??= this.processOne().finally(() => {
-      this.processing = undefined;
-    });
-    return this.processing;
-  }
-
-  private async processOne() {
+  // Called only by the Durable Object alarm, whose invocations Cloudflare serializes.
+  async processNext(): Promise<void> {
     await this.cleanup();
     const queue = (await this.store.get<string[]>("queue")) ?? [];
     const id = queue[0];
@@ -251,20 +243,16 @@ export class Conversation {
     await this.store.transaction(async (store) => {
       if (status === "accepted" && record.input && record.reply) {
         const prior = await store.get<History>("history");
-        const messages =
-          prior && prior.expiresAt > this.now() ? prior.messages : [];
-        const history: History = {
-          messages: [
-            ...messages,
-            { role: "user", content: record.input.message.text },
-            { role: "assistant", content: record.reply },
-          ].slice(-12) as ChatMessage[],
-          // A follow-up must not extend the retention of older messages.
-          expiresAt:
-            prior && prior.expiresAt > this.now()
-              ? prior.expiresAt
-              : this.now() + DAY,
-        };
+        const history =
+          prior && prior.expiresAt > this.now()
+            ? prior
+            : ({ messages: [], expiresAt: this.now() + DAY } satisfies History);
+        // A follow-up must not extend the retention of older messages.
+        history.messages = [
+          ...history.messages,
+          { role: "user" as const, content: record.input.message.text },
+          { role: "assistant" as const, content: record.reply },
+        ].slice(-12);
         await store.put("history", history);
       }
       await store.put(`run:${record.messageId}`, {

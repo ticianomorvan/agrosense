@@ -14,22 +14,6 @@ export type ToolResult =
   | { ok: true; data: unknown }
   | { ok: false; error: { code: string; message: string } };
 export type AgentTools = ReturnType<typeof createAgentTools>;
-const schemas = {
-  list_farms: z.strictObject({}),
-  list_plots: z.strictObject({ farmId: z.uuid() }),
-  get_forecast: z.strictObject({
-    plotId: z.uuid(),
-    days: z.number().int().min(1).max(7),
-  }),
-};
-const descriptions = {
-  list_farms:
-    "List the farms available to this producer. Use to discover real farm IDs; never invent IDs.",
-  list_plots:
-    "List plots in an accessible farm. Use the farmId from list_farms.",
-  get_forecast:
-    "Read fresh daily weather for an accessible plot, using its stored location. days is 1–7 local calendar days INCLUDING today. Temperatures are Celsius at 2 m; precipitation is mm. Demo farms cannot use this live tool. This does not evaluate crop risk or update records.",
-};
 const farmSchema = z.object({
   id: z.uuid(),
   name: z.string().min(1).max(100),
@@ -119,8 +103,9 @@ export function createAgentTools(options: {
   }
   return {
     list_farms: tool({
-      description: descriptions.list_farms,
-      inputSchema: schemas.list_farms,
+      description:
+        "List the farms available to this producer. Use to discover real farm IDs; never invent IDs.",
+      inputSchema: z.strictObject({}),
       execute: (_, { abortSignal }) =>
         read(abortSignal, async (db) => {
           const { data, error } = await db
@@ -142,8 +127,9 @@ export function createAgentTools(options: {
         }),
     }),
     list_plots: tool({
-      description: descriptions.list_plots,
-      inputSchema: schemas.list_plots,
+      description:
+        "List plots in an accessible farm. Use the farmId from list_farms.",
+      inputSchema: z.strictObject({ farmId: z.uuid() }),
       execute: ({ farmId }, { abortSignal }) =>
         read(abortSignal, async (db) => {
           const { data, error } = await db
@@ -175,8 +161,12 @@ export function createAgentTools(options: {
         }),
     }),
     get_forecast: tool({
-      description: descriptions.get_forecast,
-      inputSchema: schemas.get_forecast,
+      description:
+        "Read fresh daily weather for an accessible plot, using its stored location. days is 1–7 local calendar days INCLUDING today. Temperatures are Celsius at 2 m; precipitation is mm. Demo farms cannot use this live tool. This does not evaluate crop risk or update records.",
+      inputSchema: z.strictObject({
+        plotId: z.uuid(),
+        days: z.number().int().min(1).max(7),
+      }),
       execute: ({ plotId, days }, { abortSignal }) =>
         read(abortSignal, async (db, signal) => {
           const { data, error } = await db

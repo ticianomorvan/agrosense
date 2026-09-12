@@ -3,6 +3,7 @@ import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import type { ApiEnv } from "./env";
 import { requireAuth } from "./lib/auth";
+import { jsonError } from "./lib/http";
 import { KapsoError, readKapsoConfig, sendWhatsappText } from "./lib/kapso";
 
 export const whatsapp = new Hono<ApiEnv>();
@@ -13,14 +14,11 @@ whatsapp.post(
   bodyLimit({
     maxSize: 16 * 1024,
     onError: (c) =>
-      c.json(
-        {
-          error: {
-            code: "PAYLOAD_LIMIT_EXCEEDED",
-            message: "Request body exceeds 16 KiB",
-          },
-        },
+      jsonError(
+        c,
         413,
+        "PAYLOAD_LIMIT_EXCEEDED",
+        "Request body exceeds 16 KiB",
       ),
   }),
   async (c) => {
@@ -28,66 +26,50 @@ whatsapp.post(
     try {
       const config = readKapsoConfig(c.env);
       if (c.get("userId") !== config.KAPSO_ALLOWED_USER_ID) {
-        return c.json(
-          {
-            error: {
-              code: "FORBIDDEN",
-              message: "WhatsApp sending is not permitted for this user",
-            },
-          },
+        return jsonError(
+          c,
           403,
+          "FORBIDDEN",
+          "WhatsApp sending is not permitted for this user",
         );
       }
       if (new URL(c.req.url).search) {
-        return c.json(
-          {
-            error: {
-              code: "BAD_REQUEST",
-              message: "Query parameters are not supported",
-            },
-          },
+        return jsonError(
+          c,
           400,
+          "BAD_REQUEST",
+          "Query parameters are not supported",
         );
       }
       if (
         c.req.header("Content-Type")?.split(";")[0]?.trim().toLowerCase() !==
         "application/json"
       ) {
-        return c.json(
-          {
-            error: {
-              code: "UNSUPPORTED_MEDIA_TYPE",
-              message: "Content-Type must be application/json",
-            },
-          },
+        return jsonError(
+          c,
           415,
+          "UNSUPPORTED_MEDIA_TYPE",
+          "Content-Type must be application/json",
         );
       }
       let body: unknown;
       try {
         body = await c.req.json();
       } catch {
-        return c.json(
-          {
-            error: {
-              code: "BAD_REQUEST",
-              message: "Request body must be valid JSON",
-            },
-          },
+        return jsonError(
+          c,
           400,
+          "BAD_REQUEST",
+          "Request body must be valid JSON",
         );
       }
       const message = whatsappMessageRequestSchema.safeParse(body);
       if (!message.success) {
-        return c.json(
-          {
-            error: {
-              code: "VALIDATION_ERROR",
-              message:
-                "Provide an international phone number and 1–4096 characters of text; no extra fields",
-            },
-          },
+        return jsonError(
+          c,
           422,
+          "VALIDATION_ERROR",
+          "Provide an international phone number and 1–4096 characters of text; no extra fields",
         );
       }
       return c.json(await sendWhatsappText(config, message.data));

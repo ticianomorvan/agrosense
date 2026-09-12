@@ -1,3 +1,15 @@
+import type { Context } from "hono";
+import type { ContentfulStatusCode } from "hono/utils/http-status";
+
+export function jsonError(
+  c: Context,
+  status: ContentfulStatusCode,
+  code: string,
+  message: string,
+) {
+  return c.json({ error: { code, message } }, status);
+}
+
 export class ProviderTimeoutError extends Error {
   constructor() {
     super("Provider deadline exceeded");
@@ -35,32 +47,20 @@ export async function boundedFetch(
       await response.body?.cancel();
       return response;
     }
-    const reader = response.body?.getReader();
-    if (!reader) return response;
-    const chunks: Uint8Array[] = [];
+    if (!response.body) return response;
     let size = 0;
-    try {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        size += value.byteLength;
-        if (size > options.maxBytes)
-          throw new Error("Provider response limit exceeded");
-        chunks.push(value);
-      }
-    } catch (error) {
-      await reader.cancel().catch(() => {});
-      throw error;
-    } finally {
-      reader.releaseLock();
-    }
+    const limited = response.body.pipeThrough(
+      new TransformStream<Uint8Array, Uint8Array>({
+        transform(chunk, controller) {
+          size += chunk.byteLength;
+          if (size > options.maxBytes)
+            throw new Error("Provider response limit exceeded");
+          controller.enqueue(chunk);
+        },
+      }),
+    );
+    const body = await new Response(limited).arrayBuffer();
     signal.throwIfAborted();
-    const body = new Uint8Array(size);
-    let offset = 0;
-    for (const chunk of chunks) {
-      body.set(chunk, offset);
-      offset += chunk.byteLength;
-    }
     return new Response(body, {
       status: response.status,
       statusText: response.statusText,

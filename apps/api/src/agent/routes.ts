@@ -4,6 +4,7 @@ import { bodyLimit } from "hono/body-limit";
 import { z } from "zod";
 import type { ApiEnv } from "../env";
 import { requireAuth } from "../lib/auth";
+import { jsonError } from "../lib/http";
 import {
   AgentConfigurationError,
   conversationName,
@@ -22,15 +23,7 @@ whatsappAgentRoutes.post(
   bodyLimit({
     maxSize: 128 * 1024,
     onError: (c) =>
-      c.json(
-        {
-          error: {
-            code: "PAYLOAD_LIMIT_EXCEEDED",
-            message: "Webhook exceeds 128 KiB",
-          },
-        },
-        413,
-      ),
+      jsonError(c, 413, "PAYLOAD_LIMIT_EXCEEDED", "Webhook exceeds 128 KiB"),
   }),
   async (c) => {
     try {
@@ -38,14 +31,11 @@ whatsappAgentRoutes.post(
       if (!c.env.WHATSAPP_CONVERSATIONS) throw new AgentConfigurationError();
       const raw = new Uint8Array(await c.req.arrayBuffer());
       if (raw.byteLength > 128 * 1024)
-        return c.json(
-          {
-            error: {
-              code: "PAYLOAD_LIMIT_EXCEEDED",
-              message: "Webhook exceeds 128 KiB",
-            },
-          },
+        return jsonError(
+          c,
           413,
+          "PAYLOAD_LIMIT_EXCEEDED",
+          "Webhook exceeds 128 KiB",
         );
       if (
         !(await verifyWebhookSignature(
@@ -54,14 +44,11 @@ whatsappAgentRoutes.post(
           config.webhookSecret,
         ))
       )
-        return c.json(
-          {
-            error: {
-              code: "UNAUTHORIZED",
-              message: "Valid webhook signature required",
-            },
-          },
+        return jsonError(
+          c,
           401,
+          "UNAUTHORIZED",
+          "Valid webhook signature required",
         );
       let payload: unknown;
       try {
@@ -110,23 +97,17 @@ whatsappAgentRoutes.post(
       );
     } catch (error) {
       if (error instanceof z.ZodError || error instanceof SyntaxError)
-        return c.json(
-          {
-            error: {
-              code: "BAD_REQUEST",
-              message: "Invalid Kapso webhook payload",
-            },
-          },
+        return jsonError(
+          c,
           400,
+          "BAD_REQUEST",
+          "Invalid Kapso webhook payload",
         );
-      return c.json(
-        {
-          error: {
-            code: "AGENT_UNAVAILABLE",
-            message: "WhatsApp agent is temporarily unavailable",
-          },
-        },
+      return jsonError(
+        c,
         503,
+        "AGENT_UNAVAILABLE",
+        "WhatsApp agent is temporarily unavailable",
       );
     }
   },
@@ -136,14 +117,11 @@ whatsappAgentRoutes.get("/agent/runs/:messageId", requireAuth, async (c) => {
   try {
     const config = readAgentConfig(c.env);
     if (c.get("userId") !== config.ownerId)
-      return c.json(
-        {
-          error: {
-            code: "FORBIDDEN",
-            message: "Agent status is restricted to its operator",
-          },
-        },
+      return jsonError(
+        c,
         403,
+        "FORBIDDEN",
+        "Agent status is restricted to its operator",
       );
     if (!c.env.WHATSAPP_CONVERSATIONS) throw new AgentConfigurationError();
     const messageId = z
@@ -155,18 +133,13 @@ whatsappAgentRoutes.get("/agent/runs/:messageId", requireAuth, async (c) => {
       await conversationName(config),
     );
     const run = await stub.status(messageId);
-    return run
-      ? c.json(run)
-      : c.json({ error: { code: "NOT_FOUND", message: "Run not found" } }, 404);
+    return run ? c.json(run) : jsonError(c, 404, "NOT_FOUND", "Run not found");
   } catch {
-    return c.json(
-      {
-        error: {
-          code: "AGENT_UNAVAILABLE",
-          message: "Agent status is temporarily unavailable",
-        },
-      },
+    return jsonError(
+      c,
       503,
+      "AGENT_UNAVAILABLE",
+      "Agent status is temporarily unavailable",
     );
   }
 });
