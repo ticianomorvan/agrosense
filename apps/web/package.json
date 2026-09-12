@@ -8,8 +8,7 @@
     "preview": "vite preview --host 127.0.0.1",
     "build": "vite build",
     "validate:deploy": "node scripts/validate-deploy-env.mjs",
-    "predeploy": "pnpm validate:deploy && vite build",
-    "deploy": "wrangler deploy",
+    "deploy": "pnpm validate:deploy && pnpm build && wrangler deploy",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },

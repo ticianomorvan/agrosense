@@ -37,9 +37,9 @@ imagery, and agricultural credibility. The agreed direction is recorded in the
 ## Capabilities and Constraints
 
 The current repository contains a React/Vite frontend, a Hono API on Cloudflare
-Workers, and shared Zod contracts. The backend supports authenticated dashboard
-reads and a standalone Open-Meteo forecast adapter with hazard detection; forecast
-refresh/publication and crop-risk evaluation remain separate implementation work.
+Workers, and shared Zod contracts. It supports browser sign-in and onboarding,
+authenticated dashboard reads, Open-Meteo forecast refresh/publication, and
+rule-based crop-risk evaluation. Live evaluations require approved rules.
 See [stack decisions](docs/stack.md) and the [MVP domain reference](docs/domain-model.md).
 
 Maps, field comparisons, alerts, and suggested actions are design intentions in

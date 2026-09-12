@@ -85,8 +85,8 @@ These tests validate SQL/RLS, not the full GoTrue/PostgREST stack.
 ## Remaining product slices
 
 The dashboard read route, snapshot RPC, crop-cycle mutation, validated demo
-importer, and manual demo/live refresh are implemented. Sign-in UI remains a
-separate feature. The [weather adapter](domain-model.md#implemented-weather-adapter)
+importer, manual demo/live refresh, and browser sign-in/onboarding are implemented.
+The [weather adapter](domain-model.md#implemented-weather-adapter)
 returns forecasts and detected events without writing to Supabase. The refresh
 service validates the complete prospective dashboard, evaluates the shared rules,
 and atomically upserts events/alerts, including covered hazard withdrawals.

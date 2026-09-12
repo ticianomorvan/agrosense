@@ -43,14 +43,14 @@ pnpm preview  # built SPA on :4173 + real local Worker on :8787
 The backend includes authenticated dashboard reads and a standalone Open-Meteo
 forecast adapter with frost, heat, severe-storm, and hail detection. See the
 [implemented adapter scope](docs/domain-model.md#implemented-weather-adapter).
-The authenticated refresh route publishes synthetic forecasts for demo farms;
-live refresh remains unavailable.
+The authenticated refresh route publishes synthetic forecasts for demo farms and
+complete Open-Meteo forecasts for live farms. Live crop-risk evaluations require
+approved rules; absent rules do not imply safe conditions.
 
 ## Deployment
 
 Production uses two Cloudflare resources: the `agrosense` API Worker and the
-`agrosense-web` frontend on the latest Cloudflare Pages platform, backed by
-Workers Static Assets. Authenticate once with
+`agrosense-web` frontend on Workers Static Assets. Authenticate once with
 `pnpm --filter @agrosense/api exec wrangler login`, then publish each surface:
 
 ```sh
@@ -60,17 +60,22 @@ VITE_API_BASE_URL=https://YOUR-WORKER.workers.dev pnpm deploy:web
 ```
 
 Supply the Worker secrets to `secret bulk` as JSON on stdin or from an ignored
-file. The core browser flow requires the four `SUPABASE_*` settings and both
-`COPERNICUS_*` settings. `CORS_ORIGIN` is a non-secret Wrangler variable set to
+file. The core browser flow requires the four `SUPABASE_*` settings. Satellite
+imagery additionally requires both `COPERNICUS_*` settings; otherwise it reports
+an unavailable state. `CORS_ORIGIN` is a non-secret Wrangler variable set to
 the exact frontend origin; update it if that origin changes.
 Kapso, OpenRouter, and monitoring settings are required only when those features
 are activated; keep the reasoning agent disabled until its owner, provider keys,
 and webhook signing secret are configured. Never use a `VITE_` variable for a
 secret.
 
-For subsequent releases, export the same Worker origin and run `pnpm deploy`;
-its preflight rejects a missing or malformed API origin before it changes either
-deployment. `pnpm build` remains a non-deploying local build. The frontend's
+For subsequent releases, export the same Worker origin and run `pnpm run deploy`.
+It validates the origin, runs the complete `pnpm check` suite, and dry-runs both
+Worker packages before publishing either one. Run `pnpm deploy:check` for the same
+preflight without publishing. A frontend build failure therefore leaves both live
+deployments untouched. Individual `deploy:api` / `deploy:web` commands are available
+for targeted releases after verification; they do not run the complete suite.
+`pnpm build` remains a non-deploying local build. The frontend's
 static-assets configuration supplies SPA fallback routing, while the API Worker
 grants browser CORS access only to `CORS_ORIGIN`.
 
@@ -81,7 +86,8 @@ out of Git and client bundles.
 
 ## Frontend workspace
 
-The field overview accepts a `FarmDataSource`; authenticated session and farm
-selection still need to be connected. Until then the app shows an unavailable
-state. See [stack and integration notes](docs/stack.md) for the data boundary and
-Sentinel-2 configuration.
+The SPA provides landing, email/password sign-in, and an authenticated workspace.
+Owners can create farms and plots, switch farms, and inspect plot/crop facts,
+Sentinel-2 imagery, and dated weather events. Requests are owner-scoped and failed
+requests never substitute sample data. See [stack and integration notes](docs/stack.md)
+for the data boundary and Sentinel-2 configuration.
