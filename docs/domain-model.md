@@ -472,12 +472,18 @@ cancellation clearing current risk; cross-owner/cross-farm denial; limits and
 freshness derivations. Run pnpm check after application changes, and inspect the
 three panels in a browser. This document is a reference, not completed runtime code.
 
+### Implemented weather adapter
+
 The weather adapter slice exposes only `fetchOpenMeteoPlotForecast` and
 `detectThreatEvents`. Fetch performs one request with an eight-second deadline
 including body consumption; failures propagate. Detection returns event identity,
 kind, title, bounds, and evidence; source metadata remains in `evidence.source`.
-HTTP routes, farm-wide aggregation, and demo generation belong to their consuming
-slices.
+The shared forecast and evidence contracts are also used by dashboard reads.
+The adapter returns data without storing it or assigning crop risk. Refresh HTTP
+routes, farm-wide aggregation/publication, and demo generation belong to their
+consuming slices. SMN integration, automatic retries, and live-to-demo fallback
+are outside this slice. Missing wind, rain, probability, or weather-code values
+remain null; invalid temperatures or incomplete hourly coverage reject the fetch.
 
 A real farmer pilot requires reviewed agronomic rules and provider permissions
 plus monitoring reliability, history and notification design beyond this MVP.

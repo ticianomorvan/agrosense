@@ -1,7 +1,13 @@
-import { dashboardResponseSchema } from "@agrosense/contracts";
-import { describe, expect, it } from "vitest";
+import { dashboardResponseSchema, pointSchema } from "@agrosense/contracts";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { projectDashboard } from "./dashboard";
 import type { Database } from "./database.types";
+import {
+  detectThreatEvents,
+  fetchOpenMeteoPlotForecast,
+} from "./weather-provider";
+
+afterEach(() => vi.unstubAllGlobals());
 
 type Farm = Database["public"]["Tables"]["farms"]["Row"];
 type Plot = Database["public"]["Tables"]["plots"]["Row"];
@@ -40,7 +46,16 @@ const evidence = {
   source,
   temperatureHeightM: 2,
   detectionThresholdC: 0,
-  hours: [{ at: "2026-09-12T02:00:00.000Z", temperatureC: -1 }],
+  hours: [
+    {
+      at: "2026-09-12T02:00:00.000Z",
+      temperatureC: -1,
+      windGustKmh: null,
+      precipitationMm: null,
+      precipitationProbability: null,
+      weatherCode: null,
+    },
+  ],
 };
 
 const farm: Farm = {
@@ -192,6 +207,76 @@ describe("dashboard projection", () => {
     );
     expect(response.events[0]?.alerts[0]?.isStale).toBe(true);
   });
+});
+
+it("preserves adapter measurements and all four hazards through the dashboard contract", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () =>
+      Response.json({
+        hourly: {
+          time: [
+            "2026-09-12T00:00",
+            "2026-09-12T01:00",
+            "2026-09-12T02:00",
+            "2026-09-12T03:00",
+          ],
+          temperature_2m: [0, 35, 10, 10],
+          wind_gusts_10m: [null, null, 60, null],
+          precipitation: [null, null, 24.99, null],
+          precipitation_probability: [null, null, 80, null],
+          weather_code: [null, null, null, 96],
+        },
+      }),
+    ),
+  );
+  const forecast = await fetchOpenMeteoPlotForecast({
+    plotId,
+    samplePoint: pointSchema.parse(point),
+  });
+  const detected = detectThreatEvents(forecast);
+  const storedEvents: Event[] = detected.map((threat, index) => ({
+    ...event,
+    id: `33333333-3333-4333-8333-${String(index).padStart(12, "0")}`,
+    source_event_key: threat.sourceEventKey,
+    kind: threat.kind,
+    title: threat.title,
+    starts_at: threat.startsAt,
+    ends_at: threat.endsAt,
+    source_code: forecast.source.code,
+    source_url: forecast.source.url,
+    issued_at: forecast.source.issuedAt,
+    retrieved_at: forecast.source.retrievedAt,
+    is_demo: false,
+    evidence: { ...threat.evidence, samplePoint: point },
+  }));
+  const result = projectDashboard(
+    {
+      ...farm,
+      data_mode: "live",
+      last_attempt_at: forecast.source.retrievedAt,
+      last_success_at: forecast.source.retrievedAt,
+      forecast_summary: {
+        schemaVersion: 1,
+        fetchedAt: forecast.source.retrievedAt,
+        windowStart: "2026-09-12T00:00:00.000Z",
+        windowEnd: "2026-09-12T04:00:00.000Z",
+        plots: [{ ...forecast, samplePoint: point }],
+      },
+    },
+    [plot],
+    [],
+    storedEvents,
+    [],
+    forecast.source.retrievedAt,
+  );
+  expect(result.forecast?.plots[0]?.hours).toEqual(forecast.hours);
+  expect(result.events).toHaveLength(4);
+  for (const threat of detected) {
+    expect(
+      result.events.find((item) => item.kind === threat.kind)?.evidence,
+    ).toEqual(threat.evidence);
+  }
 });
 
 describe("dashboard freshness", () => {

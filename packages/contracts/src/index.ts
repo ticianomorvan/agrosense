@@ -22,8 +22,8 @@ const sourceSchema = z
       .url({ protocol: /^https$/ })
       .max(2048)
       .nullable(),
-    issuedAt: z.iso.datetime().nullable(),
-    retrievedAt: z.iso.datetime(),
+    issuedAt: instantSchema.nullable(),
+    retrievedAt: instantSchema,
     isDemo: z.boolean(),
   })
   .refine(
@@ -46,12 +46,10 @@ const eventKindSchema = z.enum([
 export type EventKind = z.infer<typeof eventKindSchema>;
 
 export const forecastHourSchema = z.strictObject({
-  at: z.iso
-    .datetime()
-    .refine(
-      (at) => Date.parse(at) % 3_600_000 === 0,
-      "Forecast timestamps must start on a UTC hour",
-    ),
+  at: instantSchema.refine(
+    (at) => Date.parse(at) % 3_600_000 === 0,
+    "Forecast timestamps must start on a UTC hour",
+  ),
   temperatureC: z.number().min(-100).max(70),
   windGustKmh: z.number().min(0).max(300).nullable(),
   precipitationMm: z.number().min(0).max(500).nullable(),
@@ -115,7 +113,7 @@ export const eventEvidenceSchema = z
         (ids) => new Set(ids).size === ids.length,
         "Plot IDs must be unique",
       ),
-    forecastDate: z.iso.date(),
+    forecastDate: localDateSchema,
     samplePoint: pointSchema.nullable(),
     source: sourceSchema,
     temperatureHeightM: z.literal(2),

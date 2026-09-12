@@ -6,7 +6,7 @@ const positionSchema = z
   .tuple([z.number().min(-180).max(180), z.number().min(-90).max(90)])
   .readonly();
 
-export const pointSchema = z.object({
+export const pointSchema = z.strictObject({
   type: z.literal("Point"),
   coordinates: positionSchema,
 });

@@ -72,10 +72,11 @@ These tests validate SQL/RLS, not the full GoTrue/PostgREST stack.
 
 ## Remaining product slices
 
-The tables are empty. Add a validated demo seed/importer, sign-in UI, dashboard
-queries, cultivation mutation RPCs, and forecast publication with their respective
-features. JSONB constraints currently check structural/version markers; trusted
-import/publication code must validate complete payloads and geometry topology.
+The dashboard read route and snapshot RPC are implemented. A validated demo
+seed/importer, sign-in UI, cultivation mutation RPCs, and forecast publication
+remain separate features. The [weather adapter](domain-model.md#implemented-weather-adapter)
+returns forecasts and detected events without writing to Supabase. JSONB
+constraints currently check structural/version markers; trusted import/publication code must validate complete payloads and geometry topology.
 Mutation RPCs must verify ownership and implement the farm lock/version protocol
 from the domain model. Updating `updated_at` does not increment `data_version`.
 
