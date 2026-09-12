@@ -94,3 +94,20 @@ export function createUserClient(
     global: { fetch: fetcher },
   });
 }
+
+export function createServiceClient(
+  env: SupabaseBindings,
+  fetcher: typeof fetch = fetch,
+) {
+  const config = readSupabaseConfig(env);
+  if (!env.SUPABASE_SECRET_KEY)
+    throw new Error("Supabase secret key is required for service operations");
+  return createClient<Database>(config.url, env.SUPABASE_SECRET_KEY, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+    },
+    global: { fetch: fetcher },
+  });
+}
