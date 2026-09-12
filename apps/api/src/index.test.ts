@@ -93,10 +93,12 @@ it("serves verified sessions and rejects expired tokens through the real middlew
       env,
     );
     expect(response.status).toBe(expired ? 401 : 200);
-    if (!expired)
+    if (!expired) {
+      expect(response.headers.get("cache-control")).toBe("private, no-store");
       expect(sessionResponseSchema.parse(await response.json())).toEqual({
         userId,
       });
+    }
   }
 });
 it("returns an availability error when JWKS cannot be fetched", async () => {

@@ -37,6 +37,7 @@ export function SignInPage({
   return (
     <main
       id="main-content"
+      tabIndex={-1}
       className="mx-auto grid w-full max-w-[1600px] place-items-center p-4 py-12 md:p-6 md:py-16"
     >
       <section className="w-full max-w-md space-y-6 rounded-xl border bg-card p-6">

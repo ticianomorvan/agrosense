@@ -56,9 +56,10 @@ app.get("/api/auth/config", (c) => {
   }
 });
 
-app.get("/api/session", requireAuth, (c) =>
-  c.json({ userId: c.get("userId") } satisfies SessionResponse),
-);
+app.get("/api/session", requireAuth, (c) => {
+  c.header("Cache-Control", "private, no-store");
+  return c.json({ userId: c.get("userId") } satisfies SessionResponse);
+});
 
 app.get("/api/farms", requireAuth, async (c) => {
   c.header("Cache-Control", "private, no-store");

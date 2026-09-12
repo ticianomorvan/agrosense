@@ -3,7 +3,7 @@ import { buttonVariants } from "../components/ui/button";
 
 export function LandingPage({ onStart }: { onStart: () => void }) {
   return (
-    <main id="main-content">
+    <main id="main-content" tabIndex={-1}>
       <section className="mx-auto grid max-w-[1600px] items-center gap-8 p-4 py-12 md:p-6 md:py-16 lg:grid-cols-[minmax(0,0.9fr)_minmax(32rem,1.1fr)] lg:py-24">
         <div className="max-w-2xl space-y-6">
           <p className="font-semibold text-primary">
