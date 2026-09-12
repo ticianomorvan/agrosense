@@ -318,6 +318,21 @@ via the `RuleProvider` pattern:
 2. A custom rule with the same `code` overrides the system rule of the same code.
 3. The evaluation engine is a pure, deterministic function receiving the merged ruleset.
 
+## Estimated economic impact (demo-v1)
+
+An evaluated plot alert may include `lossEstimate`. It is a transparent
+synthetic estimate in USD, calculated as:
+
+`declared_area_ha × expected_yield_t_per_ha × expected_price_usd_per_t × damage_rate`
+
+The demo profiles use fixed values of 8.5 t/ha and USD 180/t for maize, and
+3.2 t/ha and USD 360/t for soybean. `damage_rate` is selected by hazard kind
+and risk level in the versioned `demo-v1` economic-impact catalog. These
+values are placeholders, not validated agronomic advice or live market prices;
+the response includes the assumptions and methodology version so the UI can
+label the result accordingly. Alerts without an evaluated risk never receive
+an invented monetary estimate.
+
 `evaluatePlotAlert` requires an explicit `event.kind`; daily evidence can be
 shared by multiple hazards and cannot identify the event kind. It derives the
 source freshness deadline at full timestamp precision and throws

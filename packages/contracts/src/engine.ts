@@ -3,6 +3,7 @@ import {
   type CropCycle,
   type EventKind,
   type EventSnapshot,
+  estimateEconomicImpact,
   eventKindSchema,
   type ForecastHour,
   instantSchema,
@@ -17,6 +18,7 @@ import { addMinutes, compareInstants } from "./time";
 export interface EvaluatePlotAlertInput {
   plot: {
     id: string;
+    areaHa?: number;
     activeCropCycle: CropCycle | null;
   };
   event: EventSnapshot & { kind: EventKind };
@@ -181,6 +183,17 @@ export function evaluatePlotAlert(input: EvaluatePlotAlertInput): PlotAlert {
     recommendedActions: string[],
     matchedRuleCodes: string[],
   ): PlotAlert => {
+    const lossEstimate =
+      riskLevel !== null &&
+      plot.areaHa !== undefined &&
+      plot.activeCropCycle !== null
+        ? estimateEconomicImpact({
+            areaHa: plot.areaHa,
+            cropCode: plot.activeCropCycle.cropCode,
+            hazardKind,
+            riskLevel,
+          })
+        : null;
     return plotAlertSchema.parse({
       id: alertId,
       plotId: plot.id,
@@ -205,7 +218,9 @@ export function evaluatePlotAlert(input: EvaluatePlotAlertInput): PlotAlert {
           modelId,
           promptVersion,
         },
+        lossEstimate,
       },
+      lossEstimate,
       isStale: false,
     });
   };
