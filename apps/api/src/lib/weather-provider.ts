@@ -10,6 +10,7 @@ import {
   pointSchema,
 } from "@agrosense/contracts";
 import { z } from "zod";
+import { boundedFetch } from "./http";
 
 export type DetectedThreatEvent = {
   sourceEventKey: string;
@@ -48,41 +49,60 @@ const providerResponseSchema = z.object({ hourly: providerHourlySchema });
 export async function fetchOpenMeteoPlotForecast(params: {
   plotId: string;
   samplePoint: Point;
+  signal?: AbortSignal;
+  apiKey?: string;
 }): Promise<PlotForecast> {
   const plotId = plotForecastSchema.shape.plotId.parse(params.plotId);
   const samplePoint = pointSchema.parse(params.samplePoint);
   const [lon, lat] = samplePoint.coordinates;
-  const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=temperature_2m,precipitation,wind_gusts_10m,weather_code,precipitation_probability&forecast_days=7&timezone=UTC`;
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 8000);
-  try {
-    const response = await fetch(url, { signal: controller.signal });
-    if (!response.ok) throw new Error(`Open-Meteo HTTP ${response.status}`);
-    const { hourly } = providerResponseSchema.parse(await response.json());
-    return plotForecastSchema.parse({
-      plotId,
-      samplePoint,
-      source: {
-        code: "open_meteo",
-        url: "https://open-meteo.com",
-        issuedAt: null,
-        retrievedAt: new Date().toISOString(),
-        isDemo: false,
-      },
-      temperatureHeightM: 2,
-      hours: hourly.time.map((at, index) => ({
-        at: new Date(at.endsWith("Z") ? at : `${at}Z`).toISOString(),
-        temperatureC: hourly.temperature_2m[index],
-        windGustKmh: hourly.wind_gusts_10m?.[index] ?? null,
-        precipitationMm: hourly.precipitation?.[index] ?? null,
-        weatherCode: hourly.weather_code?.[index] ?? null,
-        precipitationProbability:
-          hourly.precipitation_probability?.[index] ?? null,
-      })),
-    });
-  } finally {
-    clearTimeout(timeout);
-  }
+  const url = new URL(
+    `https://${params.apiKey ? "customer-api" : "api"}.open-meteo.com/v1/forecast`,
+  );
+  url.search = new URLSearchParams({
+    latitude: String(lat),
+    longitude: String(lon),
+    hourly:
+      "temperature_2m,precipitation,wind_gusts_10m,weather_code,precipitation_probability",
+    forecast_days: "7",
+    timezone: "UTC",
+    temperature_unit: "celsius",
+    wind_speed_unit: "kmh",
+    precipitation_unit: "mm",
+    ...(params.apiKey ? { apikey: params.apiKey } : {}),
+  }).toString();
+  const response = await boundedFetch(
+    url,
+    {},
+    {
+      fetcher: fetch,
+      signal: params.signal,
+      timeoutMs: 8000,
+      maxBytes: 1024 * 1024,
+    },
+  );
+  if (!response.ok) throw new Error(`Open-Meteo HTTP ${response.status}`);
+  const { hourly } = providerResponseSchema.parse(await response.json());
+  return plotForecastSchema.parse({
+    plotId,
+    samplePoint,
+    source: {
+      code: "open_meteo",
+      url: "https://open-meteo.com",
+      issuedAt: null,
+      retrievedAt: new Date().toISOString(),
+      isDemo: false,
+    },
+    temperatureHeightM: 2,
+    hours: hourly.time.map((at, index) => ({
+      at: new Date(at.endsWith("Z") ? at : `${at}Z`).toISOString(),
+      temperatureC: hourly.temperature_2m[index],
+      windGustKmh: hourly.wind_gusts_10m?.[index] ?? null,
+      precipitationMm: hourly.precipitation?.[index] ?? null,
+      weatherCode: hourly.weather_code?.[index] ?? null,
+      precipitationProbability:
+        hourly.precipitation_probability?.[index] ?? null,
+    })),
+  });
 }
 
 const threats: {

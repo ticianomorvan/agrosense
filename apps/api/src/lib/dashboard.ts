@@ -261,10 +261,12 @@ export function projectDashboard(
 export async function loadDashboardSnapshot(
   client: DashboardClient,
   farmId: string,
+  signal?: AbortSignal,
 ) {
-  const snapshotResult = await client.rpc("get_farm_dashboard_snapshot", {
+  const query = client.rpc("get_farm_dashboard_snapshot", {
     p_farm_id: farmId,
   });
+  const snapshotResult = await (signal ? query.abortSignal(signal) : query);
   if (snapshotResult.error) throw snapshotResult.error;
   return json<{
     farm: FarmRow | null;

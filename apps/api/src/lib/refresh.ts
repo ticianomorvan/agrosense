@@ -17,6 +17,7 @@ import { z } from "zod";
 import { DashboardPayloadLimitError, loadDashboardSnapshot } from "./dashboard";
 import type { Database, Json } from "./database.types";
 import { iso, json } from "./database-utils";
+import { ProviderTimeoutError } from "./http";
 import {
   buildPublication,
   type PreviousEvent,
@@ -172,13 +173,17 @@ export async function refreshFarm(
   farmId: string,
   ownerId: string,
   now = new Date(),
+  options: { signal?: AbortSignal; apiKey?: string } = {},
 ): Promise<RefreshResponse> {
+  const signal = options.signal ?? AbortSignal.timeout(55_000);
   const attemptAt = now.toISOString();
-  const admission = await serviceClient.rpc("admit_farm_refresh", {
-    p_owner_id: ownerId,
-    p_farm_id: farmId,
-    p_attempt_at: attemptAt,
-  });
+  const admission = await serviceClient
+    .rpc("admit_farm_refresh", {
+      p_owner_id: ownerId,
+      p_farm_id: farmId,
+      p_attempt_at: attemptAt,
+    })
+    .abortSignal(signal);
   if (admission.error) throw rpcFailure(admission.error.message);
   const admitted = z
     .strictObject({
@@ -188,7 +193,7 @@ export async function refreshFarm(
     })
     .parse(admission.data);
   try {
-    const snapshot = await loadDashboardSnapshot(userClient, farmId);
+    const snapshot = await loadDashboardSnapshot(userClient, farmId, signal);
     if (!snapshot.farm || snapshot.farm.owner_id !== ownerId)
       throw new RefreshError({ kind: "not_found" });
     if (snapshot.farm.data_version !== admitted.dataVersion)
@@ -209,6 +214,8 @@ export async function refreshFarm(
                   samplePoint: json<PlotForecast["samplePoint"]>(
                     plot.sample_point_geojson,
                   ),
+                  signal,
+                  apiKey: options.apiKey,
                 }),
               ),
             )),
@@ -218,7 +225,9 @@ export async function refreshFarm(
         throw new RefreshError({
           kind: "unavailable",
           code:
-            error instanceof DOMException && error.name === "AbortError"
+            error instanceof ProviderTimeoutError ||
+            signal.aborted ||
+            (error instanceof DOMException && error.name === "AbortError")
               ? "PROVIDER_TIMEOUT"
               : error instanceof z.ZodError
                 ? "INVALID_PROVIDER_DATA"
@@ -230,7 +239,13 @@ export async function refreshFarm(
       if (!firstHour || !lastHour) invalidForecast();
       candidate = {
         schemaVersion: 1,
-        fetchedAt: new Date().toISOString(),
+        fetchedAt: fetched.reduce(
+          (latest, plot) =>
+            compareInstants(plot.source.retrievedAt, latest) > 0
+              ? plot.source.retrievedAt
+              : latest,
+          fetched[0]?.source.retrievedAt ?? attemptAt,
+        ),
         windowStart: firstHour.at,
         windowEnd: addMinutes(lastHour.at, 60),
         plots: fetched,
@@ -271,15 +286,17 @@ export async function refreshFarm(
       },
     });
     validatePublicationDashboard(snapshot, forecast, publications, publishedAt);
-    const published = await serviceClient.rpc("publish_farm_refresh", {
-      p_owner_id: ownerId,
-      p_farm_id: farmId,
-      p_expected_data_version: admitted.dataVersion,
-      p_attempt_at: attemptAt,
-      p_published_at: publishedAt,
-      p_forecast: forecast as unknown as Json,
-      p_events: publications as unknown as Json,
-    });
+    const published = await serviceClient
+      .rpc("publish_farm_refresh", {
+        p_owner_id: ownerId,
+        p_farm_id: farmId,
+        p_expected_data_version: admitted.dataVersion,
+        p_attempt_at: attemptAt,
+        p_published_at: publishedAt,
+        p_forecast: forecast as unknown as Json,
+        p_events: publications as unknown as Json,
+      })
+      .abortSignal(signal);
     if (published.error) throw rpcFailure(published.error.message);
     const result = z
       .union([
@@ -316,17 +333,19 @@ export async function refreshFarm(
       failure.failure.kind === "unavailable" ||
       failure.failure.kind === "payload_limit"
     ) {
-      await serviceClient.rpc("fail_farm_refresh", {
-        p_owner_id: ownerId,
-        p_farm_id: farmId,
-        p_expected_data_version: admitted.dataVersion,
-        p_attempt_at: attemptAt,
-        p_completed_at: new Date().toISOString(),
-        p_error_code:
-          failure.failure.kind === "payload_limit"
-            ? "PAYLOAD_LIMIT_EXCEEDED"
-            : failure.failure.code,
-      });
+      await serviceClient
+        .rpc("fail_farm_refresh", {
+          p_owner_id: ownerId,
+          p_farm_id: farmId,
+          p_expected_data_version: admitted.dataVersion,
+          p_attempt_at: attemptAt,
+          p_completed_at: new Date().toISOString(),
+          p_error_code:
+            failure.failure.kind === "payload_limit"
+              ? "PAYLOAD_LIMIT_EXCEEDED"
+              : failure.failure.code,
+        })
+        .abortSignal(AbortSignal.timeout(8000));
     }
     throw failure;
   }

@@ -5,6 +5,7 @@ import {
   uuidSchema,
 } from "@agrosense/contracts";
 import { Hono } from "hono";
+import { automationRoutes } from "./automation/routes";
 import type { ApiEnv } from "./env";
 import { requireAuth } from "./lib/auth";
 import { CropCycleError, updateCropCycle } from "./lib/crop-cycle";
@@ -17,6 +18,7 @@ import { satelliteRoutes } from "./satellite/routes";
 import { whatsapp } from "./whatsapp";
 
 const app = new Hono<ApiEnv>();
+app.route("/", automationRoutes);
 
 app.route("/api/whatsapp", whatsapp);
 app.route("/", satelliteRoutes);
@@ -63,6 +65,8 @@ app.post("/api/farms/:farmId/refresh", requireAuth, async (c) => {
       createServiceClient(c.env),
       farmId,
       c.get("userId"),
+      new Date(),
+      { apiKey: c.env?.OPEN_METEO_API_KEY },
     );
     return c.json(response);
   } catch (error) {

@@ -11,13 +11,15 @@ export type KapsoBindings = {
   KAPSO_ALLOWED_USER_ID?: string;
 };
 
-const configSchema = z.object({
+export const kapsoSendConfigSchema = z.object({
   KAPSO_API_KEY: z
     .string()
     .min(1)
     .max(4096)
     .regex(/^[\x21-\x7e]+$/),
   KAPSO_PHONE_NUMBER_ID: z.string().regex(/^[1-9]\d{0,29}$/),
+});
+const configSchema = kapsoSendConfigSchema.extend({
   KAPSO_ALLOWED_USER_ID: z.uuid(),
 });
 
@@ -61,6 +63,68 @@ export async function sendWhatsappText(
   message: WhatsappMessageRequest,
   fetcher: typeof fetch = fetch,
 ): Promise<WhatsappMessageResponse> {
+  return sendWhatsappRequest(
+    config,
+    {
+      messaging_product: "whatsapp",
+      recipient_type: "individual",
+      to: message.to,
+      type: "text",
+      text: { body: message.text, preview_url: false },
+    },
+    fetcher,
+  );
+}
+
+export async function sendWhatsappTemplate(
+  config: z.infer<typeof kapsoSendConfigSchema>,
+  message: {
+    to: string;
+    name: string;
+    language: string;
+    parameters: Record<string, string>;
+    callbackData: string;
+  },
+  fetcher: typeof fetch = fetch,
+  signal?: AbortSignal,
+): Promise<WhatsappMessageResponse> {
+  // Named parameters and callback data follow Kapso's Meta proxy contract.
+  return sendWhatsappRequest(
+    config,
+    {
+      messaging_product: "whatsapp",
+      recipient_type: "individual",
+      to: message.to,
+      type: "template",
+      biz_opaque_callback_data: message.callbackData,
+      template: {
+        name: message.name,
+        language: { code: message.language },
+        components: [
+          {
+            type: "body",
+            parameters: Object.entries(message.parameters).map(
+              ([parameter_name, text]) => ({
+                type: "text",
+                parameter_name,
+                text,
+              }),
+            ),
+          },
+        ],
+      },
+    },
+    fetcher,
+    signal,
+  );
+}
+
+async function sendWhatsappRequest(
+  config: z.infer<typeof kapsoSendConfigSchema>,
+  payload: Record<string, unknown>,
+  fetcher: typeof fetch,
+  signal?: AbortSignal,
+): Promise<WhatsappMessageResponse> {
   try {
     const response = await boundedFetch(
       `https://api.kapso.ai/meta/whatsapp/v24.0/${config.KAPSO_PHONE_NUMBER_ID}/messages`,
@@ -70,15 +134,9 @@ export async function sendWhatsappText(
           "X-API-Key": config.KAPSO_API_KEY,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          messaging_product: "whatsapp",
-          recipient_type: "individual",
-          to: message.to,
-          type: "text",
-          text: { body: message.text, preview_url: false },
-        }),
+        body: JSON.stringify(payload),
       },
-      { fetcher, timeoutMs: 8000, maxBytes: 16 * 1024 },
+      { fetcher, signal, timeoutMs: 8000, maxBytes: 16 * 1024 },
     );
     if (!response.ok) {
       // Do not expose or log upstream bodies; they can contain sensitive data.
