@@ -4,6 +4,7 @@ import {
   type EventSnapshot,
   evaluatePlotAlert,
   type ForecastHour,
+  generationSchema,
   plotAlertSchema,
   type RiskRule,
   resolveRules,
@@ -559,5 +560,97 @@ describe("Agronomic Rules Engine - Evaluation of All Canonical Rules", () => {
     expect(alert.inputSnapshot.generation.modelId).toBe("gpt-4o");
     expect(alert.inputSnapshot.generation.promptVersion).toBe("v1.2");
     expect(plotAlertSchema.parse(alert)).toBeDefined();
+  });
+
+  it("calculates default validUntil from source freshness deadline", () => {
+    const cropCycle: CropCycle = {
+      id: "33333333-3333-4333-8333-333333333333",
+      plotId,
+      cropCode: "maize",
+      seasonLabel: "2025/26",
+      sownOn: "2026-08-01",
+      stageCode: "V3",
+      stageAsOf: "2026-09-05",
+      endedOn: null,
+      updatedAt: "2026-09-05T12:00:00Z",
+    };
+    const now = "2026-09-12T02:00:00Z";
+    const hours = [createHour("2026-09-12T04:00:00Z", { temperatureC: -2 })];
+    const event = createEvent("frost", "2026-09-12", hours);
+    // retrievedAt is 2026-09-12T02:00:00Z -> deadline is +60m = 03:00:00Z
+    event.evidence.source.retrievedAt = now;
+    event.evidence.source.issuedAt = null;
+
+    const alert = evaluatePlotAlert({
+      plot: { id: plotId, activeCropCycle: cropCycle },
+      event,
+      now,
+    });
+
+    expect(alert.validUntil).toBe("2026-09-12T03:00:00.000Z");
+  });
+
+  it("yields no_applicable_rule when plot crop has no rules for the hazard even if stage is missing", () => {
+    // In demo-v1, extreme-heat rules ONLY exist for maize (demo-maize-heat), NOT soybean!
+    const soybeanNoStage: CropCycle = {
+      id: "33333333-3333-4333-8333-333333333333",
+      plotId,
+      cropCode: "soybean",
+      seasonLabel: "2025/26",
+      sownOn: "2026-08-01",
+      stageCode: null,
+      stageAsOf: null,
+      endedOn: null,
+      updatedAt: "2026-09-05T12:00:00Z",
+    };
+    const hours = [createHour("2026-09-12T14:00:00Z", { temperatureC: 38 })];
+    const event = createEvent("extreme-heat", "2026-09-12", hours);
+
+    const alert = evaluatePlotAlert({
+      plot: { id: plotId, activeCropCycle: soybeanNoStage },
+      event,
+    });
+
+    // Because no extreme-heat rule exists for soybean, missing stage must yield no_applicable_rule, NOT insufficient_data
+    expect(alert.assessmentState).toBe("no_applicable_rule");
+    expect(alert.riskLevel).toBeNull();
+  });
+
+  it("validates generationSchema mutually exclusive template vs llm invariants", () => {
+    // Valid template
+    expect(
+      generationSchema.parse({
+        method: "template",
+        modelId: null,
+        promptVersion: null,
+      }),
+    ).toBeDefined();
+
+    // Invalid template with non-null modelId
+    expect(() =>
+      generationSchema.parse({
+        method: "template",
+        modelId: "gpt-4",
+        promptVersion: null,
+      }),
+    ).toThrow();
+
+    // Valid llm
+    expect(
+      generationSchema.parse({
+        method: "llm",
+        modelId: "gpt-4",
+        promptVersion: "v1",
+      }),
+    ).toBeDefined();
+
+    // Invalid llm with null modelId
+    expect(() =>
+      generationSchema.parse({
+        method: "llm",
+        modelId: null,
+        promptVersion: "v1",
+      }),
+    ).toThrow();
   });
 });

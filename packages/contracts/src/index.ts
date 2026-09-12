@@ -149,11 +149,19 @@ export const eventSnapshotSchema = z.object({
 });
 export type EventSnapshot = z.infer<typeof eventSnapshotSchema>;
 
-export const generationSchema = z.object({
-  method: z.enum(["template", "llm"]),
-  modelId: z.string().nullable(),
-  promptVersion: z.string().nullable(),
-});
+export const generationSchema = z
+  .strictObject({
+    method: z.enum(["template", "llm"]),
+    modelId: z.string().min(1).max(200).nullable(),
+    promptVersion: z.string().min(1).max(100).nullable(),
+  })
+  .refine(
+    (gen) =>
+      gen.method === "template"
+        ? gen.modelId === null && gen.promptVersion === null
+        : gen.modelId !== null && gen.promptVersion !== null,
+    "template requires null modelId and promptVersion; llm requires both",
+  );
 export type Generation = z.infer<typeof generationSchema>;
 
 export const inputSnapshotSchema = z.object({

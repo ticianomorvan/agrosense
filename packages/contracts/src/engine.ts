@@ -19,6 +19,7 @@ export interface EvaluatePlotAlertInput {
   rules?: RiskRule[];
   ruleSetVersion?: string;
   now?: string;
+  validUntil?: string;
   alertId?: string;
   generationMethod?: "template" | "llm";
   modelId?: string | null;
@@ -84,12 +85,17 @@ export function ruleFires(rule: RiskRule, hours: ForecastHour[]): boolean {
     }
 
     if (rule.windGustThresholdKmh !== null) {
-      matches = matches && (hour.windGustKmh ?? 0) >= rule.windGustThresholdKmh;
+      matches =
+        matches &&
+        hour.windGustKmh !== null &&
+        hour.windGustKmh >= rule.windGustThresholdKmh;
     }
 
     if (rule.precipitationThresholdMm !== null) {
       matches =
-        matches && (hour.precipitationMm ?? 0) >= rule.precipitationThresholdMm;
+        matches &&
+        hour.precipitationMm !== null &&
+        hour.precipitationMm >= rule.precipitationThresholdMm;
     }
 
     if (rule.hazardKind === "hail") {
@@ -123,10 +129,21 @@ export function evaluatePlotAlert(input: EvaluatePlotAlertInput): PlotAlert {
     generationMethod === "llm" ? (input.promptVersion ?? "v1") : null;
   const now = input.now ?? new Date().toISOString();
   const alertId = input.alertId ?? crypto.randomUUID();
-  const validUntil =
-    Date.parse(event.endsAt) > Date.parse(now)
-      ? event.endsAt
+
+  const calculateDefaultValidUntil = (): string => {
+    const source = event.evidence.source;
+    const retrievedDeadline = Date.parse(source.retrievedAt) + 60 * 60 * 1000;
+    const issuedDeadline = source.issuedAt
+      ? Date.parse(source.issuedAt) + 6 * 60 * 60 * 1000
+      : retrievedDeadline;
+    const earliest = Math.min(retrievedDeadline, issuedDeadline);
+    const deadlineIso = new Date(earliest).toISOString();
+    return Date.parse(deadlineIso) > Date.parse(now)
+      ? deadlineIso
       : new Date(Date.parse(now) + 3_600_000).toISOString();
+  };
+
+  const validUntil = input.validUntil ?? calculateDefaultValidUntil();
 
   const eventSnapshot: EventSnapshot = {
     id: event.id,
@@ -233,10 +250,15 @@ export function evaluatePlotAlert(input: EvaluatePlotAlertInput): PlotAlert {
   // State precedence 2: Missing crop cycle or stage for an otherwise matching rule -> insufficient_data
   const cropCycle = plot.activeCropCycle;
   if (!cropCycle?.cropCode || !cropCycle.stageCode || !cropCycle.stageAsOf) {
+    const cropCompatible =
+      !cropCycle?.cropCode ||
+      hazardRules.some((r) => r.cropCode === cropCycle.cropCode);
     return createAlert(
-      "insufficient_data",
+      cropCompatible ? "insufficient_data" : "no_applicable_rule",
       null,
-      "Missing active crop cycle or phenological stage.",
+      cropCompatible
+        ? "Missing active crop cycle or phenological stage."
+        : "No applicable agronomic rule for hazard kind and crop.",
       [],
       [],
     );
