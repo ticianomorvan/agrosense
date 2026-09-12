@@ -10,7 +10,21 @@ export const satelliteRoutes = new Hono<
 satelliteRoutes.post(
   "/api/farms/:farmId/satellite",
   requireAuth,
-  bodyLimit({ maxSize: 1024 }),
+  bodyLimit({
+    maxSize: 1024,
+    onError: (c) => {
+      c.header("Cache-Control", "private, no-store");
+      return c.json(
+        {
+          error: {
+            code: "PAYLOAD_LIMIT_EXCEEDED",
+            message: "Satellite requests must not exceed 1024 bytes",
+          },
+        },
+        413,
+      );
+    },
+  }),
   async (c) => {
     c.header("Cache-Control", "private, no-store");
     const farmId = c.req.param("farmId");

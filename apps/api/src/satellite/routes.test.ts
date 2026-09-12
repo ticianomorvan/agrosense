@@ -18,6 +18,80 @@ it("requires authentication before satellite processing", async () => {
   expect(response.status).toBe(401);
   expect(fetcher).not.toHaveBeenCalled();
 });
+it("returns JSON 413 for oversized declared and streamed bodies before farm lookup", async () => {
+  const env = {
+    SUPABASE_URL: "https://satellite-size-test.supabase.co",
+    SUPABASE_PUBLISHABLE_KEY: "sb_publishable_test",
+    SUPABASE_JWKS_URL:
+      "https://satellite-size-test.supabase.co/auth/v1/.well-known/jwks.json",
+  };
+  const { privateKey, publicKey } = await generateKeyPair("ES256");
+  const token = await new SignJWT({ role: "authenticated" })
+    .setSubject(userId)
+    .setIssuer(`${env.SUPABASE_URL}/auth/v1`)
+    .setAudience("authenticated")
+    .setExpirationTime("5m")
+    .setProtectedHeader({ alg: "ES256", kid: "satellite-size" })
+    .sign(privateKey);
+  const fetcher = vi.fn(async (url: string | URL | Request) => {
+    expect(String(url)).toBe(env.SUPABASE_JWKS_URL);
+    return Response.json({
+      keys: [
+        {
+          ...(await exportJWK(publicKey)),
+          kid: "satellite-size",
+          alg: "ES256",
+        },
+      ],
+    });
+  });
+  vi.stubGlobal("fetch", fetcher);
+
+  for (const declaredSize of [true, false]) {
+    const headers = new Headers({
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    });
+    if (declaredSize) headers.set("Content-Length", "1025");
+    const init = {
+      method: "POST",
+      headers,
+      duplex: "half" as const,
+      body: new ReadableStream({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode(" ".repeat(1024)));
+          controller.enqueue(new TextEncoder().encode(" "));
+          controller.close();
+        },
+      }),
+    };
+    const response = await app.request(
+      new Request(`http://localhost${path}`, init),
+      undefined,
+      env,
+    );
+    expect(response.status).toBe(413);
+    expect(response.headers.get("Cache-Control")).toBe("private, no-store");
+    expect(await response.json()).toEqual({
+      error: {
+        code: "PAYLOAD_LIMIT_EXCEEDED",
+        message: "Satellite requests must not exceed 1024 bytes",
+      },
+    });
+  }
+  // The exact limit reaches JSON validation instead of being rejected as oversized.
+  const atLimit = await app.request(
+    path,
+    {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: " ".repeat(1024),
+    },
+    env,
+  );
+  expect(atLimit.status).toBe(400);
+  expect(fetcher).toHaveBeenCalledTimes(1);
+});
 it("uses the verified owner and returns 404 for inaccessible farms before contacting Copernicus", async () => {
   const env = {
     SUPABASE_URL: "https://satellite-test.supabase.co",
