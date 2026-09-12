@@ -6,24 +6,16 @@ This change defines schemas; it does not provision a database or implement route
 Source: [AgroSense product document](https://docs.google.com/document/d/1tcxZBTNtnSFpBFIxwPe1tD6QwrSWgnngrScm1vnrx-g/edit?tab=t.0)
 and the three-column sketch. Stack: [stack.md](stack.md).
 
-## Which reference to use
+## How to use this document
 
-| File | Authority |
-| --- | --- |
-| [mvp-schema.sql](reference/mvp-schema.sql) | Exact five-table PostgreSQL DDL: columns, defaults, nullability, keys, indexes, deletion behavior, timestamps, read policies and grants |
-| [mvp.openapi.json](reference/mvp.openapi.json) | OpenAPI 3.1: all request/response types, enums, JSONB schemas, field limits, null handling, auth and errors |
-| [dashboard.example.json](reference/dashboard.example.json) | Complete valid example of the dashboard response; fixed synthetic dates and one plot keep it readable |
-| This document | Meaning of fields, cross-field validation, transaction rules, derivations and build scope |
+This is the single reference for the five-table MVP. The column dictionary and
+inline SQL specify persistence. The inline type definitions specify JSON payloads
+and API bodies; the accompanying rules define runtime validation and transactions.
+The complete dashboard example shows how the models fit together.
 
-Implement these definitions directly. SQL is authoritative for persistence;
-OpenAPI is authoritative for wire/JSON structure. Rules below cover checks that
-need several rows, the current time, or existing stored data. An inconsistency
-between references is a defect to fix, not an invitation to choose either shape.
-
-The SQL is a fresh-database reference requiring existing Supabase Auth objects
-and roles. It deliberately contains no auth bootstrap, seed credentials, mutation
-RPCs, or production deployment instructions. It is not an idempotent rerunnable
-migration. Port it into a migration when building persistence.
+The SQL is a fresh-database design requiring existing Supabase Auth objects and
+roles. It is not an applied migration or a rerunnable setup script. Mutation RPCs,
+provider integration, and application code are future implementation work.
 
 ## Product and scope
 
@@ -81,10 +73,9 @@ erDiagram
 ## Column dictionary
 
 Every column is listed below. “NULL” means nullable with an implicit SQL NULL
-default; “required” means NOT NULL without a default. SQL holds the exact CHECK
+default; “required” means NOT NULL without a default. The inline SQL appendix gives the exact CHECK
 expressions. created_at and updated_at default to now(); a trigger refreshes
 updated_at on every UPDATE. Only the server writes these timestamps.
-
 
 ### farms
 
@@ -193,7 +184,7 @@ updated_at on every UPDATE. Only the server writes these timestamps.
   verify owner identity, validate inputs, lock the farm, and apply the version
   protocol below; no generic privileged SQL endpoint is permitted.
 - SQL checks structure/version markers on JSONB; it does **not** validate the
-  complete OpenAPI JSON schema, polygon topology, or cross-row JSON references.
+  complete JSON shapes below, polygon topology, or cross-row JSON references.
   The trusted import/publication boundary validates those before writing.
 
 ## Exact enums and catalogs
@@ -217,9 +208,10 @@ stages requires updating the API catalog and SQL CHECK together.
 
 ## Exact JSONB shapes
 
-The named schemas below are fully defined in OpenAPI components.schemas; there
-are no unspecified metadata objects. Every object includes all listed properties.
-Nested field types, bounds and conditional nullability are machine-readable there.
+The type definitions below specify every nested field. All properties are required
+unless marked with `?`; `| null` means a present nullable value. Array bounds,
+format rules, conditional nullability and cross-field checks are mandatory runtime
+validation, not inferred TypeScript behavior. Unknown object keys are rejected.
 
 | SQL field | Schema | Fields |
 | --- | --- | --- |
@@ -277,7 +269,7 @@ consecutive hours from the evidence, never from ends_at minus starts_at. Changes
 to hours/bounds within the date retain the same event ID; a different date is a
 different event. This is a demo grouping policy, not regional storm correlation.
 
-RiskRule and RuleSet are exact configuration schemas in OpenAPI. Evaluate the
+RiskRule and RuleSet are defined in the inline type reference. Evaluate the
 seeded open cycle only; the MVP has no scheduled crop transitions. For each rule:
 match crop and stage, require declared stage_as_of <= the event's local start
 date, and require its age on that date <= stageMaxAgeDays. Height must equal the
@@ -359,7 +351,7 @@ IDs and counts but increments the farm publication version.
 All paths require `Authorization: Bearer <Supabase access token>`. Local fixtures
 may bypass auth only in an explicitly local demo mode. Responses use
 `Cache-Control: private, no-store`. Query parameters are unsupported in v1.
-Exact bodies and response examples are in OpenAPI; the three operations are:
+Exact bodies and response examples are included below; the three operations are:
 
 | Method/path | Input | Success |
 | --- | --- | --- |
@@ -408,7 +400,7 @@ forecast, events, monitoring. Read all DB data under one consistent snapshot.
 - Basemap is either available with HTTPS tileUrlTemplate, attribution, zoom bounds
   and nullable acquiredAt, or unavailable with reason. Available templates must
   include {z}, {x}, {y}; minZoom <= maxZoom; credentials must be browser-safe.
-  Provider selection remains deployment configuration. The checked-in example
+  Provider selection remains deployment configuration. The inline example
   intentionally reports unavailable instead of inventing a working tile service.
 
 | HTTP | Error code and condition |
@@ -433,28 +425,751 @@ Version and rate-limit conflicts do not replace last_error_code.
 Build order: fixture page → deterministic risk comparison → five-table persistence
 and owner-scoped access → one live forecast adapter/manual refresh → optional
 schedule and grounded AI wording. Keep shared Zod contracts browser-safe and
-mirror these OpenAPI shapes; no dependency on application code from contracts.
+mirror these documented shapes; no dependency on application code from contracts.
 
 Required implementation tests: crop-specific differences; unknown stage; mismatch
 between crop/stage; invalid dates; event identity under a revised forecast; failed
 partial refresh preserving results; older concurrent refresh rejected; event
 cancellation clearing current risk; cross-owner/cross-farm denial; limits and
 freshness derivations. Run pnpm check after application changes, and inspect the
-three panels in a browser. These files are references, not completed runtime code.
+three panels in a browser. This document is a reference, not completed runtime code.
 
-Reproduce the reference checks without adding application dependencies:
-
-```sh
-npm install --prefix /tmp/agrosense-reference-validation --ignore-scripts --no-audit --no-fund @electric-sql/pglite@0.5.8 ajv@8.20.0 ajv-formats@3.0.1
-node docs/reference/validate.mjs /tmp/agrosense-reference-validation
-```
-
-[validate.mjs](reference/validate.mjs) checks the named schemas/examples and runs
-SQL against isolated PGlite PostgreSQL with mocked Auth objects. It covers invalid
-inputs, relational constraints, owner-scoped reads, denied client writes and
-retention cascade. It does not test deployed Supabase, provider integration,
-mutation RPCs, or cross-field publication rules that are not yet implemented.
-The SQL and OpenAPI references introduce no application dependencies.
+The SQL was checked in isolated PostgreSQL with mocked Supabase Auth objects,
+including relational constraints, owner-scoped reads, denied client writes, and
+event-alert deletion behavior. The JSON shapes and example were also validated.
+These checks do not test deployed Supabase, provider integration, mutation RPCs,
+or application behavior that has not been implemented.
 
 A real farmer pilot requires reviewed agronomic rules and provider permissions
 plus monitoring reliability, history and notification design beyond this MVP.
+
+## Inline JSON and API type reference
+
+Use these names directly when implementing shared contracts. `Id`, `Instant`,
+and `LocalDate` must pass UUID, UTC RFC3339 and calendar-date validation; they are
+strings on the wire. `number` must be finite, and version/count/hour-limit values
+must be integers. Text length/range comments and the column dictionary are binding.
+
+Conditional checks beyond the type notation:
+
+- CropCycle.stageCode must match cropCode's allowed stage list. stageCode and
+  stageAsOf are both null or both non-null.
+- Source.isDemo is true exactly for code=demo. Source.url is HTTPS or null, with
+  at most 2,048 characters. issuedAt can be null and is never fabricated.
+- EventEvidence.scope=farm_demo requires demo source and null samplePoint;
+  plot_forecast requires open_meteo, one plot ID and a non-null samplePoint.
+- Generation.method=template requires null modelId/promptVersion; llm requires
+  both, with maxima of 200 and 100 characters respectively.
+- PlotAlert.assessmentState=evaluated requires non-null riskLevel/recommendation;
+  other states require both null. Recommendation length is 1–1,000 when present.
+- Basemap.available requires all three tile placeholders, HTTPS, minZoom <= maxZoom,
+  attribution length 1–500, and nullable acquiredAt. Unavailable has only status
+  and a reason of length 1–300.
+- RiskRule.stageCodes contains only stages supported by its crop. Approved rules
+  require an HTTPS evidenceUrl of at most 2,048 characters; synthetic rules may
+  use null. Rule codes are unique within a set; all version/code strings have
+  length 1–100. thresholdC is in [-100,0], hours in [1,24], stage age in [1,30].
+- PATCH accepts only its listed fields, requires at least one cultivation field
+  beyond expectedDataVersion, and follows the merge/pairing rules above.
+- IDs in arrays must resolve within the farm. Exact array limits appear in the
+  type comments. All geometry conditions from Conventions and limits still apply.
+
+```ts
+// format: uuid
+type Id = string;
+
+// format: date-time; pattern: Z$
+type Instant = string;
+
+// format: date
+type LocalDate = string;
+
+type DataMode = "demo" | "live";
+
+type CropCode = "maize" | "soybean";
+
+type StageCode = "V3" | "V6" | "VT" | "R1" | "V2" | "R4" | "R6";
+
+type RiskLevel = "low" | "moderate" | "high";
+
+type SourceCode = "demo" | "open_meteo";
+
+type AssessmentState = "evaluated" | "insufficient_data" | "no_applicable_rule";
+
+type EventStatus = "active" | "cancelled";
+
+type RefreshErrorCode = "PROVIDER_TIMEOUT" | "PROVIDER_UNAVAILABLE" | "INVALID_PROVIDER_DATA" | "PAYLOAD_LIMIT_EXCEEDED" | "PUBLISH_FAILED";
+
+// min items: 2; max items: 2
+type Position = [number, number];
+
+type Point = {
+  type: "Point";
+  coordinates: Position;
+};
+
+type Polygon = {
+  type: "Polygon";
+  // min items 1, max items 1
+  coordinates: Position[][];
+};
+
+type Source = {
+  code: SourceCode;
+  url: string | null;
+  issuedAt: Instant | null;
+  retrievedAt: Instant;
+  isDemo: boolean;
+};
+
+type ForecastHour = {
+  at: Instant;
+  // min -100, max 70
+  temperatureC: number;
+};
+
+type PlotForecast = {
+  plotId: Id;
+  samplePoint: Point;
+  source: Source;
+  temperatureHeightM: 2;
+  // min items 1, max items 168
+  hours: ForecastHour[];
+};
+
+type ForecastSummary = {
+  schemaVersion: 1;
+  fetchedAt: Instant;
+  windowStart: Instant;
+  windowEnd: Instant;
+  // min items 1, max items 10
+  plots: PlotForecast[];
+};
+
+type CropCycle = {
+  id: Id;
+  plotId: Id;
+  cropCode: CropCode;
+  // pattern ^[0-9]{4}/[0-9]{2}$
+  seasonLabel: string;
+  sownOn: LocalDate | null;
+  stageCode: StageCode | null;
+  stageAsOf: LocalDate | null;
+  endedOn: LocalDate | null;
+  updatedAt: Instant;
+};
+
+type EventEvidence = {
+  schemaVersion: 1;
+  scope: "farm_demo" | "plot_forecast";
+  // min items 1, max items 10, unique items
+  plotIds: Id[];
+  forecastDate: LocalDate;
+  samplePoint: Point | null;
+  source: Source;
+  temperatureHeightM: 2;
+  detectionThresholdC: 0;
+  // min items 1, max items 24
+  hours: ForecastHour[];
+};
+
+type EventSnapshot = {
+  id: Id;
+  status: EventStatus;
+  startsAt: Instant;
+  endsAt: Instant;
+  evidence: EventEvidence;
+};
+
+type Generation = {
+  method: "template" | "llm";
+  modelId: string | null;
+  promptVersion: string | null;
+};
+
+type InputSnapshot = {
+  schemaVersion: 1;
+  plotId: Id;
+  cropCycle: CropCycle | null;
+  event: EventSnapshot;
+  // min length 1, max length 100
+  ruleSetVersion: string;
+  // min items 0, max items 20, unique items
+  matchedRuleCodes: string[];
+  generation: Generation;
+};
+
+type PlotAlert = {
+  id: Id;
+  plotId: Id;
+  eventId: Id;
+  assessmentState: AssessmentState;
+  riskLevel: RiskLevel | null;
+  // min length 1, max length 1000
+  reason: string;
+  recommendation: string | null;
+  // min length 1, max length 100
+  ruleVersion: string;
+  generatedAt: Instant;
+  validUntil: Instant;
+  generationMethod: "template" | "llm";
+  inputSnapshot: InputSnapshot;
+  isStale: boolean;
+};
+
+type Farm = {
+  id: Id;
+  // min length 1, max length 100
+  name: string;
+  // min length 1, max length 100
+  province: string;
+  locality: string | null;
+  timezone: "America/Argentina/Cordoba";
+  dataMode: DataMode;
+  boundary: Polygon;
+  // min 0.01, max 1000000
+  declaredAreaHa: number;
+  // min 1, max 2147483647
+  dataVersion: number;
+};
+
+type Plot = {
+  id: Id;
+  // min length 1, max length 100
+  name: string;
+  boundary: Polygon;
+  samplePoint: Point;
+  // min 0.01, max 1000000
+  declaredAreaHa: number;
+  activeCropCycle: CropCycle | null;
+};
+
+type Basemap = {
+  status: "available";
+  // min length 1, max length 2048, pattern ^https://
+  tileUrlTemplate: string;
+  // min length 1, max length 500
+  attribution: string;
+  // min 0, max 24
+  minZoom: number;
+  // min 0, max 24
+  maxZoom: number;
+  acquiredAt: Instant | null;
+} | {
+  status: "unavailable";
+  // min length 1, max length 300
+  reason: string;
+};
+
+type EventCard = {
+  id: Id;
+  kind: "frost";
+  // min length 1, max length 160
+  title: string;
+  startsAt: Instant;
+  endsAt: Instant;
+  status: EventStatus;
+  temporalState: "upcoming" | "ongoing" | "recent";
+  source: Source;
+  evidence: EventEvidence;
+  // min items 1, max items 10
+  alerts: PlotAlert[];
+};
+
+type Monitoring = {
+  status: "never_refreshed" | "fresh" | "stale" | "failed";
+  lastAttemptAt: Instant | null;
+  lastSuccessAt: Instant | null;
+  lastErrorCode: RefreshErrorCode | null;
+  forecastValidUntil: Instant | null;
+};
+
+type DashboardResponse = {
+  schemaVersion: 1;
+  asOf: Instant;
+  farm: Farm;
+  // min items 1, max items 10
+  plots: Plot[];
+  basemap: Basemap;
+  forecast: ForecastSummary | null;
+  // min items 0, max items 50
+  events: EventCard[];
+  monitoring: Monitoring;
+};
+
+type RefreshResponse = {
+  farmId: Id;
+  // min 1, max 2147483647
+  dataVersion: number;
+  refreshedAt: Instant;
+  dataMode: DataMode;
+  // min 0, max 50
+  eventCount: number;
+  // min 0, max 500
+  alertCount: number;
+};
+
+type UpdateCropCycleRequest = {
+  // min 1, max 2147483647
+  expectedDataVersion: number;
+  cropCode?: CropCode;
+  sownOn?: LocalDate | null;
+  stageCode?: StageCode | null;
+  stageAsOf?: LocalDate | null;
+};
+
+type UpdateCropCycleResponse = {
+  farmId: Id;
+  // min 1, max 2147483647
+  dataVersion: number;
+  cropCycle: CropCycle;
+};
+
+type ErrorResponse = {
+  error: {
+    code: "BAD_REQUEST" | "UNAUTHENTICATED" | "NOT_FOUND" | "VERSION_CONFLICT" | "STALE_PROVIDER_DATA" | "PAYLOAD_LIMIT_EXCEEDED" | "VALIDATION_ERROR" | "RATE_LIMITED" | "REFRESH_UNAVAILABLE" | "INTERNAL_ERROR";
+    // min length 1, max length 300
+    message: string;
+    // min items 0, max items 20
+    details?: {
+      // min length 1, max length 200
+      path: string;
+      // min length 1, max length 300
+      message: string;
+    }[];
+  };
+};
+
+type RiskRule = {
+  // min length 1, max length 100
+  code: string;
+  cropCode: CropCode;
+  // min items 1, max items 8, unique items
+  stageCodes: StageCode[];
+  temperatureHeightM: 2;
+  // min -100, max 0
+  thresholdC: number;
+  // min 1, max 24
+  minimumConsecutiveHours: number;
+  // min 1, max 30
+  stageMaxAgeDays: number;
+  riskLevel: RiskLevel;
+  reviewState: "synthetic" | "approved";
+  evidenceUrl: string | null;
+  // min length 1, max length 1000
+  reasonTemplate: string;
+  // min length 1, max length 1000
+  recommendationTemplate: string;
+};
+
+type RuleSet = {
+  // min length 1, max length 100
+  version: string;
+  // min items 0, max items 20
+  rules: RiskRule[];
+};
+```
+
+## Inline dashboard example
+
+This complete JSON response uses fixed synthetic dates and one plot for readability.
+The actual demo seeds two or three plots. Satellite configuration is explicitly
+unavailable here; no placeholder URL is presented as a working image service.
+
+```json
+{
+  "schemaVersion": 1,
+  "asOf": "2026-09-12T04:00:00Z",
+  "farm": {
+    "id": "00000000-0000-4000-8000-000000000001",
+    "name": "Campo demo",
+    "province": "Córdoba",
+    "locality": null,
+    "timezone": "America/Argentina/Cordoba",
+    "dataMode": "demo",
+    "boundary": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [-64.1, -31.4],
+          [-64.09, -31.4],
+          [-64.09, -31.39],
+          [-64.1, -31.39],
+          [-64.1, -31.4]
+        ]
+      ]
+    },
+    "declaredAreaHa": 100,
+    "dataVersion": 2
+  },
+  "plots": [
+    {
+      "id": "00000000-0000-4000-8000-000000000002",
+      "name": "Lote 1",
+      "boundary": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [-64.1, -31.4],
+            [-64.09, -31.4],
+            [-64.09, -31.39],
+            [-64.1, -31.39],
+            [-64.1, -31.4]
+          ]
+        ]
+      },
+      "samplePoint": {
+        "type": "Point",
+        "coordinates": [-64.095, -31.395]
+      },
+      "declaredAreaHa": 100,
+      "activeCropCycle": {
+        "id": "00000000-0000-4000-8000-000000000003",
+        "plotId": "00000000-0000-4000-8000-000000000002",
+        "cropCode": "maize",
+        "seasonLabel": "2026/27",
+        "sownOn": "2026-08-01",
+        "stageCode": "V6",
+        "stageAsOf": "2026-09-11",
+        "endedOn": null,
+        "updatedAt": "2026-09-12T03:00:00Z"
+      }
+    }
+  ],
+  "basemap": {
+    "status": "unavailable",
+    "reason": "Proveedor satelital pendiente de configuración."
+  },
+  "forecast": {
+    "schemaVersion": 1,
+    "fetchedAt": "2026-09-12T04:00:00Z",
+    "windowStart": "2026-09-12T06:00:00Z",
+    "windowEnd": "2026-09-12T08:00:00Z",
+    "plots": [
+      {
+        "plotId": "00000000-0000-4000-8000-000000000002",
+        "samplePoint": {
+          "type": "Point",
+          "coordinates": [-64.095, -31.395]
+        },
+        "source": {
+          "code": "demo",
+          "url": null,
+          "issuedAt": "2026-09-12T03:00:00Z",
+          "retrievedAt": "2026-09-12T04:00:00Z",
+          "isDemo": true
+        },
+        "temperatureHeightM": 2,
+        "hours": [
+          {
+            "at": "2026-09-12T06:00:00Z",
+            "temperatureC": -2
+          },
+          {
+            "at": "2026-09-12T07:00:00Z",
+            "temperatureC": -2
+          }
+        ]
+      }
+    ]
+  },
+  "events": [
+    {
+      "id": "00000000-0000-4000-8000-000000000004",
+      "kind": "frost",
+      "title": "Riesgo de helada — simulación",
+      "startsAt": "2026-09-12T06:00:00Z",
+      "endsAt": "2026-09-12T08:00:00Z",
+      "status": "active",
+      "temporalState": "upcoming",
+      "source": {
+        "code": "demo",
+        "url": null,
+        "issuedAt": "2026-09-12T03:00:00Z",
+        "retrievedAt": "2026-09-12T04:00:00Z",
+        "isDemo": true
+      },
+      "evidence": {
+        "schemaVersion": 1,
+        "scope": "farm_demo",
+        "plotIds": ["00000000-0000-4000-8000-000000000002"],
+        "forecastDate": "2026-09-12",
+        "samplePoint": null,
+        "source": {
+          "code": "demo",
+          "url": null,
+          "issuedAt": "2026-09-12T03:00:00Z",
+          "retrievedAt": "2026-09-12T04:00:00Z",
+          "isDemo": true
+        },
+        "temperatureHeightM": 2,
+        "detectionThresholdC": 0,
+        "hours": [
+          {
+            "at": "2026-09-12T06:00:00Z",
+            "temperatureC": -2
+          },
+          {
+            "at": "2026-09-12T07:00:00Z",
+            "temperatureC": -2
+          }
+        ]
+      },
+      "alerts": [
+        {
+          "id": "00000000-0000-4000-8000-000000000005",
+          "plotId": "00000000-0000-4000-8000-000000000002",
+          "eventId": "00000000-0000-4000-8000-000000000004",
+          "assessmentState": "evaluated",
+          "riskLevel": "high",
+          "reason": "Escenario sintético: la regla demo-maize-v6 coincide.",
+          "recommendation": "Demostración: revisar el lote; no es asesoramiento agronómico.",
+          "ruleVersion": "demo-v1",
+          "generatedAt": "2026-09-12T04:00:00Z",
+          "validUntil": "2026-09-12T05:00:00Z",
+          "generationMethod": "template",
+          "inputSnapshot": {
+            "schemaVersion": 1,
+            "plotId": "00000000-0000-4000-8000-000000000002",
+            "cropCycle": {
+              "id": "00000000-0000-4000-8000-000000000003",
+              "plotId": "00000000-0000-4000-8000-000000000002",
+              "cropCode": "maize",
+              "seasonLabel": "2026/27",
+              "sownOn": "2026-08-01",
+              "stageCode": "V6",
+              "stageAsOf": "2026-09-11",
+              "endedOn": null,
+              "updatedAt": "2026-09-12T03:00:00Z"
+            },
+            "event": {
+              "id": "00000000-0000-4000-8000-000000000004",
+              "status": "active",
+              "startsAt": "2026-09-12T06:00:00Z",
+              "endsAt": "2026-09-12T08:00:00Z",
+              "evidence": {
+                "schemaVersion": 1,
+                "scope": "farm_demo",
+                "plotIds": ["00000000-0000-4000-8000-000000000002"],
+                "forecastDate": "2026-09-12",
+                "samplePoint": null,
+                "source": {
+                  "code": "demo",
+                  "url": null,
+                  "issuedAt": "2026-09-12T03:00:00Z",
+                  "retrievedAt": "2026-09-12T04:00:00Z",
+                  "isDemo": true
+                },
+                "temperatureHeightM": 2,
+                "detectionThresholdC": 0,
+                "hours": [
+                  {
+                    "at": "2026-09-12T06:00:00Z",
+                    "temperatureC": -2
+                  },
+                  {
+                    "at": "2026-09-12T07:00:00Z",
+                    "temperatureC": -2
+                  }
+                ]
+              }
+            },
+            "ruleSetVersion": "demo-v1",
+            "matchedRuleCodes": ["demo-maize-v6"],
+            "generation": {
+              "method": "template",
+              "modelId": null,
+              "promptVersion": null
+            }
+          },
+          "isStale": false
+        }
+      ]
+    }
+  ],
+  "monitoring": {
+    "status": "fresh",
+    "lastAttemptAt": "2026-09-12T04:00:00Z",
+    "lastSuccessAt": "2026-09-12T04:00:00Z",
+    "lastErrorCode": null,
+    "forecastValidUntil": "2026-09-12T05:00:00Z"
+  }
+}
+```
+
+## Inline PostgreSQL DDL reference
+
+This appendix defines only tables, constraints, indexes, timestamp maintenance,
+and read access. Full JSON/topology validation and atomic mutation behavior remain
+as specified above. Port the DDL into a migration when implementing persistence.
+
+```sql
+-- AgroSense MVP schema reference v1. Fresh Supabase database only.
+-- Not an applied migration. Requires auth.users, auth.uid(), and Supabase roles.
+-- Full JSON shapes and application invariants are defined earlier in this document.
+BEGIN;
+
+CREATE TABLE public.farms (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  owner_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE RESTRICT,
+  name text NOT NULL CHECK (length(btrim(name)) BETWEEN 1 AND 100),
+  province text NOT NULL CHECK (length(btrim(province)) BETWEEN 1 AND 100),
+  locality text CHECK (locality IS NULL OR length(btrim(locality)) BETWEEN 1 AND 100),
+  timezone text NOT NULL DEFAULT 'America/Argentina/Cordoba'
+    CHECK (timezone = 'America/Argentina/Cordoba'),
+  data_mode text NOT NULL DEFAULT 'demo' CHECK (data_mode IN ('demo', 'live')),
+  boundary_geojson jsonb NOT NULL CHECK (
+    jsonb_typeof(boundary_geojson) = 'object'
+    AND boundary_geojson @> '{"type":"Polygon"}'::jsonb
+    AND jsonb_typeof(boundary_geojson->'coordinates') IS NOT DISTINCT FROM 'array'),
+  declared_area_ha numeric(12,2) NOT NULL
+    CHECK (declared_area_ha > 0 AND declared_area_ha <= 1000000),
+  data_version integer NOT NULL DEFAULT 1 CHECK (data_version > 0),
+  forecast_summary jsonb CHECK (forecast_summary IS NULL OR (
+    jsonb_typeof(forecast_summary) = 'object'
+    AND forecast_summary @> '{"schemaVersion":1}'::jsonb)),
+  last_attempt_at timestamptz,
+  last_success_at timestamptz,
+  last_error_code text CHECK (last_error_code IN (
+    'PROVIDER_TIMEOUT', 'PROVIDER_UNAVAILABLE', 'INVALID_PROVIDER_DATA',
+    'PAYLOAD_LIMIT_EXCEEDED', 'PUBLISH_FAILED')),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  CHECK ((forecast_summary IS NULL) = (last_success_at IS NULL)),
+  CHECK (last_success_at IS NULL OR (last_attempt_at IS NOT NULL AND last_success_at <= last_attempt_at))
+);
+
+CREATE TABLE public.plots (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  farm_id uuid NOT NULL REFERENCES public.farms(id) ON DELETE RESTRICT,
+  name text NOT NULL CHECK (length(btrim(name)) BETWEEN 1 AND 100),
+  boundary_geojson jsonb NOT NULL CHECK (
+    jsonb_typeof(boundary_geojson) = 'object'
+    AND boundary_geojson @> '{"type":"Polygon"}'::jsonb
+    AND jsonb_typeof(boundary_geojson->'coordinates') IS NOT DISTINCT FROM 'array'),
+  sample_point_geojson jsonb NOT NULL CHECK (
+    jsonb_typeof(sample_point_geojson) = 'object'
+    AND sample_point_geojson @> '{"type":"Point"}'::jsonb
+    AND jsonb_typeof(sample_point_geojson->'coordinates') IS NOT DISTINCT FROM 'array'),
+  declared_area_ha numeric(12,2) NOT NULL
+    CHECK (declared_area_ha > 0 AND declared_area_ha <= 1000000),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (farm_id, name),
+  UNIQUE (id, farm_id)
+);
+
+CREATE TABLE public.crop_cycles (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  plot_id uuid NOT NULL REFERENCES public.plots(id) ON DELETE RESTRICT,
+  crop_code text NOT NULL CHECK (crop_code IN ('maize', 'soybean')),
+  season_label text NOT NULL CHECK (season_label ~ '^[0-9]{4}/[0-9]{2}$'),
+  sown_on date,
+  stage_code text,
+  stage_as_of date,
+  ended_on date,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  CHECK ((stage_code IS NULL) = (stage_as_of IS NULL)),
+  CHECK (stage_code IS NULL OR
+    (crop_code = 'maize' AND stage_code IN ('V3', 'V6', 'VT', 'R1')) OR
+    (crop_code = 'soybean' AND stage_code IN ('V2', 'R1', 'R4', 'R6'))),
+  CHECK (sown_on IS NULL OR stage_as_of IS NULL OR stage_as_of >= sown_on),
+  CHECK (ended_on IS NULL OR sown_on IS NULL OR ended_on > sown_on),
+  CHECK (ended_on IS NULL OR stage_as_of IS NULL OR stage_as_of < ended_on)
+);
+CREATE UNIQUE INDEX crop_cycles_one_open ON public.crop_cycles(plot_id) WHERE ended_on IS NULL;
+CREATE INDEX crop_cycles_plot ON public.crop_cycles(plot_id);
+
+CREATE TABLE public.events (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  farm_id uuid NOT NULL REFERENCES public.farms(id) ON DELETE RESTRICT,
+  source_code text NOT NULL CHECK (source_code IN ('demo', 'open_meteo')),
+  source_event_key text NOT NULL CHECK (length(source_event_key) BETWEEN 1 AND 200),
+  kind text NOT NULL DEFAULT 'frost' CHECK (kind = 'frost'),
+  title text NOT NULL CHECK (length(btrim(title)) BETWEEN 1 AND 160),
+  starts_at timestamptz NOT NULL,
+  ends_at timestamptz NOT NULL CHECK (ends_at > starts_at),
+  issued_at timestamptz,
+  retrieved_at timestamptz NOT NULL,
+  source_url text CHECK (source_url IS NULL OR (length(source_url) <= 2048 AND source_url LIKE 'https://%')),
+  status text NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'cancelled')),
+  evidence jsonb NOT NULL CHECK (
+    jsonb_typeof(evidence) = 'object' AND evidence @> '{"schemaVersion":1}'::jsonb),
+  is_demo boolean NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  CHECK (is_demo = (source_code = 'demo')),
+  CHECK (issued_at IS NULL OR issued_at <= retrieved_at),
+  UNIQUE (farm_id, source_code, source_event_key),
+  UNIQUE (id, farm_id)
+);
+CREATE INDEX events_farm_time ON public.events(farm_id, starts_at, id);
+
+CREATE TABLE public.plot_alerts (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  farm_id uuid NOT NULL REFERENCES public.farms(id) ON DELETE RESTRICT,
+  plot_id uuid NOT NULL,
+  event_id uuid NOT NULL,
+  assessment_state text NOT NULL CHECK (assessment_state IN (
+    'evaluated', 'insufficient_data', 'no_applicable_rule')),
+  risk_level text CHECK (risk_level IN ('low', 'moderate', 'high')),
+  reason text NOT NULL CHECK (length(btrim(reason)) BETWEEN 1 AND 1000),
+  recommendation text CHECK (recommendation IS NULL OR length(btrim(recommendation)) BETWEEN 1 AND 1000),
+  input_snapshot jsonb NOT NULL CHECK (
+    jsonb_typeof(input_snapshot) = 'object' AND input_snapshot @> '{"schemaVersion":1}'::jsonb),
+  rule_version text NOT NULL CHECK (length(btrim(rule_version)) BETWEEN 1 AND 100),
+  generated_at timestamptz NOT NULL,
+  valid_until timestamptz NOT NULL CHECK (valid_until > generated_at),
+  generation_method text NOT NULL DEFAULT 'template' CHECK (generation_method IN ('template', 'llm')),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  FOREIGN KEY (plot_id, farm_id) REFERENCES public.plots(id, farm_id) ON DELETE RESTRICT,
+  FOREIGN KEY (event_id, farm_id) REFERENCES public.events(id, farm_id) ON DELETE CASCADE,
+  UNIQUE (plot_id, event_id),
+  CHECK ((assessment_state = 'evaluated' AND risk_level IS NOT NULL AND recommendation IS NOT NULL)
+    OR (assessment_state <> 'evaluated' AND risk_level IS NULL AND recommendation IS NULL))
+);
+CREATE INDEX plot_alerts_farm ON public.plot_alerts(farm_id);
+CREATE INDEX plot_alerts_event ON public.plot_alerts(event_id);
+CREATE INDEX farms_owner ON public.farms(owner_id);
+
+-- Timestamp maintenance only: application mutations MUST also increment
+-- farms.data_version in the same transaction, as specified in the reference.
+CREATE FUNCTION public.set_mvp_updated_at() RETURNS trigger
+LANGUAGE plpgsql SET search_path = '' AS $$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$$;
+REVOKE ALL ON FUNCTION public.set_mvp_updated_at() FROM PUBLIC;
+CREATE TRIGGER farms_updated BEFORE UPDATE ON public.farms FOR EACH ROW EXECUTE FUNCTION public.set_mvp_updated_at();
+CREATE TRIGGER plots_updated BEFORE UPDATE ON public.plots FOR EACH ROW EXECUTE FUNCTION public.set_mvp_updated_at();
+CREATE TRIGGER cycles_updated BEFORE UPDATE ON public.crop_cycles FOR EACH ROW EXECUTE FUNCTION public.set_mvp_updated_at();
+CREATE TRIGGER events_updated BEFORE UPDATE ON public.events FOR EACH ROW EXECUTE FUNCTION public.set_mvp_updated_at();
+CREATE TRIGGER alerts_updated BEFORE UPDATE ON public.plot_alerts FOR EACH ROW EXECUTE FUNCTION public.set_mvp_updated_at();
+
+ALTER TABLE public.farms ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.plots ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.crop_cycles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.plot_alerts ENABLE ROW LEVEL SECURITY;
+CREATE POLICY farms_owner_read ON public.farms FOR SELECT TO authenticated
+  USING (owner_id = (SELECT auth.uid()));
+CREATE POLICY plots_owner_read ON public.plots FOR SELECT TO authenticated
+  USING (EXISTS (SELECT 1 FROM public.farms f WHERE f.id = farm_id AND f.owner_id = (SELECT auth.uid())));
+CREATE POLICY cycles_owner_read ON public.crop_cycles FOR SELECT TO authenticated
+  USING (EXISTS (SELECT 1 FROM public.plots p JOIN public.farms f ON f.id = p.farm_id
+    WHERE p.id = plot_id AND f.owner_id = (SELECT auth.uid())));
+CREATE POLICY events_owner_read ON public.events FOR SELECT TO authenticated
+  USING (EXISTS (SELECT 1 FROM public.farms f WHERE f.id = farm_id AND f.owner_id = (SELECT auth.uid())));
+CREATE POLICY alerts_owner_read ON public.plot_alerts FOR SELECT TO authenticated
+  USING (EXISTS (SELECT 1 FROM public.farms f WHERE f.id = farm_id AND f.owner_id = (SELECT auth.uid())));
+
+-- No direct browser writes; narrow mutation RPCs are a separate implementation.
+REVOKE ALL ON public.farms, public.plots, public.crop_cycles, public.events, public.plot_alerts FROM PUBLIC, anon, authenticated;
+GRANT SELECT ON public.farms, public.plots, public.crop_cycles, public.events, public.plot_alerts TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.farms, public.plots, public.crop_cycles, public.events, public.plot_alerts TO service_role;
+COMMIT;
+```

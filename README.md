@@ -4,9 +4,6 @@ TypeScript monorepo: React + Vite SPA, Hono API on Cloudflare Workers, and share
 Zod contracts. See [stack decisions](docs/stack.md) for boundaries and the optional
 Supabase persistence plan.
 
-See the [MVP schema reference](docs/domain-model.md) for the five-table column
-dictionary, SQL DDL, OpenAPI/JSON schemas, worked example, and refresh contracts.
-
 ## Get started
 
 Use Node 24 and pnpm 11.21.0.
