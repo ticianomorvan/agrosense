@@ -131,7 +131,7 @@ updated_at on every UPDATE. Only the server writes these timestamps.
 | `farm_id` | `uuid` | `required` | Farm whose forecast produced this event. |
 | `source_code` | `text` | `required` | demo or open_meteo. |
 | `source_event_key` | `text` | `required` | Daily identity defined in Event normalization below. |
-| `kind` | `text` | `NOT NULL; 'frost'` | Only frost in v1. |
+| `kind` | `text` | `NOT NULL; 'frost'` | frost, severe-storm, hail, or extreme-heat. |
 | `title` | `text` | `required` | Trimmed display title, 1–160 characters. |
 | `starts_at` | `timestamptz` | `required` | First qualifying hourly interval start for this daily event. |
 | `ends_at` | `timestamptz` | `required` | Last qualifying hourly interval end; always present in this MVP. |
@@ -153,9 +153,9 @@ updated_at on every UPDATE. Only the server writes these timestamps.
 | `plot_id` | `uuid` | `required` | Affected plot; must belong to farm_id. |
 | `event_id` | `uuid` | `required` | Source event; must belong to farm_id. |
 | `assessment_state` | `text` | `required` | evaluated, insufficient_data, or no_applicable_rule. |
-| `risk_level` | `text` | `NULL` | low/moderate/high for evaluated; null otherwise. |
+| `risk_level` | `text` | `NULL` | low/moderate/high/critical for evaluated; null otherwise. |
 | `reason` | `text` | `required` | Trimmed explanation, 1–1,000 characters, always present. |
-| `recommendation` | `text` | `NULL` | Trimmed suggestion, 1–1,000 characters only when evaluated; otherwise null. |
+| `recommended_actions` | `jsonb` | `NOT NULL; '[]'` | Structured action strings returned by the agronomic engine. |
 | `input_snapshot` | `jsonb` | `required` | InputSnapshot schema: exact inputs for this current result. |
 | `rule_version` | `text` | `required` | Whole rule-set version, including when no rule applies. |
 | `generated_at` | `timestamptz` | `required` | Time evaluation finished. |
@@ -196,7 +196,7 @@ updated_at on every UPDATE. Only the server writes these timestamps.
   crop. Known stage_as_of >= sown_on; known ended_on > sown_on and > stage_as_of.
 - ends_at > starts_at; known issued_at <= retrieved_at. is_demo matches the
   source code. valid_until > generated_at. evaluated has non-null risk and
-  recommendation; other assessment states have both null.
+  recommended actions; other assessment states have null risk and no actions.
 - Besides indexes backing primary/unique keys, add farms(owner_id),
   crop_cycles(plot_id), events(farm_id,starts_at,id), plot_alerts(farm_id), and
   plot_alerts(event_id). These cover owner reads, joins and the timeline ordering.
@@ -210,9 +210,9 @@ updated_at on every UPDATE. Only the server writes these timestamps.
 | CropCode | maize, soybean |
 | Maize stages | V3, V6, VT, R1 |
 | Soybean stages | V2, R1, R4, R6 |
-| Event kind/status | frost / active, cancelled |
+| Event kind/status | frost, severe-storm, hail, extreme-heat / active, cancelled |
 | AssessmentState | evaluated, insufficient_data, no_applicable_rule |
-| RiskLevel | low, moderate, high |
+| RiskLevel | low, moderate, high, critical |
 | Generation method | template, llm |
 | Monitoring status (derived) | never_refreshed, fresh, stale, failed |
 
@@ -265,8 +265,8 @@ Additional publication checks:
    generation_method equals generation.method. template has null modelId and
    promptVersion; llm requires both. Snapshot matched rule codes exist in that
    exact versioned rule set, even though the set is stored in code.
-6. evaluated requires non-null risk and recommendation. Other states require both
-   null and an explanatory reason. valid_until must be after generated_at.
+6. evaluated requires non-null risk and recommended actions. Other states require
+   null risk and an explanatory reason. valid_until must be after generated_at.
 
 ## Event normalization and risk rules
 
@@ -291,9 +291,9 @@ rule's height. A rule fires when at least minimumConsecutiveHours consecutive
 hour intervals have temperatureC <= thresholdC. Never replace 2 m readings with
 crop-apex readings. No growth-stage estimation is performed.
 
-All matching rules use the same evidence. Choose greatest risk (high > moderate
-> low), then lexicographically smallest rule code for ties. Save all firing codes
-sorted lexicographically, and the winning reason/recommendation. Rule codes must
+All matching rules use the same evidence. Choose greatest risk (critical > high >
+moderate > low), then lexicographically smallest rule code for ties. Save all
+firing codes sorted lexicographically, and the winning reason/recommended actions. Rule codes must
 be unique within the rule set. State precedence:
 cancelled event → no_applicable_rule; missing crop/stage or stale stage for an
 otherwise matching rule → insufficient_data; no eligible/firing rule →
@@ -341,7 +341,7 @@ refresh does all work; there are no job IDs, 202 responses, or asynchronous queu
    coverage. Cancel an existing upcoming/ongoing event only if its **whole prior
    interval** is covered by newer evidence with no qualifying hours. Replace its
    alert with no_applicable_rule, reason `Forecast withdrawn by newer data.`,
-   null risk/recommendation and the updated evidence. A partial window never
+   null risk and an empty recommended action list with the updated evidence. A partial window never
    cancels an event it cannot fully evaluate. Preserve recent/unaffected rows.
 5. Remove events whose ends_at <= publication time minus seven days, cascading
    their current alerts. Validate retained counts, relationships and payload
@@ -470,8 +470,8 @@ Additional conditional validation:
 - EventEvidence.scope=farm_demo requires demo source and null samplePoint;
   plot_forecast requires open_meteo, exactly one plot ID and non-null samplePoint.
 - Generation.method=template requires null modelId/promptVersion; llm requires
-  both. PlotAlert.evaluated requires riskLevel/recommendation; other states
-  require both null.
+  both. PlotAlert.evaluated requires riskLevel; other states require null risk
+  and an empty recommended action list.
 - Basemap uses exactly one of the two alternatives below. Available templates
   require {z}, {x}, {y} and minZoom <= maxZoom.
 - RiskRule stages must belong to its crop. Approved rules require a non-null
@@ -598,7 +598,7 @@ Additional conditional validation:
 | assessmentState | AssessmentState | required | — |
 | riskLevel | RiskLevel or null | required | —; — |
 | reason | text | required | 1–1000 characters |
-| recommendation | text or null | required | 1–1000 characters; — |
+| recommendedActions | array of text | required | Structured action strings; empty when there are no actions. |
 | ruleVersion | text | required | 1–100 characters |
 | generatedAt | Instant | required | — |
 | validUntil | Instant | required | — |
@@ -654,7 +654,7 @@ Additional conditional validation:
 | Field | Type | Presence | Validation |
 | --- | --- | --- | --- |
 | id | Id | required | — |
-| kind | frost | required | — |
+| kind | frost, severe-storm, hail, extreme-heat | required | — |
 | title | text | required | 1–160 characters |
 | startsAt | Instant | required | — |
 | endsAt | Instant | required | — |
