@@ -398,7 +398,8 @@ it("runs scheduled weather → rules → outbox → Kapso → delivery with dupl
     const fetcher: typeof fetch = async (_input, init) => {
       const body = JSON.parse(String(init?.body));
       expect(body.to).toBe("5493515551234");
-      expect(body.type).toBe("template");
+      expect(body.type).toBe("text");
+      expect(body.text.body).toContain("AgroSense: Aviso meteorológico");
       sends.push(body);
       return Response.json({
         messaging_product: "whatsapp",

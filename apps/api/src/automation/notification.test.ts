@@ -35,7 +35,7 @@ const job = {
 };
 afterEach(() => vi.unstubAllGlobals());
 
-it("sends a proactive named template to the persisted recipient with a callback token", async () => {
+it("sends a plain text notification to the persisted recipient with a callback token", async () => {
   const fetcher = vi.fn(async () =>
     Response.json({
       messaging_product: "whatsapp",
@@ -51,16 +51,12 @@ it("sends a proactive named template to the persisted recipient with a callback 
   expect(url).toBe("https://api.kapso.ai/meta/whatsapp/v24.0/123456/messages");
   const body = JSON.parse(String(init.body));
   expect(body.to).toBe(job.recipient);
-  expect(body.type).toBe("template");
+  expect(body.type).toBe("text");
   expect(body.biz_opaque_callback_data).toBe(
     `agrosense:${job.id}:${job.token}`,
   );
-  expect(
-    body.template.components[0].parameters.map(
-      (p: { parameter_name: string }) => p.parameter_name,
-    ),
-  ).toEqual(["farm", "plot", "hazard", "details"]);
-  expect(JSON.stringify(body)).toContain("Riesgo del cultivo no disponible");
+  expect(body.text.body).toContain("AgroSense: Aviso meteorológico");
+  expect(body.text.body).toContain("Riesgo del cultivo no disponible");
   expect(init.redirect).toBe("manual");
   expect(fetcher).toHaveBeenCalledTimes(1);
 });

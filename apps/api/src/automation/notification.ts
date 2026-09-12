@@ -8,7 +8,7 @@ import { z } from "zod";
 import {
   type KapsoBindings,
   kapsoSendConfigSchema,
-  sendWhatsappTemplate,
+  sendWhatsappText,
 } from "../lib/kapso";
 
 export type AutomationBindings = {
@@ -24,10 +24,12 @@ const notificationConfigSchema = kapsoSendConfigSchema.extend({
     .string()
     .min(1)
     .max(512)
-    .regex(/^[a-z0-9_]+$/),
+    .regex(/^[a-z0-9_]+$/)
+    .optional(),
   KAPSO_NOTIFICATION_TEMPLATE_LANGUAGE: z
     .string()
-    .regex(/^[a-z]{2,3}(?:_[A-Z]{2})?$/),
+    .regex(/^[a-z]{2,3}(?:_[A-Z]{2})?$/)
+    .optional(),
 });
 
 export function readNotificationConfig(
@@ -97,19 +99,30 @@ export function notificationTemplate(job: NotificationJob) {
   };
 }
 
+export function formatNotificationText(job: NotificationJob): string {
+  const params = notificationTemplate(job);
+  return [
+    `*AgroSense: Aviso meteorológico*`,
+    `Finca: ${params.farm}`,
+    `Lote: ${params.plot}`,
+    `Evento previsto: ${params.hazard}`,
+    `Detalles: ${params.details}`,
+    ``,
+    `Consultá AgroSense para revisar el pronóstico y la evaluación del lote.`,
+  ].join("\n");
+}
+
 export function sendNotification(
   config: z.infer<typeof notificationConfigSchema>,
   job: NotificationJob,
   fetcher: typeof fetch = fetch,
   signal?: AbortSignal,
 ) {
-  return sendWhatsappTemplate(
+  return sendWhatsappText(
     config,
     {
       to: job.recipient,
-      name: config.KAPSO_NOTIFICATION_TEMPLATE_NAME,
-      language: config.KAPSO_NOTIFICATION_TEMPLATE_LANGUAGE,
-      parameters: notificationTemplate(job),
+      text: formatNotificationText(job),
       callbackData: `agrosense:${job.id}:${job.token}`,
     },
     fetcher,

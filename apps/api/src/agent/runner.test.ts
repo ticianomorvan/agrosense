@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createOpenRouterModel } from "./model";
-import { runAgent } from "./runner";
+import { formatForWhatsapp, runAgent } from "./runner";
 import { call, chatResponse, testTools } from "./test-helpers";
 
 const now = () => new Date("2026-09-12T12:00:00Z");
@@ -322,5 +322,28 @@ describe("AI SDK agent through OpenRouter", () => {
     await vi.advanceTimersByTimeAsync(60000);
     await assertion;
     expect(fetcher).toHaveBeenCalledTimes(4);
+  });
+
+  describe("formatForWhatsapp", () => {
+    it("converts double asterisks markdown bold to single asterisk WhatsApp bold", () => {
+      const input = "El pronóstico para **Lote Norte** tiene riesgo **alto**.";
+      expect(formatForWhatsapp(input)).toBe(
+        "El pronóstico para *Lote Norte* tiene riesgo *alto*.",
+      );
+    });
+
+    it("converts markdown headings to bold labels", () => {
+      const input = "### Pronóstico próximos 3 días\nTemperatura: 22°C";
+      expect(formatForWhatsapp(input)).toBe(
+        "*Pronóstico próximos 3 días*\nTemperatura: 22°C",
+      );
+    });
+
+    it("strips markdown table divider rows and trims whitespace", () => {
+      const input = "Día | Temp\n|---|---|\n12/09 | 20°C\n\n\nFin";
+      expect(formatForWhatsapp(input)).toBe(
+        "Día | Temp\n\n12/09 | 20°C\n\nFin",
+      );
+    });
   });
 });

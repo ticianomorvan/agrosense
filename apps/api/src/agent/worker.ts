@@ -18,13 +18,18 @@ export class WhatsAppConversation extends DurableObject<AgentBindings> {
     this.#conversation = new Conversation({
       store: ctx.storage,
       run: async (input) => {
-        this.#authorize(input.ownerId, [input.message]);
-        return runAgent({
-          text: input.message.text,
-          history: input.history,
-          tools: createAgentTools({ env: this.env, ownerId: input.ownerId }),
-          model: createOpenRouterModel(this.env),
-        });
+        try {
+          this.#authorize(input.ownerId, [input.message]);
+          return await runAgent({
+            text: input.message.text,
+            history: input.history,
+            tools: createAgentTools({ env: this.env, ownerId: input.ownerId }),
+            model: createOpenRouterModel(this.env),
+          });
+        } catch (error) {
+          console.error("[worker:run:error]", error);
+          throw error;
+        }
       },
       send: async (input) => {
         const config = this.#authorize(input.ownerId, [input.message]);

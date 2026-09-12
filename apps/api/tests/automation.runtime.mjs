@@ -106,8 +106,8 @@ test("Worker authenticates Supabase jobs, dispatches a template once and verifie
           );
           assert.equal(request.headers.get("X-API-Key"), "kapso_test");
           assert.equal(state, "sending");
-          assert.equal(body.type, "template");
-          assert.equal(body.template.name, "agrosense_weather_alert");
+          assert.equal(body.type, "text");
+          assert.match(body.text.body, /AgroSense: Aviso meteorológico/);
           assert.equal(
             body.biz_opaque_callback_data,
             `agrosense:${id}:${token}`,

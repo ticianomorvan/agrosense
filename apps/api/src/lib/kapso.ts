@@ -59,9 +59,10 @@ const sendResponseSchema = z.object({
 
 /** One attempt only: a lost response may still represent an accepted message. */
 export async function sendWhatsappText(
-  config: KapsoConfig,
-  message: WhatsappMessageRequest,
+  config: z.infer<typeof kapsoSendConfigSchema>,
+  message: WhatsappMessageRequest & { callbackData?: string },
   fetcher: typeof fetch = fetch,
+  signal?: AbortSignal,
 ): Promise<WhatsappMessageResponse> {
   return sendWhatsappRequest(
     config,
@@ -70,9 +71,13 @@ export async function sendWhatsappText(
       recipient_type: "individual",
       to: message.to,
       type: "text",
+      ...(message.callbackData
+        ? { biz_opaque_callback_data: message.callbackData }
+        : {}),
       text: { body: message.text, preview_url: false },
     },
     fetcher,
+    signal,
   );
 }
 
