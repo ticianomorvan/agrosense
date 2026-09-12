@@ -45,6 +45,9 @@ erDiagram
 - Every listed response property is required, even when its value is null.
   Objects reject unknown keys. PATCH is the only partial object.
 - SQL instants are timestamptz; API instants are RFC3339 UTC strings ending in Z.
+  Projected SQL instants and freshness comparisons preserve PostgreSQL's
+  microsecond precision, normalizing to six fractional digits rather than
+  truncating crop-cycle change tokens to JavaScript milliseconds.
   Dates are YYYY-MM-DD. Display timezone is fixed to America/Argentina/Cordoba.
 - JSON numbers are finite. Area is numeric(12,2) in SQL and a JSON number in
   hectares; serialize as a number, not a database decimal string. Values round
@@ -245,8 +248,9 @@ validation. Unknown object keys are rejected.
 | plot_alerts.input_snapshot | InputSnapshot | schemaVersion=1, plotId, cropCycle or null, event, ruleSetVersion, matchedRuleCodes[], generation |
 
 Source = {code, url or null, issuedAt or null, retrievedAt, isDemo}.
-ForecastHour = {at, temperatureC, windGustKmh or null, precipitationMm or null, precipitationProbability or null}; at begins a one-hour interval. Temperature is
-Celsius at 2 m, in [-100,70]. Wind gusts are km/h in [0,300]. Precipitation is mm/h in [0,500]. Probability is percentage [0,100]. Missing provider temperatures invalidate a complete
+ForecastHour = {at, temperatureC, windGustKmh or null, precipitationMm or null, precipitationProbability or null, weatherCode or null}; at begins a one-hour interval. Temperature is
+Celsius at 2 m, in [-100,70]. Wind gusts are km/h in [0,300]. Precipitation is mm/h in [0,500]. Probability is percentage [0,100]. weatherCode is an integer WMO weather code in [0,99],
+null when unavailable. Missing optional measurements remain null. Missing provider temperatures invalidate a complete
 refresh; they never become zero.
 
 Additional publication checks:
@@ -287,7 +291,8 @@ Qualifying hazard thresholds:
 - `frost`: at least one hourly interval has `temperatureC <= 0°C`.
 - `extreme-heat`: at least one hourly interval has `temperatureC >= 35°C`.
 - `severe-storm`: at least one hourly interval has `windGustKmh >= 60` or `precipitationMm >= 25`.
-- `hail`: convective forecast indicator or hail precipitation code.
+- `hail`: Open-Meteo WMO weather code 96 or 99 (thunderstorm with hail).
+  See the [provider variable reference](https://open-meteo.com/en/docs#hourly-weather-variables).
 
 starts_at is the first qualifying hour; ends_at is the last qualifying hour plus one hour. These
 bounds enclose the risk window, not necessarily continuous hazard conditions. Cancelled rows
@@ -467,6 +472,19 @@ cancellation clearing current risk; cross-owner/cross-farm denial; limits and
 freshness derivations. Run pnpm check after application changes, and inspect the
 three panels in a browser. This document is a reference, not completed runtime code.
 
+### Implemented weather adapter
+
+The weather adapter slice exposes only `fetchOpenMeteoPlotForecast` and
+`detectThreatEvents`. Fetch performs one request with an eight-second deadline
+including body consumption; failures propagate. Detection returns event identity,
+kind, title, bounds, and evidence; source metadata remains in `evidence.source`.
+The shared forecast and evidence contracts are also used by dashboard reads.
+The adapter returns data without storing it or assigning crop risk. Refresh HTTP
+routes, farm-wide aggregation/publication, and demo generation belong to their
+consuming slices. SMN integration, automatic retries, and live-to-demo fallback
+are outside this slice. Missing wind, rain, probability, or weather-code values
+remain null; invalid temperatures or incomplete hourly coverage reject the fetch.
+
 A real farmer pilot requires reviewed agronomic rules and provider permissions
 plus monitoring reliability, history and notification design beyond this MVP.
 
@@ -531,6 +549,7 @@ Additional conditional validation:
 | windGustKmh | number or null | required | 0–300; — |
 | precipitationMm | number or null | required | 0–500; — |
 | precipitationProbability | integer or null | required | 0–100; — |
+| weatherCode | integer or null | required | WMO weather code, 0–99; null when unavailable |
 
 ### PlotForecast
 
@@ -577,7 +596,7 @@ Additional conditional validation:
 | samplePoint | Point or null | required | —; — |
 | source | Source | required | — |
 | temperatureHeightM | 2 (constant) | required | — |
-| detectionThresholdC | 0 (constant) | required | — |
+| detectionThresholdC | number or null | required | 0 for frost; 35 for extreme-heat; null for severe-storm/hail |
 | hours | array of ForecastHour | required | 1–24 items; each item: — |
 
 ### EventSnapshot
@@ -685,7 +704,7 @@ Additional conditional validation:
 | temporalState | upcoming, ongoing, recent | required | — |
 | source | Source | required | — |
 | evidence | EventEvidence | required | — |
-| alerts | array of PlotAlert | required | 1–10 items; each item: — |
+| alerts | array of PlotAlert | required | 0–10 items; each item: — |
 
 ### Monitoring
 
@@ -704,7 +723,7 @@ Additional conditional validation:
 | schemaVersion | 1 (constant) | required | — |
 | asOf | Instant | required | — |
 | farm | Farm | required | — |
-| plots | array of Plot | required | 1–10 items; each item: — |
+| plots | array of Plot | required | 0–10 items; each item: — |
 | basemap | Basemap | required | — |
 | forecast | ForecastSummary or null | required | —; — |
 | events | array of EventCard | required | 0–50 items; each item: — |

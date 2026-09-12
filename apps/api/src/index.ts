@@ -1,6 +1,11 @@
-import type { HealthResponse, SessionResponse } from "@agrosense/contracts";
+import {
+  type HealthResponse,
+  type SessionResponse,
+  uuidSchema,
+} from "@agrosense/contracts";
 import { Hono } from "hono";
 import { type ApiEnv, requireAuth } from "./lib/auth";
+import { DashboardPayloadLimitError, loadDashboard } from "./lib/dashboard";
 
 const app = new Hono<ApiEnv>();
 
@@ -11,6 +16,42 @@ app.get("/api/health", (c) =>
 app.get("/api/session", requireAuth, (c) =>
   c.json({ userId: c.get("userId") } satisfies SessionResponse),
 );
+
+app.get("/api/farms/:farmId/dashboard", requireAuth, async (c) => {
+  c.header("Cache-Control", "private, no-store");
+  if (Object.keys(c.req.query()).length > 0)
+    return c.json(
+      {
+        error: {
+          code: "BAD_REQUEST",
+          message: "Query parameters are unsupported",
+        },
+      },
+      400,
+    );
+  const farmId = c.req.param("farmId");
+  if (!uuidSchema.safeParse(farmId).success)
+    return c.json(
+      { error: { code: "BAD_REQUEST", message: "farmId must be a UUID" } },
+      400,
+    );
+  try {
+    const dashboard = await loadDashboard(c.get("supabase"), farmId);
+    if (!dashboard)
+      return c.json(
+        { error: { code: "NOT_FOUND", message: "Farm not found" } },
+        404,
+      );
+    return c.json(dashboard);
+  } catch (error) {
+    if (error instanceof DashboardPayloadLimitError)
+      return c.json(
+        { error: { code: "PAYLOAD_LIMIT_EXCEEDED", message: error.message } },
+        413,
+      );
+    throw error;
+  }
+});
 
 app.notFound((c) =>
   c.json({ error: { code: "NOT_FOUND", message: "Route not found" } }, 404),

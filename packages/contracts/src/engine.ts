@@ -1,20 +1,29 @@
-import type {
-  AgronomicAlert,
-  AgronomicRule,
-  EventKind,
-  HourlyWeatherData,
-  PlotContext,
-  SeverityLevel,
-} from "./agronomic";
-import { DEFAULT_AGRONOMIC_RULES } from "./default-rules";
+import { DEMO_V1_RULES } from "./default-rules";
+import {
+  type CropCycle,
+  type EventKind,
+  type EventSnapshot,
+  type ForecastHour,
+  type PlotAlert,
+  plotAlertSchema,
+  type RiskLevel,
+  type RiskRule,
+} from "./index";
 
-export interface EngineOptions {
-  customRules?: AgronomicRule[];
-  source?: string;
+export interface EvaluatePlotAlertInput {
+  plot: {
+    id: string;
+    activeCropCycle: CropCycle | null;
+  };
+  event: EventSnapshot & { kind?: EventKind };
+  rules?: RiskRule[];
+  ruleSetVersion?: string;
   now?: string;
+  alertId?: string;
+  generationMethod?: "template" | "llm";
 }
 
-const SEVERITY_WEIGHT: Record<SeverityLevel, number> = {
+const RISK_ORDER: Record<RiskLevel, number> = {
   low: 1,
   moderate: 2,
   high: 3,
@@ -22,323 +31,279 @@ const SEVERITY_WEIGHT: Record<SeverityLevel, number> = {
 };
 
 /**
- * Normalizes common agronomic stage codes (e.g., V3, VT, R4) into macro phenological stages.
- */
-export function normalizePhenologicalStage(stage: string): string[] {
-  const clean = stage.trim().toLowerCase();
-  const stages: Set<string> = new Set([clean, stage.trim()]);
-
-  if (clean === "ve" || clean === "emergencia" || clean === "emergence") {
-    stages.add("emergence");
-  } else if (
-    /^v\d+$/.test(clean) ||
-    clean === "vegetativo" ||
-    clean === "vegetative"
-  ) {
-    stages.add("vegetative");
-  } else if (
-    clean === "vt" ||
-    clean === "r1" ||
-    clean === "r2" ||
-    clean === "floracion" ||
-    clean === "floración" ||
-    clean === "flowering"
-  ) {
-    stages.add("flowering");
-  } else if (
-    clean === "r3" ||
-    clean === "r4" ||
-    clean === "r5" ||
-    clean === "r6" ||
-    clean === "llenado" ||
-    clean === "grain_filling"
-  ) {
-    stages.add("grain_filling");
-  } else if (clean === "r7" || clean === "r8" || clean === "madurez") {
-    stages.add("maturity");
-  }
-
-  return Array.from(stages);
-}
-
-/**
  * Resolves effective rule set by merging system defaults with user-defined custom rules (RuleProvider Pattern).
- * Custom rules with an identical ID override default rules.
+ * Custom rules with an identical `code` override default rules.
  */
 export function resolveRules(
-  systemRules: AgronomicRule[] = DEFAULT_AGRONOMIC_RULES,
-  customRules: AgronomicRule[] = [],
-): AgronomicRule[] {
-  const rulesMap = new Map<string, AgronomicRule>();
+  systemRules: RiskRule[] = DEMO_V1_RULES,
+  customRules: RiskRule[] = [],
+): RiskRule[] {
+  const rulesMap = new Map<string, RiskRule>();
 
   for (const rule of systemRules) {
-    rulesMap.set(rule.id, rule);
+    rulesMap.set(rule.code, rule);
   }
 
   for (const custom of customRules) {
-    rulesMap.set(custom.id, custom);
+    rulesMap.set(custom.code, custom);
   }
 
   return Array.from(rulesMap.values());
 }
 
 /**
- * Checks whether a single hourly weather reading satisfies a rule's meteorological thresholds.
+ * Checks whether an array of hourly forecasts satisfies the rule's threshold for the required consecutive hours.
  */
-export function hourMatchesThresholds(
-  hour: HourlyWeatherData,
-  rule: AgronomicRule,
-): boolean {
-  const { thresholds } = rule;
+export function ruleFires(rule: RiskRule, hours: ForecastHour[]): boolean {
+  const requiredConsecutive = rule.minimumConsecutiveHours;
+  let consecutive = 0;
 
-  if (
-    thresholds.minTemperatureC !== undefined &&
-    hour.temperatureC > thresholds.minTemperatureC
-  ) {
-    return false;
-  }
+  for (const hour of hours) {
+    let matches = true;
 
-  if (
-    thresholds.maxTemperatureC !== undefined &&
-    hour.temperatureC < thresholds.maxTemperatureC
-  ) {
-    return false;
-  }
-
-  if (thresholds.windGustKmh !== undefined) {
-    const gust = hour.windGustKmh ?? 0;
-    if (gust < thresholds.windGustKmh) {
-      return false;
+    if (rule.thresholdC !== null) {
+      if (rule.hazardKind === "frost") {
+        matches = matches && hour.temperatureC <= rule.thresholdC;
+      } else if (rule.hazardKind === "extreme-heat") {
+        matches = matches && hour.temperatureC >= rule.thresholdC;
+      }
     }
-  }
 
-  if (thresholds.precipitationMm !== undefined) {
-    const rain = hour.precipitationMm ?? 0;
-    if (rain < thresholds.precipitationMm) {
-      return false;
+    if (rule.windGustThresholdKmh !== null) {
+      matches = matches && (hour.windGustKmh ?? 0) >= rule.windGustThresholdKmh;
     }
-  }
 
-  if (thresholds.convectiveIndex !== undefined) {
-    // Evaluates WMO thunderstorm/hail codes (96, 99 = thunderstorm with hail; 89, 90 = hail showers)
-    // or precipitation/convective probability
-    const isWmoHail =
-      hour.weatherCode === 96 ||
-      hour.weatherCode === 99 ||
-      hour.weatherCode === 89 ||
-      hour.weatherCode === 90;
-    const meetsProb =
-      (hour.precipitationProbability ?? 0) >= thresholds.convectiveIndex;
-
-    if (!isWmoHail && !meetsProb) {
-      return false;
+    if (rule.precipitationThresholdMm !== null) {
+      matches =
+        matches && (hour.precipitationMm ?? 0) >= rule.precipitationThresholdMm;
     }
-  }
 
-  return true;
-}
+    if (rule.hazardKind === "hail") {
+      matches = matches && (hour.weatherCode === 96 || hour.weatherCode === 99);
+    }
 
-interface QualifyingBlock {
-  rule: AgronomicRule;
-  hours: HourlyWeatherData[];
-  start: string;
-  end: string;
-}
-
-function findQualifyingBlocks(
-  weatherHours: HourlyWeatherData[],
-  rule: AgronomicRule,
-): QualifyingBlock[] {
-  const minConsecutive = rule.thresholds.minimumConsecutiveHours || 1;
-  const blocks: QualifyingBlock[] = [];
-  let currentRun: HourlyWeatherData[] = [];
-
-  for (const hour of weatherHours) {
-    if (hourMatchesThresholds(hour, rule)) {
-      currentRun.push(hour);
+    if (matches) {
+      consecutive++;
+      if (consecutive >= requiredConsecutive) {
+        return true;
+      }
     } else {
-      if (currentRun.length >= minConsecutive) {
-        const block = buildBlock(currentRun, rule);
-        if (block) blocks.push(block);
-      }
-      currentRun = [];
+      consecutive = 0;
     }
   }
 
-  if (currentRun.length >= minConsecutive) {
-    const block = buildBlock(currentRun, rule);
-    if (block) blocks.push(block);
-  }
-
-  return blocks;
+  return false;
 }
 
-function buildBlock(
-  hours: HourlyWeatherData[],
-  rule: AgronomicRule,
-): QualifyingBlock | null {
-  const firstHour = hours[0];
-  const lastHour = hours[hours.length - 1];
+/**
+ * Pure deterministic agronomic alert evaluation engine per plot and event.
+ * Complies explicitly with docs/domain-model.md lines 310-344.
+ */
+export function evaluatePlotAlert(input: EvaluatePlotAlertInput): PlotAlert {
+  const { plot, event, rules } = input;
+  const ruleSetVersion = input.ruleSetVersion ?? "demo-v1";
+  const generationMethod = input.generationMethod ?? "template";
+  const now = input.now ?? new Date().toISOString();
+  const alertId = input.alertId ?? crypto.randomUUID();
+  const validUntil =
+    Date.parse(event.endsAt) > Date.parse(now)
+      ? event.endsAt
+      : new Date(Date.parse(now) + 3_600_000).toISOString();
 
-  if (!firstHour || !lastHour) {
-    return null;
-  }
-
-  const start = firstHour.timestamp;
-  // validUntil extends 1 hour past the start of the final qualifying interval
-  const lastDate = new Date(lastHour.timestamp);
-  const endDate = new Date(lastDate.getTime() + 60 * 60 * 1000);
-
-  return {
-    rule,
-    hours,
-    start,
-    end: endDate.toISOString(),
+  const eventSnapshot: EventSnapshot = {
+    id: event.id,
+    status: event.status,
+    startsAt: event.startsAt,
+    endsAt: event.endsAt,
+    evidence: event.evidence,
   };
-}
 
-/**
- * Generates a stable deterministic identifier for the generated alert.
- */
-function generateDeterministicAlertId(
-  plotId: string,
-  event: EventKind,
-  validFrom: string,
-): string {
-  const base = `${plotId}:${event}:${validFrom}`;
-  let hash = 0;
-  for (let i = 0; i < base.length; i++) {
-    const char = base.charCodeAt(i);
-    hash = (hash << 5) - hash + char;
-    hash |= 0;
-  }
-  const hex = Math.abs(hash).toString(16).padStart(8, "0");
-  return `alert-${hex}-${event}`;
-}
-
-/**
- * Pure deterministic agronomic alert calculation engine per plot.
- */
-export function evaluateAgronomicAlerts(
-  plot: PlotContext,
-  weatherData: HourlyWeatherData[],
-  options: EngineOptions = {},
-): AgronomicAlert[] {
-  if (!weatherData || weatherData.length === 0) {
-    return [];
-  }
-
-  // Sort weather chronologically
-  const sortedWeather = [...weatherData].sort(
-    (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
-  );
-
-  const activeRules = resolveRules(
-    DEFAULT_AGRONOMIC_RULES,
-    options.customRules ?? [],
-  );
-
-  // Normalize stages for flexible matching
-  const candidateStages = normalizePhenologicalStage(plot.phenologicalStage);
-
-  // Filter rules matching the plot's crop and phenological stage
-  const applicableRules = activeRules.filter(
-    (rule) =>
-      rule.crop === plot.crop &&
-      candidateStages.includes(rule.phenologicalStage.toLowerCase()),
-  );
-
-  if (applicableRules.length === 0) {
-    return [];
-  }
-
-  // Scan all blocks triggering rules
-  const rawBlocks: QualifyingBlock[] = [];
-  for (const rule of applicableRules) {
-    const blocks = findQualifyingBlocks(sortedWeather, rule);
-    rawBlocks.push(...blocks);
-  }
-
-  if (rawBlocks.length === 0) {
-    return [];
-  }
-
-  // Deduplicate alerts by event type and overlapping temporal windows
-  const deduplicatedAlerts: AgronomicAlert[] = [];
-  const source = options.source ?? "agronomic-engine";
-
-  // Group by hazard event kind
-  const byEvent = new Map<EventKind, QualifyingBlock[]>();
-  for (const block of rawBlocks) {
-    const existing = byEvent.get(block.rule.event) ?? [];
-    existing.push(block);
-    byEvent.set(block.rule.event, existing);
-  }
-
-  for (const [event, blocks] of byEvent.entries()) {
-    // Sort multiple blocks for the same event by descending severity
-    blocks.sort(
-      (a, b) =>
-        SEVERITY_WEIGHT[b.rule.severity] - SEVERITY_WEIGHT[a.rule.severity],
-    );
-
-    // Take the highest risk block for this hazard window
-    const winningBlock = blocks[0];
-    if (!winningBlock) {
-      continue;
-    }
-    const winningRule = winningBlock.rule;
-
-    // Compute adjusted confidence
-    let confidence = winningRule.baseConfidence;
-    const avgProb =
-      winningBlock.hours.reduce(
-        (acc, h) => acc + (h.precipitationProbability ?? 80),
-        0,
-      ) / winningBlock.hours.length;
-    if (event === "severe-storm" || event === "hail") {
-      confidence = Math.min(1.0, (confidence + avgProb / 100) / 2);
-    }
-
-    // Combine recommended actions across matching rules without duplicates
-    const actionSet = new Set<string>();
-    for (const b of blocks) {
-      for (const action of b.rule.recommendedActions) {
-        actionSet.add(action);
-      }
-    }
-
-    const title =
-      winningRule.titleTemplate ??
-      `${event.toUpperCase()} alert in plot (${winningRule.severity})`;
-    const description =
-      winningRule.descriptionTemplate ??
-      `Detected ${event} conditions exceeding agronomic thresholds for ${plot.crop}.`;
-
-    const alertId = generateDeterministicAlertId(
-      plot.plotId,
-      event,
-      winningBlock.start,
-    );
-
-    deduplicatedAlerts.push({
+  const createAlert = (
+    assessmentState: "evaluated" | "insufficient_data" | "no_applicable_rule",
+    riskLevel: RiskLevel | null,
+    reason: string,
+    recommendedActions: string[],
+    matchedRuleCodes: string[],
+  ): PlotAlert => {
+    return plotAlertSchema.parse({
       id: alertId,
-      plotId: plot.plotId,
-      farmId: plot.farmId,
-      crop: plot.crop,
-      phenologicalStage: plot.phenologicalStage,
-      event,
-      severity: winningRule.severity,
-      title,
-      description,
-      recommendedActions: Array.from(actionSet),
-      confidence: Math.round(confidence * 100) / 100,
-      validFrom: winningBlock.start,
-      validUntil: winningBlock.end,
-      source,
-      matchedRuleId: winningRule.id,
+      plotId: plot.id,
+      eventId: event.id,
+      assessmentState,
+      riskLevel,
+      reason,
+      recommendedActions,
+      ruleVersion: ruleSetVersion,
+      generatedAt: now,
+      validUntil,
+      generationMethod,
+      inputSnapshot: {
+        schemaVersion: 1,
+        plotId: plot.id,
+        cropCycle: plot.activeCropCycle,
+        event: eventSnapshot,
+        ruleSetVersion,
+        matchedRuleCodes,
+        generation: {
+          method: generationMethod,
+          modelId: null,
+          promptVersion: null,
+        },
+      },
+      isStale: false,
     });
+  };
+
+  // State precedence 1: Cancelled event -> no_applicable_rule
+  if (event.status === "cancelled") {
+    return createAlert(
+      "no_applicable_rule",
+      null,
+      "Forecast withdrawn by newer data.",
+      [],
+      [],
+    );
   }
 
-  return deduplicatedAlerts;
+  // State precedence 2: Missing active crop cycle or stage -> insufficient_data
+  const cropCycle = plot.activeCropCycle;
+  if (!cropCycle?.stageCode || !cropCycle.stageAsOf) {
+    return createAlert(
+      "insufficient_data",
+      null,
+      "Missing active crop cycle or phenological stage.",
+      [],
+      [],
+    );
+  }
+
+  // Determine event hazard kind
+  const hazardKind: EventKind =
+    event.kind ??
+    (event.evidence.detectionThresholdC === 0
+      ? "frost"
+      : event.evidence.detectionThresholdC === 35
+        ? "extreme-heat"
+        : "severe-storm");
+
+  const effectiveRules = resolveRules(rules ?? DEMO_V1_RULES);
+
+  // Check for rules matching the crop and stage
+  const matchingCropStageRules = effectiveRules.filter(
+    (r) =>
+      r.hazardKind === hazardKind &&
+      r.cropCode === cropCycle.cropCode &&
+      r.stageCodes.some(
+        (code) => code.toLowerCase() === cropCycle.stageCode?.toLowerCase(),
+      ),
+  );
+
+  // State precedence 3: Stale stage date for an otherwise matching rule -> insufficient_data
+  if (matchingCropStageRules.length > 0) {
+    const forecastDateMs = Date.parse(
+      `${event.evidence.forecastDate}T00:00:00Z`,
+    );
+    const stageAsOfMs = Date.parse(`${cropCycle.stageAsOf}T00:00:00Z`);
+
+    if (stageAsOfMs > forecastDateMs) {
+      return createAlert(
+        "insufficient_data",
+        null,
+        "Declared stage date cannot follow event forecast date.",
+        [],
+        [],
+      );
+    }
+
+    const ageDays = Math.floor(
+      (forecastDateMs - stageAsOfMs) / (24 * 60 * 60 * 1000),
+    );
+    const maxAllowedAge = Math.max(
+      ...matchingCropStageRules.map((r) => r.stageMaxAgeDays),
+    );
+
+    if (ageDays > maxAllowedAge) {
+      return createAlert(
+        "insufficient_data",
+        null,
+        `Declared stage observation is stale (${ageDays} days old; max allowed is ${maxAllowedAge} days).`,
+        [],
+        [],
+      );
+    }
+  }
+
+  // Filter eligible rules for live vs demo modes
+  const eligibleRules = matchingCropStageRules.filter((r) => {
+    if (!event.evidence.source.isDemo) {
+      return r.reviewState === "approved" && r.evidenceUrl !== null;
+    }
+    return true;
+  });
+
+  // State precedence 4: No eligible rule -> no_applicable_rule
+  if (eligibleRules.length === 0) {
+    return createAlert(
+      "no_applicable_rule",
+      null,
+      "No applicable agronomic rule for current crop stage.",
+      [],
+      [],
+    );
+  }
+
+  // Evaluate meteorological thresholds against event evidence hours
+  const firingRules = eligibleRules.filter((r) =>
+    ruleFires(r, event.evidence.hours),
+  );
+
+  // State precedence 5: No firing rule -> no_applicable_rule
+  if (firingRules.length === 0) {
+    return createAlert(
+      "no_applicable_rule",
+      null,
+      "Weather conditions did not reach agronomic rule thresholds.",
+      [],
+      [],
+    );
+  }
+
+  // State precedence 6: Evaluated!
+  // Sort firing rules: greatest risk first, then lexicographically smallest rule code for ties
+  firingRules.sort((a, b) => {
+    const riskDiff = RISK_ORDER[b.riskLevel] - RISK_ORDER[a.riskLevel];
+    if (riskDiff !== 0) {
+      return riskDiff;
+    }
+    return a.code.localeCompare(b.code);
+  });
+
+  const winningRule = firingRules[0];
+  if (!winningRule) {
+    return createAlert(
+      "no_applicable_rule",
+      null,
+      "No applicable agronomic rule found.",
+      [],
+      [],
+    );
+  }
+
+  const matchedRuleCodes = firingRules
+    .map((r) => r.code)
+    .sort((a, b) => a.localeCompare(b));
+
+  const reason = winningRule.reasonTemplate.replace(
+    /\{code\}/g,
+    winningRule.code,
+  );
+  const recommendedActions = winningRule.recommendedActionTemplates;
+
+  return createAlert(
+    "evaluated",
+    winningRule.riskLevel,
+    reason,
+    recommendedActions,
+    matchedRuleCodes,
+  );
 }
