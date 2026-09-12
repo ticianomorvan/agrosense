@@ -15,7 +15,8 @@ Implementation code, migrations, and fixtures belong in the build work.
 
 ## Product and scope
 
-One seeded owner, one farm, two or three plots, maize/soybean, frost, one forecast
+One seeded owner, one farm, two or three plots, maize/soybean, hazards
+(frost, severe-storm, hail, extreme-heat), one forecast
 adapter and one satellite basemap. Left: land, crop/stage and forecast. Center:
 seeded polygons and plot selection. Right: grouped events and plot-specific risk.
 Selection/filtering is local UI state. No database is required for the first
@@ -49,6 +50,9 @@ erDiagram
 - Every listed response property is required, even when its value is null.
   Objects reject unknown keys. PATCH is the only partial object.
 - SQL instants are timestamptz; API instants are RFC3339 UTC strings ending in Z.
+  Projected SQL instants and freshness comparisons preserve PostgreSQL's
+  microsecond precision, normalizing to six fractional digits rather than
+  truncating crop-cycle change tokens to JavaScript milliseconds.
   Dates are YYYY-MM-DD. Display timezone is fixed to America/Argentina/Cordoba.
 - JSON numbers are finite. Area is numeric(12,2) in SQL and a JSON number in
   hectares; serialize as a number, not a database decimal string. Values round
@@ -93,6 +97,7 @@ updated_at on every UPDATE. Only the server writes these timestamps.
 | `boundary_geojson` | `jsonb` | `required` | Polygon schema; farm outline. |
 | `declared_area_ha` | `numeric(12,2)` | `required` | Declared hectares; two decimal places, 0.01–1,000,000. |
 | `data_version` | `integer` | `NOT NULL; 1` | Farm-wide compare-and-swap token for cultivation and refresh writes. |
+| `custom_rules` | `jsonb` | `NOT NULL; '[]'::jsonb` | Custom user-defined RiskRule definitions for this farm (max 10). |
 | `forecast_summary` | `jsonb` | `NULL` | ForecastSummary schema; null before first successful refresh. |
 | `last_attempt_at` | `timestamptz` | `NULL` | Latest admitted refresh attempt time; replaced by completion time if still current. |
 | `last_success_at` | `timestamptz` | `NULL` | Latest successful publication time. |
@@ -136,7 +141,7 @@ updated_at on every UPDATE. Only the server writes these timestamps.
 | `farm_id` | `uuid` | `required` | Farm whose forecast produced this event. |
 | `source_code` | `text` | `required` | demo or open_meteo. |
 | `source_event_key` | `text` | `required` | Daily identity defined in Event normalization below. |
-| `kind` | `text` | `NOT NULL; 'frost'` | Only frost in v1. |
+| `kind` | `text` | `NOT NULL; 'frost'` | Hazard kind: frost, severe-storm, hail, or extreme-heat. |
 | `title` | `text` | `required` | Trimmed display title, 1–160 characters. |
 | `starts_at` | `timestamptz` | `required` | First qualifying hourly interval start for this daily event. |
 | `ends_at` | `timestamptz` | `required` | Last qualifying hourly interval end; always present in this MVP. |
@@ -158,9 +163,9 @@ updated_at on every UPDATE. Only the server writes these timestamps.
 | `plot_id` | `uuid` | `required` | Affected plot; must belong to farm_id. |
 | `event_id` | `uuid` | `required` | Source event; must belong to farm_id. |
 | `assessment_state` | `text` | `required` | evaluated, insufficient_data, or no_applicable_rule. |
-| `risk_level` | `text` | `NULL` | low/moderate/high for evaluated; null otherwise. |
+| `risk_level` | `text` | `NULL` | low/moderate/high/critical for evaluated; null otherwise. |
 | `reason` | `text` | `required` | Trimmed explanation, 1–1,000 characters, always present. |
-| `recommendation` | `text` | `NULL` | Trimmed suggestion, 1–1,000 characters only when evaluated; otherwise null. |
+| `recommended_actions` | `jsonb` | `NOT NULL; '[]'::jsonb` | Array of actionable recommendations (1–10 items, 1–1,000 chars each) when evaluated; empty array otherwise. |
 | `input_snapshot` | `jsonb` | `required` | InputSnapshot schema: exact inputs for this current result. |
 | `rule_version` | `text` | `required` | Whole rule-set version, including when no rule applies. |
 | `generated_at` | `timestamptz` | `required` | Time evaluation finished. |
@@ -194,6 +199,10 @@ updated_at on every UPDATE. Only the server writes these timestamps.
 - data_version is a positive integer. forecast_summary is null exactly when
   last_success_at is null. A non-null last_success_at requires last_attempt_at
   and must be <= last_attempt_at.
+- farms.custom_rules is a JSONB array with at most 10 items (`CHECK (jsonb_typeof(custom_rules) = 'array' AND jsonb_array_length(custom_rules) <= 10)`).
+- events.kind is constrained by `CHECK (kind IN ('frost', 'severe-storm', 'hail', 'extreme-heat'))`.
+- plot_alerts.risk_level is constrained by `CHECK (risk_level IN ('low', 'moderate', 'high', 'critical') OR risk_level IS NULL)`.
+- plot_alerts.recommended_actions is a JSONB array (`CHECK (jsonb_typeof(recommended_actions) = 'array' AND jsonb_array_length(recommended_actions) <= 10)`).
 - source_event_key length is 1–200; rule_version length is 1–100. source_url is
   null or HTTPS with at most 2,048 characters. Enforce enums and all column
   dictionary limits. JSONB objects carry schemaVersion=1 where specified.
@@ -201,7 +210,7 @@ updated_at on every UPDATE. Only the server writes these timestamps.
   crop. Known stage_as_of >= sown_on; known ended_on > sown_on and > stage_as_of.
 - ends_at > starts_at; known issued_at <= retrieved_at. is_demo matches the
   source code. valid_until > generated_at. evaluated has non-null risk and
-  recommendation; other assessment states have both null.
+  non-empty recommended_actions; other assessment states have null risk and empty recommended_actions.
 - Besides indexes backing primary/unique keys, add farms(owner_id),
   crop_cycles(plot_id), events(farm_id,starts_at,id), plot_alerts(farm_id), and
   plot_alerts(event_id). These cover owner reads, joins and the timeline ordering.
@@ -215,9 +224,9 @@ updated_at on every UPDATE. Only the server writes these timestamps.
 | CropCode | maize, soybean |
 | Maize stages | V3, V6, VT, R1 |
 | Soybean stages | V2, R1, R4, R6 |
-| Event kind/status | frost / active, cancelled |
+| Event kind/status | frost, severe-storm, hail, extreme-heat / active, cancelled |
 | AssessmentState | evaluated, insufficient_data, no_applicable_rule |
-| RiskLevel | low, moderate, high |
+| RiskLevel | low, moderate, high, critical |
 | Generation method | template, llm |
 | Monitoring status (derived) | never_refreshed, fresh, stale, failed |
 
@@ -236,15 +245,18 @@ validation. Unknown object keys are rejected.
 | --- | --- | --- |
 | farms.boundary_geojson, plots.boundary_geojson | Polygon | type=Polygon; coordinates=[one closed ring] |
 | plots.sample_point_geojson | Point | type=Point; coordinates=[longitude,latitude] |
+| farms.custom_rules | array of RiskRule | max 10 items; each item validates against RiskRule schema |
 | farms.forecast_summary | ForecastSummary or SQL NULL | schemaVersion=1, fetchedAt, windowStart, windowEnd, plots[] |
 | forecast_summary.plots[] | PlotForecast | plotId, samplePoint, source, temperatureHeightM=2, hours[] |
-| events.evidence | EventEvidence | schemaVersion=1, scope, plotIds[], forecastDate, samplePoint, source, temperatureHeightM=2, detectionThresholdC=0, hours[] |
+| events.evidence | EventEvidence | schemaVersion=1, scope, plotIds[], forecastDate, samplePoint, source, temperatureHeightM=2, detectionThresholdC, hours[] |
+| plot_alerts.recommended_actions | array of string | 1–10 items when evaluated; empty array [] otherwise |
 | plot_alerts.input_snapshot | InputSnapshot | schemaVersion=1, plotId, cropCycle or null, event, ruleSetVersion, matchedRuleCodes[], generation |
 
 Source = {code, url or null, issuedAt or null, retrievedAt, isDemo}.
-ForecastHour = {at, temperatureC}; at begins a one-hour interval. Temperature is
-Celsius at 2 m, in [-100,70]. Missing provider temperatures invalidate a complete
-refresh; they never become zero. No precipitation/hail units are implied.
+ForecastHour = {at, temperatureC, windGustKmh or null, precipitationMm or null, precipitationProbability or null, weatherCode or null}; at begins a one-hour interval. Temperature is
+Celsius at 2 m, in [-100,70]. Wind gusts are km/h in [0,300]. Precipitation is mm/h in [0,500]. Probability is percentage [0,100]. weatherCode is an integer WMO weather code in [0,99],
+null when unavailable. Missing optional measurements remain null. Missing provider temperatures invalidate a complete
+refresh; they never become zero.
 
 Additional publication checks:
 
@@ -269,61 +281,72 @@ Additional publication checks:
    cycle or null, including its updatedAt. rule_version equals ruleSetVersion;
    generation_method equals generation.method. template has null modelId and
    promptVersion; llm requires both. Snapshot matched rule codes exist in that
-   exact versioned rule set, even though the set is stored in code.
-6. evaluated requires non-null risk and recommendation. Other states require both
-   null and an explanatory reason. valid_until must be after generated_at.
+   exact versioned rule set or farm custom rules.
+6. evaluated requires non-null risk and non-empty recommended_actions (1–10 items).
+   Other states require null risk, empty recommended_actions, and an explanatory reason. valid_until must be after generated_at.
 
 ## Event normalization and risk rules
 
-Use one event per **UTC date and source scope**. The adapter's key is exactly:
+Use one event per **UTC date, hazard kind, and source scope**. The adapter's key is exactly:
 
-- Demo: `demo:frost:YYYY-MM-DD` (one shared synthetic forecast for the farm).
-- Live: `open_meteo:frost:<plot UUID>:YYYY-MM-DD` (one forecast sampling location).
+- Demo: `demo:<kind>:YYYY-MM-DD` (one shared synthetic forecast for the farm).
+- Live: `open_meteo:<kind>:<plot UUID>:YYYY-MM-DD` (one forecast sampling location).
 
-Include a day only if at least one hourly temperature is <= 0°C. starts_at is the
-first qualifying hour; ends_at is the last qualifying hour plus one hour. These
-bounds enclose the risk window, not necessarily continuous frost. Cancelled rows
+Qualifying hazard thresholds:
+- `frost`: at least one hourly interval has `temperatureC <= 0°C`.
+- `extreme-heat`: at least one hourly interval has `temperatureC >= 35°C`.
+- `severe-storm`: at least one hourly interval has `windGustKmh >= 60` or `precipitationMm >= 25`.
+- `hail`: Open-Meteo WMO weather code 96 or 99 (thunderstorm with hail).
+  See the [provider variable reference](https://open-meteo.com/en/docs#hourly-weather-variables).
+
+starts_at is the first qualifying hour; ends_at is the last qualifying hour plus one hour. These
+bounds enclose the risk window, not necessarily continuous hazard conditions. Cancelled rows
 retain their last active starts_at/ends_at while replacing evidence and status. Rules calculate
 consecutive hours from the evidence, never from ends_at minus starts_at. Changes
-to hours/bounds within the date retain the same event ID; a different date is a
-different event. This is a demo grouping policy, not regional storm correlation.
+to hours/bounds within the date retain the same event ID; a different date or hazard kind is a
+different event.
 
-RiskRule and RuleSet are defined in the payload field tables. Evaluate the
-seeded open cycle only; the MVP has no scheduled crop transitions. For each rule:
+RiskRule and RuleSet are defined in the payload field tables. The application evaluates rules
+via the `RuleProvider` pattern:
+1. Base system rules (e.g. `demo-v1`) are merged with `farms.custom_rules`.
+2. A custom rule with the same `code` overrides the system rule of the same code.
+3. The evaluation engine is a pure, deterministic function receiving the merged ruleset.
+
+Evaluate the seeded open cycle only; the MVP has no scheduled crop transitions. For each rule:
 match crop and stage, require declared stage_as_of <= the event's local start
 date, and require its age on that date <= stageMaxAgeDays. Height must equal the
 rule's height. A rule fires when at least minimumConsecutiveHours consecutive
-hour intervals have temperatureC <= thresholdC. Never replace 2 m readings with
+hour intervals satisfy the rule's meteorological thresholds. Never replace 2 m readings with
 crop-apex readings. No growth-stage estimation is performed.
 
-All matching rules use the same evidence. Choose greatest risk (high > moderate
+All matching rules use the same evidence. Choose greatest risk (critical > high > moderate
 > low), then lexicographically smallest rule code for ties. Save all firing codes
-sorted lexicographically, and the winning reason/recommendation. Rule codes must
-be unique within the rule set. State precedence:
+sorted lexicographically, the winning reason, and the winning recommended_actions array. Rule codes must
+be unique within the effective rule set. State precedence:
 cancelled event → no_applicable_rule; missing crop/stage or stale stage for an
 otherwise matching rule → insufficient_data; no eligible/firing rule →
 no_applicable_rule; otherwise evaluated. No applicable rule does not mean safe.
 
 Use this fully synthetic initial rule set, version `demo-v1`:
 
-| Rule code | Crop/stage | Threshold | Consecutive hours | Stage age max | Risk |
+| Rule code | Hazard / Crop / stage | Threshold | Consecutive hours | Stage age max | Risk |
 | --- | --- | --- | --- | --- | --- |
-| demo-maize-v3 | maize / V3 | -1°C at 2 m | 1 | 14 days | moderate |
-| demo-maize-v6 | maize / V6 | -1°C at 2 m | 1 | 14 days | high |
-| demo-soybean-r4 | soybean / R4 | -1°C at 2 m | 1 | 14 days | high |
+| demo-maize-v3 | frost / maize / V3 | -1°C at 2 m | 1 | 14 days | moderate |
+| demo-maize-v6 | frost / maize / V6 | -1°C at 2 m | 1 | 14 days | high |
+| demo-soybean-r4 | frost / soybean / R4 | -1°C at 2 m | 1 | 14 days | high |
+| demo-maize-heat | extreme-heat / maize / VT | 35°C at 2 m | 2 | 14 days | critical |
+| demo-storm-v | severe-storm / maize / V6 | wind >= 70 km/h | 1 | 14 days | high |
 
-All three have reviewState=synthetic and evidenceUrl=null. Use reasonTemplate
-`Escenario sintético: la regla {code} coincide.` and recommendationTemplate
-`Demostración: revisar el lote; no es asesoramiento agronómico.` Substitute only
-{code}; this is not an arbitrary template language. Other supported stages have
-no demo rule. These values demonstrate UI differentiation and are **not validated
+All synthetic rules have reviewState=synthetic and evidenceUrl=null. Use reasonTemplate
+`Escenario sintético: la regla {code} coincide.` and recommendedActionsTemplates
+`["Demostración: revisar el lote; no es asesoramiento agronómico."]`. Substitute only
+{code}. Other supported stages have no demo rule. These values demonstrate UI differentiation and are **not validated
 agronomic thresholds**. Live evaluation permits approved rules with evidence URLs
-only; if none exist, live events appear with no_applicable_rule and null risk.
+only; if none exist, live events appear with no_applicable_rule, empty recommended_actions, and null risk.
 
 The default generation method is template. Optional LLM rewriting accepts only
-{reason,recommendation} strings with the same limits, cannot change risk, and
-falls back to the template on timeout/invalid output. Do not claim that wording
-alone satisfies the source document's AI-core track requirements.
+{reason,recommendedActions} with the same limits, cannot change risk, and
+falls back to the template on timeout/invalid output.
 
 ## Refresh transaction protocol
 
@@ -345,8 +368,8 @@ refresh does all work; there are no job IDs, 202 responses, or asynchronous queu
    preserving IDs/created_at. Reconcile only the complete supplied date/location
    coverage. Cancel an existing upcoming/ongoing event only if its **whole prior
    interval** is covered by newer evidence with no qualifying hours. Replace its
-   alert with no_applicable_rule, reason `Forecast withdrawn by newer data.`,
-   null risk/recommendation and the updated evidence. A partial window never
+    alert with no_applicable_rule, reason `Forecast withdrawn by newer data.`,
+    null risk/empty recommended_actions and the updated evidence. A partial window never
    cancels an event it cannot fully evaluate. Preserve recent/unaffected rows.
 5. Remove events whose ends_at <= publication time minus seven days, cascading
    their current alerts. Validate retained counts, relationships and payload
@@ -393,15 +416,16 @@ refresh is initiated. The client invokes refresh and then reloads the dashboard.
 DashboardResponse contains exactly schemaVersion, asOf, farm, plots, basemap,
 forecast, events, monitoring. Read all DB data under one consistent snapshot.
 
-- Farm omits owner_id and internal timestamps; boundary_geojson becomes boundary.
+- Farm omits owner_id and internal timestamps; boundary_geojson becomes boundary;
+  custom_rules becomes customRules.
   Plot omits farm_id; includes samplePoint and activeCropCycle or null. CropCycle
   exposes updatedAt for context comparison; created_at is not a public field.
 - forecast is the stored ForecastSummary, including per-plot source and hourly
   data; null before success. No generated satellite bytes are included.
 - EventCard includes source from its row/evidence, evidence, and alerts for its
   plot IDs. PlotAlert exposes all current evaluation data except farm_id and DB
-  created_at/updated_at; inputSnapshot provides the evidence. source_event_key
-  remains an internal ingestion key.
+  created_at/updated_at; inputSnapshot provides the evidence; recommended_actions becomes
+  recommendedActions. source_event_key remains an internal ingestion key.
 - temporalState: upcoming if asOf < startsAt; ongoing if startsAt <= asOf < endsAt;
   recent otherwise. Sort ongoing first, then upcoming, then recent; each of the
   first two groups uses startsAt ascending, recent descending; UUID ascending
@@ -410,7 +434,7 @@ forecast, events, monitoring. Read all DB data under one consistent snapshot.
   isStale is true when asOf >= validUntil, current rule-set version differs, or
   the snapshot's crop-cycle ID/updatedAt differs from the current open cycle
   (including null/non-null changes). Keep the old values visible as stale evidence;
-  they must not drive current recommendations. Cancelled risk never drives action.
+  they must not drive current recommended actions. Cancelled risk never drives action.
 - Monitoring status precedence: non-null lastErrorCode → failed; null forecast →
   never_refreshed; expired forecast deadline or any stale non-recent active alert
   → stale; otherwise fresh. forecastValidUntil is the minimum deadline across
@@ -453,6 +477,19 @@ cancellation clearing current risk; cross-owner/cross-farm denial; limits and
 freshness derivations. Run pnpm check after application changes, and inspect the
 three panels in a browser. This document is a reference, not completed runtime code.
 
+### Implemented weather adapter
+
+The weather adapter slice exposes only `fetchOpenMeteoPlotForecast` and
+`detectThreatEvents`. Fetch performs one request with an eight-second deadline
+including body consumption; failures propagate. Detection returns event identity,
+kind, title, bounds, and evidence; source metadata remains in `evidence.source`.
+The shared forecast and evidence contracts are also used by dashboard reads.
+The adapter returns data without storing it or assigning crop risk. Refresh HTTP
+routes, farm-wide aggregation/publication, and demo generation belong to their
+consuming slices. SMN integration, automatic retries, and live-to-demo fallback
+are outside this slice. Missing wind, rain, probability, or weather-code values
+remain null; invalid temperatures or incomplete hourly coverage reject the fetch.
+
 A real farmer pilot requires reviewed agronomic rules and provider permissions
 plus monitoring reliability, history and notification design beyond this MVP.
 
@@ -475,8 +512,8 @@ Additional conditional validation:
 - EventEvidence.scope=farm_demo requires demo source and null samplePoint;
   plot_forecast requires open_meteo, exactly one plot ID and non-null samplePoint.
 - Generation.method=template requires null modelId/promptVersion; llm requires
-  both. PlotAlert.evaluated requires riskLevel/recommendation; other states
-  require both null.
+  both. PlotAlert.evaluated requires riskLevel and non-empty recommendedActions (1–10 items);
+  other states require null riskLevel and empty recommendedActions.
 - Basemap uses exactly one of the two alternatives below. Available templates
   require {z}, {x}, {y} and minZoom <= maxZoom.
 - RiskRule stages must belong to its crop. Approved rules require a non-null
@@ -514,6 +551,10 @@ Additional conditional validation:
 | --- | --- | --- | --- |
 | at | Instant | required | — |
 | temperatureC | number | required | -100–70 |
+| windGustKmh | number or null | required | 0–300; — |
+| precipitationMm | number or null | required | 0–500; — |
+| precipitationProbability | integer or null | required | 0–100; — |
+| weatherCode | integer or null | required | WMO weather code, 0–99; null when unavailable |
 
 ### PlotForecast
 
@@ -560,7 +601,7 @@ Additional conditional validation:
 | samplePoint | Point or null | required | —; — |
 | source | Source | required | — |
 | temperatureHeightM | 2 (constant) | required | — |
-| detectionThresholdC | 0 (constant) | required | — |
+| detectionThresholdC | number or null | required | 0 for frost; 35 for extreme-heat; null for severe-storm/hail |
 | hours | array of ForecastHour | required | 1–24 items; each item: — |
 
 ### EventSnapshot
@@ -603,7 +644,7 @@ Additional conditional validation:
 | assessmentState | AssessmentState | required | — |
 | riskLevel | RiskLevel or null | required | —; — |
 | reason | text | required | 1–1000 characters |
-| recommendation | text or null | required | 1–1000 characters; — |
+| recommendedActions | array of text | required | 0–10 items; each item: 1–1000 characters |
 | ruleVersion | text | required | 1–100 characters |
 | generatedAt | Instant | required | — |
 | validUntil | Instant | required | — |
@@ -624,6 +665,7 @@ Additional conditional validation:
 | boundary | Polygon | required | — |
 | declaredAreaHa | number | required | 0.01–1000000 |
 | dataVersion | integer | required | 1–2147483647 |
+| customRules | array of RiskRule | required | 0–10 items |
 
 ### Plot
 
@@ -659,7 +701,7 @@ Additional conditional validation:
 | Field | Type | Presence | Validation |
 | --- | --- | --- | --- |
 | id | Id | required | — |
-| kind | frost | required | — |
+| kind | EventKind | required | frost, severe-storm, hail, extreme-heat |
 | title | text | required | 1–160 characters |
 | startsAt | Instant | required | — |
 | endsAt | Instant | required | — |
@@ -667,7 +709,7 @@ Additional conditional validation:
 | temporalState | upcoming, ongoing, recent | required | — |
 | source | Source | required | — |
 | evidence | EventEvidence | required | — |
-| alerts | array of PlotAlert | required | 1–10 items; each item: — |
+| alerts | array of PlotAlert | required | 0–10 items; each item: — |
 
 ### Monitoring
 
@@ -686,7 +728,7 @@ Additional conditional validation:
 | schemaVersion | 1 (constant) | required | — |
 | asOf | Instant | required | — |
 | farm | Farm | required | — |
-| plots | array of Plot | required | 1–10 items; each item: — |
+| plots | array of Plot | required | 0–10 items; each item: — |
 | basemap | Basemap | required | — |
 | forecast | ForecastSummary or null | required | —; — |
 | events | array of EventCard | required | 0–50 items; each item: — |
@@ -732,17 +774,20 @@ Additional conditional validation:
 | Field | Type | Presence | Validation |
 | --- | --- | --- | --- |
 | code | text | required | 1–100 characters |
+| hazardKind | EventKind | required | frost, severe-storm, hail, extreme-heat |
 | cropCode | CropCode | required | — |
 | stageCodes | array of StageCode | required | 1–8 items; unique values; each item: — |
 | temperatureHeightM | 2 (constant) | required | — |
-| thresholdC | number | required | -100–0 |
+| thresholdC | number or null | required | -100–70; — |
+| windGustThresholdKmh | number or null | required | 0–300; — |
+| precipitationThresholdMm | number or null | required | 0–500; — |
 | minimumConsecutiveHours | integer | required | 1–24 |
 | stageMaxAgeDays | integer | required | 1–30 |
-| riskLevel | RiskLevel | required | — |
+| riskLevel | RiskLevel | required | low, moderate, high, critical |
 | reviewState | synthetic, approved | required | — |
 | evidenceUrl | text or null | required | 0–2048 characters; uri; HTTPS only; — |
 | reasonTemplate | text | required | 1–1000 characters |
-| recommendationTemplate | text | required | 1–1000 characters |
+| recommendedActionTemplates | array of text | required | 1–10 items; each item: 1–1000 characters |
 
 ### RuleSet
 

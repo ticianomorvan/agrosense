@@ -63,7 +63,7 @@ export type Database = {
           farm_id: string;
           source_code: string;
           source_event_key: string;
-          kind: string;
+          kind: "frost" | "severe-storm" | "hail" | "extreme-heat";
           title: string;
           starts_at: string;
           ends_at: string;
@@ -81,7 +81,7 @@ export type Database = {
           farm_id: string;
           source_code: string;
           source_event_key: string;
-          kind?: string;
+          kind?: "frost" | "severe-storm" | "hail" | "extreme-heat";
           title: string;
           starts_at: string;
           ends_at: string;
@@ -99,7 +99,7 @@ export type Database = {
           farm_id?: string;
           source_code?: string;
           source_event_key?: string;
-          kind?: string;
+          kind?: "frost" | "severe-storm" | "hail" | "extreme-heat";
           title?: string;
           starts_at?: string;
           ends_at?: string;
@@ -194,9 +194,9 @@ export type Database = {
           plot_id: string;
           event_id: string;
           assessment_state: string;
-          risk_level: string | null;
+          risk_level: "low" | "moderate" | "high" | "critical" | null;
           reason: string;
-          recommendation: string | null;
+          recommended_actions: Json;
           input_snapshot: Json;
           rule_version: string;
           generated_at: string;
@@ -211,9 +211,9 @@ export type Database = {
           plot_id: string;
           event_id: string;
           assessment_state: string;
-          risk_level?: string | null;
+          risk_level?: "low" | "moderate" | "high" | "critical" | null;
           reason: string;
-          recommendation?: string | null;
+          recommended_actions?: Json;
           input_snapshot: Json;
           rule_version: string;
           generated_at: string;
@@ -228,9 +228,9 @@ export type Database = {
           plot_id?: string;
           event_id?: string;
           assessment_state?: string;
-          risk_level?: string | null;
+          risk_level?: "low" | "moderate" | "high" | "critical" | null;
           reason?: string;
-          recommendation?: string | null;
+          recommended_actions?: Json;
           input_snapshot?: Json;
           rule_version?: string;
           generated_at?: string;
@@ -306,7 +306,12 @@ export type Database = {
       };
     };
     Views: { [_ in never]: never };
-    Functions: { [_ in never]: never };
+    Functions: {
+      get_farm_dashboard_snapshot: {
+        Args: { p_farm_id: string };
+        Returns: Json;
+      };
+    };
     Enums: { [_ in never]: never };
     CompositeTypes: { [_ in never]: never };
   };

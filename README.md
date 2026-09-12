@@ -33,6 +33,13 @@ pnpm preview  # built SPA + real local Worker at http://127.0.0.1:8787
 - `apps/api`: Hono routes and Wrangler configuration.
 - `packages/contracts`: browser-safe shared Zod schemas and types.
 
+## Weather adapter
+
+The backend includes authenticated dashboard reads and a standalone Open-Meteo
+forecast adapter with frost, heat, severe-storm, and hail detection. See the
+[implemented adapter scope](docs/domain-model.md#implemented-weather-adapter).
+Fetching is not wired to an HTTP refresh route or persistence.
+
 ## Deployment
 
 After selecting the intended Cloudflare account, authenticate with

@@ -67,8 +67,12 @@ Never put a secret/service-role key in Vite variables or a browser bundle.
 
 Shared contracts stay browser-safe. Database row types live in the API; product
 response projections belong in shared Zod contracts. The session endpoint proves
-the authentication boundary. Demo imports, product routes, mutation RPCs, forecast
-adapters, and sign-in UI are subsequent feature slices.
+the authentication boundary. The authenticated dashboard route reads stored farm
+snapshots. The [weather adapter](domain-model.md#implemented-weather-adapter)
+fetches and normalizes Open-Meteo data and detects hazards using the same forecast
+and evidence contracts as the dashboard. It does not publish forecasts.
+Demo imports, cultivation mutation RPCs, refresh/publication, and sign-in UI remain
+subsequent feature slices.
 
 ## References
 
