@@ -1,7 +1,9 @@
 import type { CropCode, SatellitePreview } from "@agrosense/contracts";
 import { useQuery } from "@tanstack/react-query";
 import {
+  Component,
   lazy,
+  type ReactNode,
   Suspense,
   useCallback,
   useEffect,
@@ -14,7 +16,6 @@ import {
   SelectField,
   StatusLabel,
 } from "../../components/ui";
-import { MapBoundary } from "../../components/ui/MapBoundary";
 import { SatelliteControls } from "../satellite/SatelliteControls";
 import { useRiskClock } from "./clock";
 import { FieldDetails } from "./FieldDetails";
@@ -104,7 +105,9 @@ export function FieldOverview({ source }: { source: FarmDataSource }) {
       </div>
       <div className="workspace-status" role="status">
         {data.farm.dataMode === "demo" && (
-          <StatusLabel tone="info">Demonstration data</StatusLabel>
+          <StatusLabel tone="info">
+            Demonstration weather and risk data
+          </StatusLabel>
         )}
         <span>
           {data.monitoring.status === "never_refreshed"
@@ -117,7 +120,7 @@ export function FieldOverview({ source }: { source: FarmDataSource }) {
         )}
       </div>
       <div className="phone-view-switch">
-        <Button onClick={() => setPhoneMap((v) => !v)} aria-pressed={phoneMap}>
+        <Button onClick={() => setPhoneMap((v) => !v)}>
           {phoneMap ? "Back to priorities" : "View farm map"}
         </Button>
       </div>
@@ -160,7 +163,6 @@ export function FieldOverview({ source }: { source: FarmDataSource }) {
               data={data}
               now={now}
               plots={plots}
-              selectedId={selectedId}
               onSelect={select}
               onClear={() => setCrop("all")}
             />
@@ -169,4 +171,24 @@ export function FieldOverview({ source }: { source: FarmDataSource }) {
       </div>
     </main>
   );
+}
+
+class MapBoundary extends Component<
+  { children: ReactNode },
+  { failed: boolean }
+> {
+  state = { failed: false };
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+  render() {
+    return this.state.failed ? (
+      <DataState title="Map unavailable">
+        Use the field list to review your fields. Reload the page to try loading
+        the map again.
+      </DataState>
+    ) : (
+      this.props.children
+    );
+  }
 }

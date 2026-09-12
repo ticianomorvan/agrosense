@@ -23,7 +23,6 @@ local runtime checks for API responses and SPA fallback.
 Use Node 24 and the pnpm version pinned in package.json. Exact dependency
 resolutions live in pnpm-lock.yaml. The frontend foundation uses TanStack Query for server state, Leaflet for maps,
 and a small local component library styled with the fixed plain CSS tokens.
-See [frontend patterns](frontend-foundation.md) and [Sentinel-2](sentinel-2.md).
 Routing is deferred while there is only one workspace screen.
 
 ## Layout and implementation order
@@ -75,3 +74,26 @@ slices; crop-cycle mutation is implemented by the API route and Supabase RPC.
 - [Hono on Workers](https://hono.dev/docs/getting-started/cloudflare-workers)
 - [Workers SPA routing](https://developers.cloudflare.com/workers/static-assets/routing/single-page-application/)
 - [Supabase Data API](https://supabase.com/docs/guides/api)
+
+## Field workspace integration
+
+`FieldOverview` consumes a `FarmDataSource`; use
+`createLiveSource(userId, farmId, getAccessToken)` after session/farm selection is
+available. Remount the overview on identity/farm changes and clear the QueryClient
+on sign-out. Tokens stay in memory; requests are same-origin, cancellable and
+validated with shared Zod schemas. Failed requests never substitute sample data.
+Risk expires on assessment/event deadlines and tab resume without a network fetch.
+Shared controls use semantic HTML and the fixed plain CSS tokens; maps load lazily.
+
+The authenticated `POST /api/farms/:farmId/satellite` accepts `{from, to}` UTC
+instants within a past window of at most 31 days. It uses owner-scoped stored farm
+bounds and server-only `COPERNICUS_CLIENT_ID` / `COPERNICUS_CLIENT_SECRET` secrets.
+It returns the newest Sentinel-2 L2A true-color acquisition as a georeferenced PNG
+with scene/source/time metadata, or an explicit unavailable state. Missing pixels
+are transparent; scene cloud cover is not plot cloud coverage or crop risk.
+
+The Worker uses Copernicus [Catalog and Process APIs](https://documentation.dataspace.copernicus.eu/APIs/SentinelHub/Overview.html).
+Requests have 8-second deadlines and bounded bodies; redirects are rejected.
+Preview bounds are limited to 0.25 degrees per axis and output to 1024×1024 pixels.
+Private responses are not stored. Production rate limiting and shared server caching
+remain necessary before scaling this preview beyond the authenticated MVP.

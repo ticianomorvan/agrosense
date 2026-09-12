@@ -18,7 +18,7 @@ pnpm dev
 ```
 
 Open http://localhost:5173. Vite forwards `/api` requests to
-Wrangler at http://127.0.0.1:8787; `/api/health` remains available for diagnostics. The starter health screen needs no cloud credentials. Authenticated API routes
+Wrangler at http://127.0.0.1:8787; `/api/health` remains available for diagnostics. Authenticated API routes
 use the Supabase settings in `apps/api/.env`. The initial web build supplies Wrangler's static asset directory;
 Vite provides live frontend changes at port 5173.
 
@@ -55,12 +55,7 @@ out of Git and client bundles.
 
 ## Frontend workspace
 
-Run `pnpm dev`, open the SPA and choose **Explore demo farm**. The demonstration
-contains synthetic plot boundaries and crop context; weather and imagery remain
-explicitly unavailable. The map supports plot selection, crop filtering and a
-phone-friendly alternate view. No real farm data or provider credentials are
-required for the demo.
-
-See [frontend patterns](docs/frontend-foundation.md) for the local UI library and
-TanStack Query adapter, and [Sentinel-2 integration](docs/sentinel-2.md) for the
-authenticated imagery route, configuration and remaining integration work.
+The field overview accepts a `FarmDataSource`; authenticated session and farm
+selection still need to be connected. Until then the app shows an unavailable
+state. See [stack and integration notes](docs/stack.md) for the data boundary and
+Sentinel-2 configuration.

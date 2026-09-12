@@ -44,7 +44,8 @@ export function SelectField({
   children,
   ...props
 }: SelectHTMLAttributes<HTMLSelectElement> & { label: string }) {
-  const id = useId();
+  const generatedId = useId();
+  const id = props.id ?? generatedId;
   return (
     <div className="select-field">
       <label htmlFor={id}>{label}</label>
@@ -70,7 +71,7 @@ export function DataState({
       <p className="data-state__title" role="status">
         {title}
       </p>
-      {children && <p>{children}</p>}
+      {children != null && <div>{children}</div>}
       {retry && (
         <Button onClick={retry} pending={pending}>
           Retry

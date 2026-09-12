@@ -10,14 +10,12 @@ export function FieldList({
   data,
   now,
   plots,
-  selectedId,
   onSelect,
   onClear,
 }: {
   data: DashboardResponse;
   now: number;
   plots: Plot[];
-  selectedId: string | null;
   onSelect: (id: string) => void;
   onClear: () => void;
 }) {
@@ -40,14 +38,7 @@ export function FieldList({
           {plots.map((plot) => {
             const status = plotStatus(data, plot.id, now);
             return (
-              <li
-                key={plot.id}
-                className={
-                  plot.id === selectedId
-                    ? "field-list__item is-selected"
-                    : "field-list__item"
-                }
-              >
+              <li key={plot.id} className="field-list__item">
                 <h3>{plot.name}</h3>
                 <p className="metadata">
                   {plot.activeCropCycle
@@ -63,7 +54,6 @@ export function FieldList({
                 <Button
                   id={`view-field-${plot.id}`}
                   onClick={() => onSelect(plot.id)}
-                  aria-pressed={plot.id === selectedId}
                   aria-label={`View field: ${plot.name}`}
                 >
                   View field

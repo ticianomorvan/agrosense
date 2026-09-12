@@ -156,9 +156,7 @@ export default function FieldMap({
         <span className="legend-selected" aria-hidden="true" /> Selected field
       </div>
       <p className="metadata">
-        {data.farm.dataMode === "demo"
-          ? "Demonstration · Synthetic field boundaries, not cadastral data."
-          : "Declared field boundaries."}{" "}
+        Declared field boundaries.{" "}
         {satellite?.status === "available" && !imageError
           ? "True color · Missing pixels are transparent."
           : "Imagery unavailable · Field outlines remain visible."}

@@ -114,8 +114,7 @@ export function SatelliteControls({
       )}
       {!source.loadSatellite && (
         <p className="metadata">
-          Imagery unavailable in the offline demo. It requires an authenticated
-          farm and a configured Sentinel-2 connection.
+          Satellite imagery is unavailable for this farm.
         </p>
       )}
       {query.isError && (

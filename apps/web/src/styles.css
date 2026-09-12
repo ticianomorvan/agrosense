@@ -347,7 +347,8 @@ select {
 .data-state__title {
   font-weight: 600;
 }
-.data-state > p {
+.data-state > p,
+.data-state > div {
   max-width: 60ch;
 }
 .phone-view-switch {

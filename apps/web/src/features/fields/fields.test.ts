@@ -4,23 +4,86 @@ import {
 } from "@agrosense/contracts";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { subscribeToRiskClock } from "./clock";
-import { demoDashboard } from "./demo";
 import { currentAlert, formatInstant, plotStatus } from "./presentation";
 import { createLiveSource, dashboardOptions } from "./queries";
 
+function rectangle(west: number, south: number, east: number, north: number) {
+  return {
+    type: "Polygon" as const,
+    coordinates: [
+      [
+        [west, south],
+        [east, south],
+        [east, north],
+        [west, north],
+        [west, south],
+      ],
+    ],
+  };
+}
+// Synthetic input used only by tests.
+const observed = "2026-09-12T06:00:00Z";
+const plotIds = ["22222222-2222-4222-8222-222222222221"];
+const dashboardFixture = dashboardResponseSchema.parse({
+  schemaVersion: 1,
+  asOf: observed,
+  farm: {
+    id: "11111111-1111-4111-8111-111111111111",
+    name: "Test farm",
+    province: "Córdoba",
+    locality: null,
+    timezone: "America/Argentina/Cordoba",
+    dataMode: "live",
+    boundary: rectangle(-64.17, -31.47, -64.154, -31.456),
+    declaredAreaHa: 235,
+    dataVersion: 1,
+  },
+  plots: [
+    {
+      id: plotIds[0],
+      name: "North field",
+      boundary: rectangle(-64.17, -31.463, -64.154, -31.456),
+      samplePoint: { type: "Point", coordinates: [-64.162, -31.4595] },
+      declaredAreaHa: 118,
+      activeCropCycle: {
+        id: "33333333-3333-4333-8333-333333333331",
+        plotId: plotIds[0],
+        cropCode: "maize",
+        seasonLabel: "2026/27",
+        sownOn: null,
+        stageCode: "V6",
+        stageAsOf: "2026-09-11",
+        endedOn: null,
+        updatedAt: observed,
+      },
+    },
+  ],
+  basemap: {
+    status: "unavailable",
+    reason: "Satellite imagery has not been loaded.",
+  },
+  forecast: null,
+  events: [],
+  monitoring: {
+    status: "never_refreshed",
+    lastAttemptAt: null,
+    lastSuccessAt: null,
+    lastErrorCode: null,
+    forecastValidUntil: null,
+  },
+});
+
 beforeEach(() => {
   vi.useFakeTimers();
-  vi.setSystemTime(new Date(demoDashboard.asOf));
+  vi.setSystemTime(new Date(dashboardFixture.asOf));
 });
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
-it("keeps the demo honest about missing weather and risk", () => {
-  const data = dashboardResponseSchema.parse(demoDashboard);
-  expect(data.farm.dataMode).toBe("demo");
-  expect(data.plots).toHaveLength(3);
+it("presents missing weather and risk as unavailable", () => {
+  const data = dashboardResponseSchema.parse(dashboardFixture);
   expect(data.forecast).toBeNull();
   for (const plot of data.plots)
     expect(plotStatus(data, plot.id)).toMatchObject({
@@ -31,12 +94,12 @@ it("keeps the demo honest about missing weather and risk", () => {
   expect(formatInstant(null)).toBe("Unavailable");
 });
 it("rejects a crop-stage mismatch and missing nullable properties", () => {
-  const wrong = structuredClone(demoDashboard);
+  const wrong = structuredClone(dashboardFixture);
   const cycle = wrong.plots[0]?.activeCropCycle;
   if (!cycle) throw new Error("Missing fixture crop cycle");
   cycle.stageCode = "R4";
   expect(dashboardResponseSchema.safeParse(wrong).success).toBe(false);
-  const { forecast: _, ...incomplete } = demoDashboard;
+  const { forecast: _, ...incomplete } = dashboardFixture;
   expect(dashboardResponseSchema.safeParse(incomplete).success).toBe(false);
 });
 it("partitions private dashboard caches by owner and farm", () => {
@@ -74,7 +137,7 @@ it("does not present expired, stale or cancelled assessments as current risk", (
 });
 
 function createAlertDashboard() {
-  const data = structuredClone(demoDashboard);
+  const data = structuredClone(dashboardFixture);
   const plot = data.plots[0];
   if (!plot) throw new Error("Missing fixture plot");
   const source = {

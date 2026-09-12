@@ -46,14 +46,3 @@ export function createLiveSource(
       ),
   };
 }
-export async function createDemoSource(): Promise<FarmDataSource> {
-  const { demoDashboard } = await import("./demo");
-  return {
-    scope: "local-demo",
-    farmId: demoDashboard.farm.id,
-    loadDashboard: async (signal) => {
-      signal.throwIfAborted();
-      return dashboardResponseSchema.parse(demoDashboard);
-    },
-  };
-}

@@ -1,20 +1,23 @@
-import { QueryClientProvider } from "@tanstack/react-query";
-import { StrictMode, useState } from "react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { Button, DataState } from "./components/ui";
+import { DataState } from "./components/ui";
 import { FieldOverview } from "./features/fields/FieldOverview";
-import {
-  createDemoSource,
-  type FarmDataSource,
-} from "./features/fields/queries";
-import { createQueryClient } from "./lib/query-client";
+import type { FarmDataSource } from "./features/fields/queries";
+import { shouldRetry } from "./lib/api";
 import "./styles.css";
 
-const queryClient = createQueryClient();
-function App() {
-  const [source, setSource] = useState<FarmDataSource>();
-  const [loadingDemo, setLoadingDemo] = useState(false);
-  const [demoError, setDemoError] = useState(false);
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 60_000,
+      retry: shouldRetry,
+      refetchOnWindowFocus: false,
+    },
+    mutations: { retry: false },
+  },
+});
+function App({ source }: { source?: FarmDataSource }) {
   return (
     <QueryClientProvider client={queryClient}>
       <a className="skip-link" href="#workspace-content">
@@ -34,31 +37,8 @@ function App() {
           <main className="workspace">
             <h1>Your field workspace</h1>
             <DataState title="Farm connection unavailable">
-              Your farm has not been connected in this frontend build. Explore
-              the demo to preview field selection and satellite controls.
+              Field information will appear when your farm is connected.
             </DataState>
-            <Button
-              variant="primary"
-              pending={loadingDemo}
-              onClick={async () => {
-                setLoadingDemo(true);
-                setDemoError(false);
-                try {
-                  setSource(await createDemoSource());
-                } catch {
-                  setDemoError(true);
-                } finally {
-                  setLoadingDemo(false);
-                }
-              }}
-            >
-              {loadingDemo ? "Opening demo…" : "Explore demo farm"}
-            </Button>
-            {demoError && (
-              <p role="alert">
-                The demo could not be loaded. Try opening it again.
-              </p>
-            )}
           </main>
         )}
       </div>
