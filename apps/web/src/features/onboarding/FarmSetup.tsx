@@ -7,8 +7,9 @@ import { type FormEvent, useId, useState } from "react";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { BoundaryFields } from "./BoundaryFields";
+import { BoundaryMapDrawer } from "./BoundaryMapDrawer";
 import { boundaryValues } from "./form-values";
-import { rectangleFromBounds } from "./geometry";
+import { type CoordinateBounds, rectangleFromBounds } from "./geometry";
 
 export function FarmSetup({
   createFarm,
@@ -23,6 +24,14 @@ export function FarmSetup({
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
   const [boundaryInvalid, setBoundaryInvalid] = useState(false);
+  const [manualCoordsOpen, setManualCoordsOpen] = useState(false);
+  const [coordinates, setCoordinates] = useState<CoordinateBounds>({
+    west: "",
+    south: "",
+    east: "",
+    north: "",
+  });
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (pending) return;
@@ -30,6 +39,7 @@ export function FarmSetup({
     const rectangle = rectangleFromBounds(boundaryValues(form, "farm"));
     if (!rectangle.ok) {
       setBoundaryInvalid(true);
+      setManualCoordsOpen(true);
       setError(rectangle.message);
       return;
     }
@@ -132,11 +142,48 @@ export function FarmSetup({
             />
           </label>
         </div>
-        <BoundaryFields
-          prefix="farm"
-          errorId={boundaryInvalid && error ? `${id}-error` : undefined}
-          invalid={boundaryInvalid}
-        />
+        <div className="space-y-4">
+          <div className="space-y-1">
+            <h2 className="text-base font-semibold text-foreground">
+              Farm boundary
+            </h2>
+            <p className="text-sm leading-normal text-muted-foreground">
+              Mark 4 corners on the satellite map by clicking or right-clicking.
+              Coordinates will calculate and populate automatically.
+            </p>
+          </div>
+          <BoundaryMapDrawer
+            bounds={coordinates}
+            onBoundsChange={setCoordinates}
+            disabled={pending}
+          />
+          <details
+            className="rounded-lg border border-border bg-card p-3"
+            open={manualCoordsOpen || boundaryInvalid}
+            onToggle={(e) => setManualCoordsOpen(e.currentTarget.open)}
+          >
+            <summary className="cursor-pointer font-semibold text-sm text-foreground flex items-center justify-between">
+              <span>Manual coordinate inputs (synced)</span>
+              <span className="text-xs text-muted-foreground font-normal">
+                {coordinates.west
+                  ? "Coordinates synced"
+                  : "Click to view or edit"}
+              </span>
+            </summary>
+            <div className="mt-3">
+              <BoundaryFields
+                prefix="farm"
+                values={coordinates}
+                onChange={(direction, value) =>
+                  setCoordinates((prev) => ({ ...prev, [direction]: value }))
+                }
+                errorId={boundaryInvalid && error ? `${id}-error` : undefined}
+                invalid={boundaryInvalid}
+                disabled={pending}
+              />
+            </div>
+          </details>
+        </div>
         {error && (
           <p id={`${id}-error`} role="alert">
             {error}

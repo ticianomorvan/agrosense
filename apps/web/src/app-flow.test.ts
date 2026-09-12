@@ -1,8 +1,17 @@
-import type { EventCard } from "@agrosense/contracts";
+import {
+  type EventCard,
+  type Polygon,
+  pointInPolygon,
+  polygonContainsPolygon,
+} from "@agrosense/contracts";
 import { describe, expect, it } from "vitest";
 import { routeFromPath, workspaceNeedsSignIn } from "./app/routing";
 import { timelineEventsForPlot } from "./features/events/timeline";
-import { rectangleFromBounds } from "./features/onboarding/geometry";
+import {
+  boundsFromPoints,
+  polygonFromPoints,
+  rectangleFromBounds,
+} from "./features/onboarding/geometry";
 
 describe("application route", () => {
   it.each([
@@ -59,6 +68,120 @@ describe("onboarding geometry", () => {
     [{ west: "-64.2", south: "-91", east: "-64.1", north: "-90.9" }],
   ])("rejects incomplete or reversed bounds", (bounds) => {
     expect(rectangleFromBounds(bounds).ok).toBe(false);
+  });
+
+  it("calculates bounding box from placed points", () => {
+    expect(boundsFromPoints([])).toBeNull();
+    expect(
+      boundsFromPoints([
+        { lat: -31.4, lng: -64.2 },
+        { lat: -31.4, lng: -64.1 },
+        { lat: -31.5, lng: -64.1 },
+      ]),
+    ).toBeNull();
+
+    const points = [
+      { lat: -31.4, lng: -64.2 },
+      { lat: -31.4, lng: -64.1 },
+      { lat: -31.5, lng: -64.1 },
+      { lat: -31.5, lng: -64.2 },
+    ];
+    const bounds = boundsFromPoints(points);
+    expect(bounds).toEqual({
+      west: "-64.200000",
+      east: "-64.100000",
+      south: "-31.500000",
+      north: "-31.400000",
+    });
+
+    expect(bounds).not.toBeNull();
+    if (!bounds) throw new Error("Expected bounds");
+    const rectangle = rectangleFromBounds(bounds);
+    expect(rectangle.ok).toBe(true);
+  });
+
+  it("builds a polygon from points", () => {
+    expect(polygonFromPoints([])).toBeNull();
+    expect(
+      polygonFromPoints([
+        { lat: -31.4, lng: -64.2 },
+        { lat: -31.4, lng: -64.1 },
+      ]),
+    ).toBeNull();
+
+    const points = [
+      { lat: -31.4, lng: -64.2 },
+      { lat: -31.4, lng: -64.1 },
+      { lat: -31.5, lng: -64.1 },
+      { lat: -31.5, lng: -64.2 },
+    ];
+    const polygon = polygonFromPoints(points);
+    expect(polygon).toEqual({
+      type: "Polygon",
+      coordinates: [
+        [
+          [-64.2, -31.4],
+          [-64.1, -31.4],
+          [-64.1, -31.5],
+          [-64.2, -31.5],
+          [-64.2, -31.4],
+        ],
+      ],
+    });
+  });
+
+  it("enforces plot points and boundary are contained inside the farm boundary", () => {
+    const farmBoundary: Polygon = {
+      type: "Polygon",
+      coordinates: [
+        [
+          [-64.2, -31.5],
+          [-64.1, -31.5],
+          [-64.1, -31.4],
+          [-64.2, -31.4],
+          [-64.2, -31.5],
+        ],
+      ],
+    };
+
+    // Point inside farm
+    expect(pointInPolygon([-64.15, -31.45], farmBoundary.coordinates)).toBe(
+      true,
+    );
+    // Point outside farm
+    expect(pointInPolygon([-64.25, -31.45], farmBoundary.coordinates)).toBe(
+      false,
+    );
+
+    // Plot rectangle completely inside
+    const insidePlot = rectangleFromBounds({
+      west: "-64.18",
+      south: "-31.48",
+      east: "-64.12",
+      north: "-31.42",
+    });
+    if (!insidePlot.ok) throw new Error("Expected valid rectangle");
+    expect(
+      polygonContainsPolygon(
+        farmBoundary.coordinates,
+        insidePlot.boundary.coordinates,
+      ),
+    ).toBe(true);
+
+    // Plot rectangle extending outside
+    const outsidePlot = rectangleFromBounds({
+      west: "-64.25",
+      south: "-31.48",
+      east: "-64.15",
+      north: "-31.42",
+    });
+    if (!outsidePlot.ok) throw new Error("Expected valid rectangle");
+    expect(
+      polygonContainsPolygon(
+        farmBoundary.coordinates,
+        outsidePlot.boundary.coordinates,
+      ),
+    ).toBe(false);
   });
 });
 
