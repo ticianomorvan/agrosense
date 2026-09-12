@@ -100,7 +100,7 @@ const forecastSummarySchema = z.object({
   windowEnd: instantSchema,
   plots: z.array(plotForecastSchema).min(1).max(10),
 });
-const cropCycleSchema = z.object({
+export const cropCycleSchema = z.strictObject({
   id: z.uuid(),
   plotId: z.uuid(),
   cropCode: z.enum(["maize", "soybean"]),
@@ -111,6 +111,37 @@ const cropCycleSchema = z.object({
   endedOn: localDateSchema.nullable(),
   updatedAt: instantSchema,
 });
+export type CropCycle = z.infer<typeof cropCycleSchema>;
+
+export const updateCropCycleRequestSchema = z
+  .strictObject({
+    expectedDataVersion: z.number().int().min(1),
+    cropCode: z.enum(["maize", "soybean"]).optional(),
+    sownOn: localDateSchema.nullable().optional(),
+    stageCode: z.string().min(1).max(20).nullable().optional(),
+    stageAsOf: localDateSchema.nullable().optional(),
+  })
+  .refine(
+    (request) =>
+      Object.keys(request).some((key) => key !== "expectedDataVersion"),
+    "At least one crop-cycle field is required",
+  )
+  .refine(
+    (request) => "stageCode" in request === "stageAsOf" in request,
+    "stageCode and stageAsOf must be supplied together",
+  );
+export type UpdateCropCycleRequest = z.infer<
+  typeof updateCropCycleRequestSchema
+>;
+
+export const updateCropCycleResponseSchema = z.strictObject({
+  farmId: z.uuid(),
+  dataVersion: z.number().int().min(1),
+  cropCycle: cropCycleSchema,
+});
+export type UpdateCropCycleResponse = z.infer<
+  typeof updateCropCycleResponseSchema
+>;
 export const eventEvidenceSchema = z
   .strictObject({
     schemaVersion: z.literal(1),
