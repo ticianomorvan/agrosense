@@ -1,27 +1,8 @@
 import { z } from "zod";
+import { pointSchema, polygonSchema } from "./geometry";
+import { instantSchema } from "./time";
 
-export const instantSchema = z.iso.datetime();
 const name = z.string().trim().min(1).max(100);
-export const positionSchema = z.tuple([
-  z.number().min(-180).max(180),
-  z.number().min(-90).max(90),
-]);
-export const pointSchema = z.strictObject({
-  type: z.literal("Point"),
-  coordinates: positionSchema,
-});
-export const polygonSchema = z
-  .strictObject({
-    type: z.literal("Polygon"),
-    coordinates: z.array(z.array(positionSchema).min(4).max(5000)).length(1),
-  })
-  .refine(({ coordinates: [ring] }) => {
-    const first = ring?.[0];
-    const last = ring?.at(-1);
-    return !!first && !!last && first[0] === last[0] && first[1] === last[1];
-  }, "Polygon ring must be closed");
-export type Polygon = z.infer<typeof polygonSchema>;
-
 export const cropCodeSchema = z.enum(["maize", "soybean"]);
 export const cropStages = {
   maize: ["V3", "V6", "VT", "R1"],
@@ -92,3 +73,35 @@ export const plotSchema = z
 export type Farm = z.infer<typeof farmSchema>;
 export type Plot = z.infer<typeof plotSchema>;
 export type CropCode = z.infer<typeof cropCodeSchema>;
+
+export type CropCycle = z.infer<typeof cropCycleSchema>;
+
+export const updateCropCycleRequestSchema = z
+  .strictObject({
+    expectedDataVersion: z.number().int().min(1),
+    cropCode: cropCodeSchema.optional(),
+    sownOn: localDate.nullable().optional(),
+    stageCode: z.string().min(1).max(20).nullable().optional(),
+    stageAsOf: localDate.nullable().optional(),
+  })
+  .refine(
+    (request) =>
+      Object.keys(request).some((key) => key !== "expectedDataVersion"),
+    "At least one crop-cycle field is required",
+  )
+  .refine(
+    (request) => "stageCode" in request === "stageAsOf" in request,
+    "stageCode and stageAsOf must be supplied together",
+  );
+export type UpdateCropCycleRequest = z.infer<
+  typeof updateCropCycleRequestSchema
+>;
+
+export const updateCropCycleResponseSchema = z.strictObject({
+  farmId: z.uuid(),
+  dataVersion: z.number().int().min(1),
+  cropCycle: cropCycleSchema,
+});
+export type UpdateCropCycleResponse = z.infer<
+  typeof updateCropCycleResponseSchema
+>;

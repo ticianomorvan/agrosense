@@ -23,7 +23,7 @@ use the Supabase settings in `apps/api/.env`. The initial web build supplies Wra
 Vite provides live frontend changes at port 5173.
 
 ```sh
-pnpm check    # type checking, Biome, API tests, and production builds
+pnpm check    # type checking, Biome, API/web/database tests, and production builds
 pnpm preview  # built SPA + real local Worker at http://127.0.0.1:8787
 ```
 

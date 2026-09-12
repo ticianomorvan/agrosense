@@ -1,4 +1,8 @@
-import { polygonSchema, satelliteRequestSchema } from "@agrosense/contracts";
+import {
+  polygonSchema,
+  satelliteRequestSchema,
+  uuidSchema,
+} from "@agrosense/contracts";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { type ApiEnv, requireAuth } from "../lib/auth";
@@ -28,12 +32,7 @@ satelliteRoutes.post(
   async (c) => {
     c.header("Cache-Control", "private, no-store");
     const farmId = c.req.param("farmId");
-    if (
-      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-        farmId,
-      ) ||
-      new URL(c.req.url).search
-    )
+    if (!uuidSchema.safeParse(farmId).success || new URL(c.req.url).search)
       return c.json(
         {
           error: {

@@ -81,9 +81,6 @@
   --radius-md: var(--radius);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) * 2);
-  --radius-2xl: calc(var(--radius) * 1.8);
-  --radius-3xl: calc(var(--radius) * 2.2);
-  --radius-4xl: calc(var(--radius) * 2.6);
 }
 
 @layer base {
@@ -291,6 +288,13 @@
   .field-list__item h3,
   .priorities-panel h2 {
     overflow-wrap: anywhere;
+  }
+  .recommended-actions {
+    padding-left: var(--space-6);
+    overflow-wrap: anywhere;
+  }
+  .recommended-actions > * + * {
+    margin-top: var(--space-2);
   }
   .field-facts {
     margin: var(--space-6) 0;

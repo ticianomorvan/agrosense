@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { instantSchema } from "./land";
+import { instantSchema } from "./time";
 
 export const satelliteRequestSchema = z
   .strictObject({ from: instantSchema, to: instantSchema })

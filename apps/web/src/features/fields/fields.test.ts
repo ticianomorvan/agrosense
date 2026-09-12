@@ -1,5 +1,8 @@
 import {
+  compareInstants,
   dashboardResponseSchema,
+  deadlineMilliseconds,
+  forecastHourSchema,
   satelliteRequestSchema,
 } from "@agrosense/contracts";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -161,7 +164,16 @@ function createAlertDashboard() {
     source,
     temperatureHeightM: 2 as const,
     detectionThresholdC: 0 as const,
-    hours: [{ at: "2026-09-12T07:00:00Z", temperatureC: -1 }],
+    hours: [
+      {
+        at: "2026-09-12T07:00:00Z",
+        temperatureC: -1,
+        windGustKmh: null,
+        precipitationMm: null,
+        precipitationProbability: null,
+        weatherCode: null,
+      },
+    ],
   };
   const event = {
     id: "44444444-4444-4444-8444-444444444444",
@@ -185,7 +197,7 @@ function createAlertDashboard() {
           assessmentState: "evaluated",
           riskLevel: "high",
           reason: "Synthetic test reason",
-          recommendation: "Synthetic test recommendation",
+          recommendedActions: ["Synthetic test recommendation"],
           ruleVersion: "test",
           generatedAt: data.asOf,
           validUntil: "2026-09-12T07:00:00Z",
@@ -217,9 +229,9 @@ it("expires risk and recommendations when wall time reaches validUntil without a
   if (!alert) throw new Error("Missing test alert");
   const originalAsOf = data.asOf;
   vi.setSystemTime(Date.parse(alert.validUntil) - 1);
-  expect(currentAlert(data, alert.plotId)?.alert.recommendation).toBe(
+  expect(currentAlert(data, alert.plotId)?.alert.recommendedActions).toEqual([
     "Synthetic test recommendation",
-  );
+  ]);
   vi.advanceTimersByTime(1);
   expect(currentAlert(data, alert.plotId)).toBeUndefined();
   expect(plotStatus(data, alert.plotId)).toMatchObject({
@@ -307,7 +319,7 @@ it("preserves the supplied explanation and source for incomplete assessments", (
   if (!alert) throw new Error("Missing test assessment");
   alert.assessmentState = "insufficient_data";
   alert.riskLevel = null;
-  alert.recommendation = null;
+  alert.recommendedActions = [];
   alert.reason = "Declared growth stage is unavailable.";
   const status = plotStatus(data, alert.plotId);
   expect(status).toMatchObject({
@@ -347,4 +359,63 @@ it("notifies when forecast freshness expires even without alerts", () => {
   expect(changed).toHaveBeenCalledExactlyOnceWith(Date.now());
   stop();
   expect(vi.getTimerCount()).toBe(0);
+});
+
+it("ranks critical risk above high and retains multiple recommended actions", () => {
+  const data = createAlertDashboard();
+  const critical = structuredClone(data.events[0]);
+  const assessment = critical?.alerts[0];
+  if (!critical || !assessment) throw new Error("Missing test assessment");
+  critical.kind = "extreme-heat";
+  assessment.riskLevel = "critical";
+  assessment.recommendedActions = [
+    "First supplied action",
+    "Second supplied action",
+  ];
+  data.events.push(critical);
+  expect(plotStatus(data, assessment.plotId)).toMatchObject({
+    label: "Critical risk",
+    badgeVariant: "destructive",
+    isCurrent: true,
+  });
+  expect(
+    currentAlert(data, assessment.plotId)?.alert.recommendedActions,
+  ).toEqual(assessment.recommendedActions);
+});
+it("accepts empty farms and active events without assessments", () => {
+  const data = createAlertDashboard();
+  const event = data.events[0];
+  if (!event) throw new Error("Missing test event");
+  event.alerts = [];
+  expect(dashboardResponseSchema.parse(data).events[0]?.alerts).toEqual([]);
+  expect(
+    dashboardResponseSchema.parse({ ...dashboardFixture, plots: [] }).plots,
+  ).toEqual([]);
+});
+it("does not expire a PostgreSQL deadline before its fractional instant", () => {
+  const data = createAlertDashboard();
+  const alert = data.events[0]?.alerts[0];
+  if (!alert) throw new Error("Missing test alert");
+  data.asOf = "2026-09-12T07:00:00.123455Z";
+  alert.validUntil = "2026-09-12T07:00:00.123456Z";
+  vi.setSystemTime(Date.parse(data.asOf));
+  expect(currentAlert(data, alert.plotId)).toBeDefined();
+  expect(deadlineMilliseconds(alert.validUntil)).toBe(Date.now() + 1);
+  vi.advanceTimersByTime(1);
+  expect(currentAlert(data, alert.plotId)).toBeUndefined();
+  expect(
+    compareInstants("2026-09-12T07:00:00Z", "2026-09-12T07:00:00.000000Z"),
+  ).toBe(0);
+});
+it("rejects forecast samples offset from an exact hour by microseconds", () => {
+  expect(
+    forecastHourSchema.safeParse({
+      at: "2026-09-12T07:00:00.000001Z",
+      temperatureC: 1,
+      windGustKmh: null,
+      precipitationMm: null,
+      precipitationProbability: null,
+      weatherCode: null,
+    }).success,
+  ).toBe(false);
 });

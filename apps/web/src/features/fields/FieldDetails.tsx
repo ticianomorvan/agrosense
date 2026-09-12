@@ -7,7 +7,7 @@ import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import {
   assessmentSource,
-  currentAlert,
+  forecastFreshness,
   formatInstant,
   plotStatus,
 } from "./presentation";
@@ -25,7 +25,9 @@ export function FieldDetails({
 }) {
   const status = plotStatus(data, plot.id, now);
   const crop = plot.activeCropCycle;
-  const current = currentAlert(data, plot.id, now);
+  const actions = status.isCurrent
+    ? status.assessment?.alert.recommendedActions
+    : undefined;
   const forecast = data.forecast?.plots.find((p) => p.plotId === plot.id);
   return (
     <>
@@ -37,16 +39,17 @@ export function FieldDetails({
       </h2>
       <Badge variant={status.badgeVariant}>{status.label}</Badge>
       <p>{status.reason}</p>
-      {!current && status.assessment?.alert.assessmentState === "evaluated" && (
-        <>
-          <h3>Previous assessment · not current</h3>
-          <p>
-            {status.assessment.alert.riskLevel &&
-              `Previously ${status.assessment.alert.riskLevel} risk. `}
-            {status.assessment.alert.reason}
-          </p>
-        </>
-      )}
+      {!status.isCurrent &&
+        status.assessment?.alert.assessmentState === "evaluated" && (
+          <>
+            <h3>Previous assessment · not current</h3>
+            <p>
+              {status.assessment.alert.riskLevel &&
+                `Previously ${status.assessment.alert.riskLevel} risk. `}
+              {status.assessment.alert.reason}
+            </p>
+          </>
+        )}
       <dl className="field-facts">
         <div>
           <dt>Crop</dt>
@@ -65,11 +68,20 @@ export function FieldDetails({
           <dd>{plot.declaredAreaHa.toLocaleString("en-GB")} ha</dd>
         </div>
       </dl>
-      <h3>Recommended next step</h3>
-      <p>
-        {current?.alert.recommendation ??
-          "A recommendation is unavailable until this field has a current evaluation."}
-      </p>
+      <h3>Recommended actions</h3>
+      {actions?.length ? (
+        <ul className="recommended-actions">
+          {actions.map((action, index) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: Ordered read-only strings have no IDs and may repeat.
+            <li key={index}>{action}</li>
+          ))}
+        </ul>
+      ) : (
+        <p>
+          Recommended actions are unavailable for this field's current
+          evaluation.
+        </p>
+      )}
       <h3>Weather context</h3>
       {forecast ? (
         <>
@@ -78,11 +90,7 @@ export function FieldDetails({
             {formatInstant(data.forecast?.windowEnd ?? null)} · Córdoba time
             (UTC−3).
           </p>
-          <p>
-            {data.monitoring.forecastValidUntil
-              ? `Forecast ${Math.max(now, Date.parse(data.asOf)) >= Date.parse(data.monitoring.forecastValidUntil) ? "stale since" : "valid until"} ${formatInstant(data.monitoring.forecastValidUntil)} (UTC−3).`
-              : "Forecast freshness unavailable."}
-          </p>
+          <p>{forecastFreshness(data, now)}</p>
           <p className="metadata">
             {forecast.source.isDemo ? "Synthetic forecast" : "Open-Meteo"} ·
             Retrieved {formatInstant(forecast.source.retrievedAt)} ·

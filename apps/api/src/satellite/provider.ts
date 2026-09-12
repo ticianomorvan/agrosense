@@ -53,7 +53,7 @@ async function boundedBody(response: Response, maxBytes: number) {
   }
   return result;
 }
-function mercator([lng, lat]: [number, number]): [number, number] {
+function mercator([lng, lat]: readonly [number, number]): [number, number] {
   return [
     (6378137 * lng * Math.PI) / 180,
     6378137 * Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / 360)),

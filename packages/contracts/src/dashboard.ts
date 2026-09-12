@@ -1,82 +1,150 @@
 import { z } from "zod";
-import {
-  cropCycleSchema,
-  farmSchema,
-  instantSchema,
-  plotSchema,
-  pointSchema,
-} from "./land";
+import { pointSchema } from "./geometry";
+import { cropCycleSchema, farmSchema, plotSchema } from "./land";
+import { compareInstants, instantSchema } from "./time";
 
-const httpsUrl = z.url({ protocol: /^https$/ }).max(2048);
-export const sourceSchema = z
+const localDateSchema = z.iso.date();
+const sourceSchema = z
   .strictObject({
     code: z.enum(["demo", "open_meteo"]),
-    url: httpsUrl.nullable(),
+    url: z
+      .url({ protocol: /^https$/ })
+      .max(2048)
+      .nullable(),
     issuedAt: instantSchema.nullable(),
     retrievedAt: instantSchema,
     isDemo: z.boolean(),
   })
   .refine(
-    (s) =>
-      s.isDemo === (s.code === "demo") &&
-      (!s.issuedAt || Date.parse(s.issuedAt) <= Date.parse(s.retrievedAt)),
-    "Inconsistent source metadata",
+    (source) => source.isDemo === (source.code === "demo"),
+    "Source mode must match its code",
+  )
+  .refine(
+    (source) =>
+      source.issuedAt === null ||
+      compareInstants(source.issuedAt, source.retrievedAt) <= 0,
+    "Issuance cannot follow retrieval",
   );
-const hour = z.strictObject({
-  at: instantSchema,
+
+const eventKindSchema = z.enum([
+  "frost",
+  "severe-storm",
+  "hail",
+  "extreme-heat",
+]);
+export type EventKind = z.infer<typeof eventKindSchema>;
+
+export const forecastHourSchema = z.strictObject({
+  at: instantSchema.refine(
+    (at) => /:00:00(?:\.0+)?Z$/.test(at),
+    "Forecast timestamps must start on a UTC hour",
+  ),
   temperatureC: z.number().min(-100).max(70),
+  windGustKmh: z.number().min(0).max(300).nullable(),
+  precipitationMm: z.number().min(0).max(500).nullable(),
+  precipitationProbability: z.number().int().min(0).max(100).nullable(),
+  weatherCode: z.number().int().min(0).max(99).nullable(),
 });
-const forecast = z.strictObject({
+export type ForecastHour = z.infer<typeof forecastHourSchema>;
+
+const forecastHoursSchema = z
+  .array(forecastHourSchema)
+  .min(1)
+  .max(168)
+  .refine(
+    (hours) =>
+      hours.every((hour, index) => {
+        const previous = hours[index - 1];
+        return (
+          !previous ||
+          Date.parse(hour.at) - Date.parse(previous.at) === 3_600_000
+        );
+      }),
+    "Forecast hours must be chronological and exactly one hour apart",
+  );
+
+export const plotForecastSchema = z.strictObject({
+  plotId: z.uuid(),
+  samplePoint: pointSchema,
+  source: sourceSchema,
+  temperatureHeightM: z.literal(2),
+  hours: forecastHoursSchema,
+});
+export type PlotForecast = z.infer<typeof plotForecastSchema>;
+
+const forecastSummarySchema = z.strictObject({
   schemaVersion: z.literal(1),
   fetchedAt: instantSchema,
   windowStart: instantSchema,
   windowEnd: instantSchema,
-  plots: z
-    .array(
-      z.strictObject({
-        plotId: z.uuid(),
-        samplePoint: pointSchema,
-        source: sourceSchema,
-        temperatureHeightM: z.literal(2),
-        hours: z.array(hour).min(1).max(168),
-      }),
-    )
-    .min(1)
-    .max(10),
+  plots: z.array(plotForecastSchema).min(1).max(10),
 });
-const evidence = z
+export const eventEvidenceSchema = z
   .strictObject({
     schemaVersion: z.literal(1),
     scope: z.enum(["farm_demo", "plot_forecast"]),
-    plotIds: z.array(z.uuid()).min(1).max(10),
-    forecastDate: z.iso.date(),
+    plotIds: z
+      .array(z.uuid())
+      .min(1)
+      .max(10)
+      .refine(
+        (ids) => new Set(ids).size === ids.length,
+        "Plot IDs must be unique",
+      ),
+    forecastDate: localDateSchema,
     samplePoint: pointSchema.nullable(),
     source: sourceSchema,
     temperatureHeightM: z.literal(2),
-    detectionThresholdC: z.literal(0),
-    hours: z.array(hour).min(1).max(24),
+    detectionThresholdC: z.union([z.literal(0), z.literal(35)]).nullable(),
+    hours: forecastHoursSchema.max(24),
   })
   .refine(
-    (e) =>
-      e.scope === "farm_demo"
-        ? e.source.isDemo && e.samplePoint === null
-        : !e.source.isDemo && e.plotIds.length === 1 && e.samplePoint !== null,
-    "Inconsistent evidence scope",
+    (evidence) =>
+      evidence.hours.every(
+        (hour) => hour.at.slice(0, 10) === evidence.forecastDate,
+      ),
+    "Evidence hours must belong to the forecast date",
+  )
+  .refine(
+    (evidence) =>
+      evidence.scope === "farm_demo"
+        ? evidence.source.isDemo && evidence.samplePoint === null
+        : !evidence.source.isDemo &&
+          evidence.plotIds.length === 1 &&
+          evidence.samplePoint !== null,
+    "Evidence scope must match its source, plots, and sampling point",
   );
-const eventStatus = z.enum(["active", "cancelled"]);
-const generation = z
+export type EventEvidence = z.infer<typeof eventEvidenceSchema>;
+
+const eventSnapshotSchema = z.strictObject({
+  id: z.uuid(),
+  status: z.enum(["active", "cancelled"]),
+  startsAt: instantSchema,
+  endsAt: instantSchema,
+  evidence: eventEvidenceSchema,
+});
+const generationSchema = z
   .strictObject({
     method: z.enum(["template", "llm"]),
     modelId: z.string().min(1).max(200).nullable(),
     promptVersion: z.string().min(1).max(100).nullable(),
   })
   .refine(
-    (g) =>
-      g.method === "template"
-        ? g.modelId === null && g.promptVersion === null
-        : g.modelId !== null && g.promptVersion !== null,
+    (generation) =>
+      generation.method === "template"
+        ? generation.modelId === null && generation.promptVersion === null
+        : generation.modelId !== null && generation.promptVersion !== null,
     "Inconsistent generation metadata",
   );
+const inputSnapshotSchema = z.strictObject({
+  schemaVersion: z.literal(1),
+  plotId: z.uuid(),
+  cropCycle: cropCycleSchema.nullable(),
+  event: eventSnapshotSchema,
+  ruleSetVersion: z.string().min(1).max(100),
+  matchedRuleCodes: z.array(z.string().min(1).max(100)).max(20),
+  generation: generationSchema,
+});
 export const plotAlertSchema = z
   .strictObject({
     id: z.uuid(),
@@ -87,67 +155,43 @@ export const plotAlertSchema = z
       "insufficient_data",
       "no_applicable_rule",
     ]),
-    riskLevel: z.enum(["low", "moderate", "high"]).nullable(),
+    riskLevel: z.enum(["low", "moderate", "high", "critical"]).nullable(),
     reason: z.string().min(1).max(1000),
-    recommendation: z.string().min(1).max(1000).nullable(),
+    recommendedActions: z.array(z.string().min(1).max(1000)).max(20),
     ruleVersion: z.string().min(1).max(100),
     generatedAt: instantSchema,
     validUntil: instantSchema,
     generationMethod: z.enum(["template", "llm"]),
+    inputSnapshot: inputSnapshotSchema,
     isStale: z.boolean(),
-    inputSnapshot: z.strictObject({
-      schemaVersion: z.literal(1),
-      plotId: z.uuid(),
-      cropCycle: cropCycleSchema.nullable(),
-      event: z.strictObject({
-        id: z.uuid(),
-        status: eventStatus,
-        startsAt: instantSchema,
-        endsAt: instantSchema,
-        evidence,
-      }),
-      ruleSetVersion: z.string().min(1).max(100),
-      matchedRuleCodes: z.array(z.string().min(1).max(100)).max(20),
-      generation,
-    }),
   })
   .refine(
-    (a) =>
-      a.assessmentState === "evaluated"
-        ? a.riskLevel !== null && a.recommendation !== null
-        : a.riskLevel === null && a.recommendation === null,
-    "Unevaluated alerts cannot claim a risk or recommendation",
+    (alert) =>
+      alert.assessmentState === "evaluated"
+        ? alert.riskLevel !== null
+        : alert.riskLevel === null && alert.recommendedActions.length === 0,
+    "Unevaluated alerts cannot claim risk or recommended actions",
   )
   .refine(
-    (a) => Date.parse(a.validUntil) > Date.parse(a.generatedAt),
+    (alert) => compareInstants(alert.validUntil, alert.generatedAt) > 0,
     "Invalid alert validity window",
   );
-export const eventCardSchema = z.strictObject({
-  id: z.uuid(),
-  kind: z.literal("frost"),
-  title: z.string().min(1).max(160),
-  startsAt: instantSchema,
-  endsAt: instantSchema,
-  status: eventStatus,
-  temporalState: z.enum(["upcoming", "ongoing", "recent"]),
-  source: sourceSchema,
-  evidence,
-  alerts: z.array(plotAlertSchema).min(1).max(10),
-});
-const basemap = z.union([
+const basemapSchema = z.discriminatedUnion("status", [
   z
     .strictObject({
       status: z.literal("available"),
-      tileUrlTemplate: httpsUrl,
+      tileUrlTemplate: z.url({ protocol: /^https$/ }).max(2048),
       attribution: z.string().min(1).max(500),
-      minZoom: z.int().min(0).max(24),
-      maxZoom: z.int().min(0).max(24),
+      minZoom: z.number().int().min(0).max(24),
+      maxZoom: z.number().int().min(0).max(24),
       acquiredAt: instantSchema.nullable(),
     })
     .refine(
-      (b) =>
-        b.minZoom <= b.maxZoom &&
-        ["{z}", "{x}", "{y}"].every((p) => b.tileUrlTemplate.includes(p)),
+      (basemap) =>
+        basemap.minZoom <= basemap.maxZoom &&
+        ["{z}", "{x}", "{y}"].every((placeholder) =>
+          basemap.tileUrlTemplate.includes(placeholder),
+        ),
       "Invalid tile template",
     ),
   z.strictObject({
@@ -155,32 +199,45 @@ const basemap = z.union([
     reason: z.string().min(1).max(300),
   }),
 ]);
+export const eventCardSchema = z.strictObject({
+  id: z.uuid(),
+  kind: eventKindSchema,
+  title: z.string().min(1).max(160),
+  startsAt: instantSchema,
+  endsAt: instantSchema,
+  status: z.enum(["active", "cancelled"]),
+  temporalState: z.enum(["upcoming", "ongoing", "recent"]),
+  source: sourceSchema,
+  evidence: eventEvidenceSchema,
+  alerts: z.array(plotAlertSchema).max(10),
+});
+const monitoringSchema = z.strictObject({
+  status: z.enum(["never_refreshed", "fresh", "stale", "failed"]),
+  lastAttemptAt: instantSchema.nullable(),
+  lastSuccessAt: instantSchema.nullable(),
+  lastErrorCode: z
+    .enum([
+      "PROVIDER_TIMEOUT",
+      "PROVIDER_UNAVAILABLE",
+      "INVALID_PROVIDER_DATA",
+      "PAYLOAD_LIMIT_EXCEEDED",
+      "PUBLISH_FAILED",
+    ])
+    .nullable(),
+  forecastValidUntil: instantSchema.nullable(),
+});
+
 export const dashboardResponseSchema = z.strictObject({
   schemaVersion: z.literal(1),
   asOf: instantSchema,
   farm: farmSchema,
-  plots: z.array(plotSchema).min(1).max(10),
-  basemap,
-  forecast: forecast.nullable(),
+  plots: z.array(plotSchema).max(10),
+  basemap: basemapSchema,
+  forecast: forecastSummarySchema.nullable(),
   events: z.array(eventCardSchema).max(50),
-  monitoring: z.strictObject({
-    status: z.enum(["never_refreshed", "fresh", "stale", "failed"]),
-    lastAttemptAt: instantSchema.nullable(),
-    lastSuccessAt: instantSchema.nullable(),
-    lastErrorCode: z
-      .enum([
-        "PROVIDER_TIMEOUT",
-        "PROVIDER_UNAVAILABLE",
-        "INVALID_PROVIDER_DATA",
-        "PAYLOAD_LIMIT_EXCEEDED",
-        "PUBLISH_FAILED",
-      ])
-      .nullable(),
-    forecastValidUntil: instantSchema.nullable(),
-  }),
+  monitoring: monitoringSchema,
 });
-// These are response-shape guards. Trusted seed/publication code additionally
-// validates topology, ownership, exact hourly coverage and cross-row invariants.
 export type DashboardResponse = z.infer<typeof dashboardResponseSchema>;
+
 export type PlotAlert = z.infer<typeof plotAlertSchema>;
 export type EventCard = z.infer<typeof eventCardSchema>;

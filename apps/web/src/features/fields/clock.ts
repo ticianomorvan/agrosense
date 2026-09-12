@@ -1,4 +1,7 @@
-import type { DashboardResponse } from "@agrosense/contracts";
+import {
+  type DashboardResponse,
+  deadlineMilliseconds,
+} from "@agrosense/contracts";
 import { useEffect, useState } from "react";
 
 // Subscribe to the response's deadlines, not a polling interval or a new TTL.
@@ -7,10 +10,12 @@ export function subscribeToRiskClock(
   onTimeChange: (now: number) => void,
 ) {
   const deadlines = data.events.flatMap((event) => [
-    Date.parse(event.endsAt),
-    ...event.alerts.map((alert) => Date.parse(alert.validUntil)),
+    deadlineMilliseconds(event.endsAt),
+    ...event.alerts.map((alert) => deadlineMilliseconds(alert.validUntil)),
   ]);
-  deadlines.push(Date.parse(data.monitoring.forecastValidUntil ?? ""));
+  deadlines.push(
+    deadlineMilliseconds(data.monitoring.forecastValidUntil ?? ""),
+  );
   let timer: ReturnType<typeof setTimeout> | undefined;
   function schedule() {
     clearTimeout(timer);

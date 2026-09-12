@@ -85,9 +85,19 @@ slices; crop-cycle mutation is implemented by the API route and Supabase RPC.
 available. Remount the overview on identity/farm changes and clear the QueryClient
 on sign-out. Tokens stay in memory; requests are same-origin, cancellable and
 validated with shared Zod schemas. Failed requests never substitute sample data.
-Risk expires on assessment/event deadlines and tab resume without a network fetch.
+Risk and forecast freshness update at response deadlines and tab resume without a
+network fetch; sub-millisecond PostgreSQL deadlines are not rounded down.
 Shared controls use shadcn Button, Badge, NativeSelect and Input with AgroSense
 semantic tokens and status variants. Map rendering loads lazily.
+
+The dashboard API, weather adapter and UI share one dashboard schema, with land
+and geometry definitions reused by satellite previews. Four hazard kinds, critical
+risk, and ordered `recommendedActions` are preserved through the same contract.
+The read contract remains compatible with the stored schema: up to 20 actions,
+including an evaluated assessment with no actions. The UI reports actions as
+unavailable in that case. The domain reference's stricter 1–10 publication rule
+still requires alignment in the publication/storage slice. `customRules` is also
+not yet stored or projected; the client does not fabricate an empty rule array.
 
 The authenticated `POST /api/farms/:farmId/satellite` accepts `{from, to}` UTC
 instants within a past window of at most 31 days. It uses owner-scoped stored farm

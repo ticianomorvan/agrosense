@@ -34,17 +34,13 @@ export function FieldOverview({ source }: { source: FarmDataSource }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [phoneMap, setPhoneMap] = useState(false);
   const [satellite, setSatellite] = useState<SatellitePreview>();
-  const details = useRef<HTMLElement>(null);
   const previousSelection = useRef<string | null>(null);
   const select = useCallback((id: string) => {
     setSelectedId(id);
     setPhoneMap(false);
   }, []);
   useEffect(() => {
-    if (selectedId)
-      details.current
-        ?.querySelector<HTMLElement>("#field-detail-title")
-        ?.focus();
+    if (selectedId) document.getElementById("field-detail-title")?.focus();
     else if (previousSelection.current)
       document
         .getElementById(`view-field-${previousSelection.current}`)
@@ -169,7 +165,6 @@ export function FieldOverview({ source }: { source: FarmDataSource }) {
           />
         </section>
         <section
-          ref={details}
           className="priorities-panel panel"
           aria-label={selected ? "Field details" : "Field priorities"}
         >

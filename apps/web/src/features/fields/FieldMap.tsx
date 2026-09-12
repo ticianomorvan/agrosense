@@ -1,6 +1,7 @@
 import type {
   DashboardResponse,
   Plot,
+  Polygon,
   SatellitePreview,
 } from "@agrosense/contracts";
 import * as L from "leaflet";
@@ -24,7 +25,7 @@ export default function FieldMap({
   const map = useRef<L.Map | null>(null);
   const [ready, setReady] = useState(false);
   const [imageError, setImageError] = useState(false);
-  const farmBounds = L.geoJSON(data.farm.boundary).getBounds();
+  const farmBounds = polygonLayer(data.farm.boundary).getBounds();
 
   useEffect(() => {
     if (!container.current) return;
@@ -39,14 +40,14 @@ export default function FieldMap({
       scrollWheelZoom: false,
     });
     map.current = instance;
-    instance.fitBounds(L.geoJSON(data.farm.boundary).getBounds(), {
+    instance.fitBounds(polygonLayer(data.farm.boundary).getBounds(), {
       padding: [24, 24],
       animate: false,
     });
     const observer = new ResizeObserver(() => {
       instance.invalidateSize({ animate: false });
       if (container.current?.clientWidth)
-        instance.fitBounds(L.geoJSON(data.farm.boundary).getBounds(), {
+        instance.fitBounds(polygonLayer(data.farm.boundary).getBounds(), {
           padding: [24, 24],
           animate: false,
         });
@@ -67,28 +68,26 @@ export default function FieldMap({
       getComputedStyle(document.documentElement)
         .getPropertyValue(`--${name}`)
         .trim();
-    L.geoJSON(data.farm.boundary, {
+    polygonLayer(data.farm.boundary, {
       interactive: false,
-      style: {
-        color: token("foreground"),
-        weight: 2,
-        fill: false,
-        dashArray: "6 6",
-      },
+      color: token("foreground"),
+      weight: 2,
+      fill: false,
+      dashArray: "6 6",
     }).addTo(group);
     for (const plot of plots) {
       const selected = plot.id === selectedId;
-      L.geoJSON(plot.boundary, {
+      polygonLayer(plot.boundary, {
         interactive: false,
-        style: { color: token("card"), weight: 4, fill: false },
+        color: token("card"),
+        weight: 4,
+        fill: false,
       }).addTo(group);
-      const shape = L.geoJSON(plot.boundary, {
-        style: {
-          color: token(selected ? "primary" : "muted-foreground"),
-          weight: 2,
-          fillColor: token("muted"),
-          fillOpacity: selected ? 0.4 : 0.15,
-        },
+      const shape = polygonLayer(plot.boundary, {
+        color: token(selected ? "primary" : "muted-foreground"),
+        weight: 2,
+        fillColor: token("muted"),
+        fillOpacity: selected ? 0.4 : 0.15,
       });
       const label = document.createElement("span");
       label.textContent = `${plot.name}${selected ? " · Selected" : ""}`;
@@ -174,5 +173,14 @@ export default function FieldMap({
         </p>
       )}
     </>
+  );
+}
+
+function polygonLayer(boundary: Polygon, options?: L.PolylineOptions) {
+  return L.polygon(
+    boundary.coordinates.map((ring) =>
+      ring.map(([longitude, latitude]) => L.latLng(latitude, longitude)),
+    ),
+    options,
   );
 }
