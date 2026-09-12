@@ -66,20 +66,17 @@ export function FieldDetails({
           </div>
         ))}
       </dl>
-      <h3>Recommended actions</h3>
       {actions?.length ? (
-        <ul className="space-y-2 pl-6 wrap-anywhere list-disc">
-          {actions.map((action, index) => (
-            // biome-ignore lint/suspicious/noArrayIndexKey: Ordered read-only strings have no IDs and may repeat.
-            <li key={index}>{action}</li>
-          ))}
-        </ul>
-      ) : (
-        <p>
-          Recommended actions are unavailable for this field's current
-          evaluation.
-        </p>
-      )}
+        <>
+          <h3>Recommended actions</h3>
+          <ul className="space-y-2 pl-6 wrap-anywhere list-disc">
+            {actions.map((action, index) => (
+              // biome-ignore lint/suspicious/noArrayIndexKey: Ordered read-only strings have no IDs and may repeat.
+              <li key={index}>{action}</li>
+            ))}
+          </ul>
+        </>
+      ) : null}
       {status.assessment?.alert.lossEstimate ? (
         <>
           <h3>Estimated production loss</h3>
