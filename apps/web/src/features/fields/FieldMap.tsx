@@ -127,7 +127,7 @@ export default function FieldMap({
 
   return (
     <>
-      <div className="map-toolbar">
+      <div className="flex flex-wrap gap-2">
         <Button
           variant="outline"
           onClick={() => map.current?.zoomIn(undefined, { animate: false })}
@@ -154,14 +154,22 @@ export default function FieldMap({
       </div>
       <section
         ref={container}
-        className="field-map"
+        className="field-map relative z-0 h-96 min-h-80 rounded-lg border border-muted-foreground bg-muted font-sans md:h-144 md:min-h-120"
         aria-label="Farm map. Use arrow keys to pan; select fields in the field list."
       />
-      <div className="map-legend">
-        <span className="legend-boundary" aria-hidden="true" /> Field boundary{" "}
-        <span className="legend-selected" aria-hidden="true" /> Selected field
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        <span
+          className="inline-block size-4 border-2 border-muted-foreground bg-card"
+          aria-hidden="true"
+        />{" "}
+        Field boundary{" "}
+        <span
+          className="inline-block size-4 border-2 border-primary bg-muted"
+          aria-hidden="true"
+        />{" "}
+        Selected field
       </div>
-      <p className="metadata">
+      <p className="text-sm leading-normal text-muted-foreground tabular-nums">
         Field boundaries · Source and observation time unavailable.{" "}
         {satellite?.status === "available" && !imageError
           ? "True color · Missing pixels are transparent."

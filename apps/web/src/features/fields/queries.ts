@@ -12,7 +12,7 @@ export type FarmDataSource = {
   scope: string;
   farmId: string;
   loadDashboard: (signal: AbortSignal) => Promise<DashboardResponse>;
-  loadSatellite?: (
+  loadSatellite: (
     window: SatelliteRequest,
     signal: AbortSignal,
   ) => Promise<SatellitePreview>;

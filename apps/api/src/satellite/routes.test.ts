@@ -92,7 +92,7 @@ it("returns JSON 413 for oversized declared and streamed bodies before farm look
   expect(atLimit.status).toBe(400);
   expect(fetcher).toHaveBeenCalledTimes(1);
 });
-it("uses the verified owner and returns 404 for inaccessible farms before contacting Copernicus", async () => {
+it("validates ownership, input and stored geometry before contacting Copernicus", async () => {
   const env = {
     SUPABASE_URL: "https://satellite-test.supabase.co",
     SUPABASE_PUBLISHABLE_KEY: "sb_publishable_test",
@@ -107,6 +107,7 @@ it("uses the verified owner and returns 404 for inaccessible farms before contac
     .setExpirationTime("5m")
     .setProtectedHeader({ alg: "ES256", kid: "satellite" })
     .sign(privateKey);
+  let farmRows: { boundary_geojson: unknown }[] = [];
   const fetcher = vi.fn(async (url: string | URL | Request) => {
     const target = new URL(
       typeof url === "string" ? url : url instanceof URL ? url.href : url.url,
@@ -120,7 +121,7 @@ it("uses the verified owner and returns 404 for inaccessible farms before contac
     expect(target.origin).toBe(env.SUPABASE_URL);
     expect(target.searchParams.get("owner_id")).toBe(`eq.${userId}`);
     expect(target.searchParams.get("id")).toBe(`eq.${farmId}`);
-    return Response.json([]);
+    return Response.json(farmRows);
   });
   vi.stubGlobal("fetch", fetcher);
   const response = await app.request(
@@ -149,4 +150,23 @@ it("uses the verified owner and returns 404 for inaccessible farms before contac
   );
   expect(invalid.status).toBe(400);
   expect(fetcher).toHaveBeenCalledTimes(2);
+
+  farmRows = [{ boundary_geojson: { type: "Polygon", coordinates: [] } }];
+  const invalidBoundary = await app.request(
+    path,
+    {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: JSON.stringify(window),
+    },
+    env,
+  );
+  expect(invalidBoundary.status).toBe(422);
+  expect(invalidBoundary.headers.get("Cache-Control")).toBe(
+    "private, no-store",
+  );
+  expect(await invalidBoundary.json()).toMatchObject({
+    error: { code: "VALIDATION_ERROR" },
+  });
+  expect(fetcher).toHaveBeenCalledTimes(3);
 });

@@ -1,6 +1,5 @@
 import {
   type Polygon,
-  polygonSchema,
   type SatellitePreview,
   type SatelliteRequest,
   satelliteBoundsSchema,
@@ -75,7 +74,8 @@ export async function loadSatellitePreview(
   satelliteRequestSchema.parse(window);
   if (Date.parse(window.to) > Date.now())
     throw new Error("Satellite window cannot end in the future");
-  const ring = polygonSchema.parse(boundary).coordinates[0];
+  // The route has already validated polygon topology before calling the provider.
+  const ring = boundary.coordinates[0];
   if (!ring) throw new Error("Farm boundary is unavailable");
   const bounds = satelliteBoundsSchema.parse([
     Math.min(...ring.map((p) => p[0])),

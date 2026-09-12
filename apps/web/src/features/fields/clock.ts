@@ -13,9 +13,8 @@ export function subscribeToRiskClock(
     deadlineMilliseconds(event.endsAt),
     ...event.alerts.map((alert) => deadlineMilliseconds(alert.validUntil)),
   ]);
-  deadlines.push(
-    deadlineMilliseconds(data.monitoring.forecastValidUntil ?? ""),
-  );
+  if (data.monitoring.forecastValidUntil)
+    deadlines.push(deadlineMilliseconds(data.monitoring.forecastValidUntil));
   let timer: ReturnType<typeof setTimeout> | undefined;
   function schedule() {
     clearTimeout(timer);

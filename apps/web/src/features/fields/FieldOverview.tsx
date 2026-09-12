@@ -1,5 +1,6 @@
 import type { CropCode, SatellitePreview } from "@agrosense/contracts";
 import { useQuery } from "@tanstack/react-query";
+import { cn } from "cn";
 import {
   Component,
   lazy,
@@ -49,7 +50,7 @@ export function FieldOverview({ source }: { source: FarmDataSource }) {
   }, [selectedId]);
   if (query.isPending)
     return (
-      <main className="workspace">
+      <main className="mx-auto grid max-w-[1600px] gap-4 p-4 md:gap-6 md:p-6">
         <h1>Your fields</h1>
         <DataState title="Loading your farm…" pending>
           Field information will appear here.
@@ -58,7 +59,7 @@ export function FieldOverview({ source }: { source: FarmDataSource }) {
     );
   if (!query.data)
     return (
-      <main className="workspace">
+      <main className="mx-auto grid max-w-[1600px] gap-4 p-4 md:gap-6 md:p-6">
         <h1>Your fields</h1>
         <DataState
           title="Farm information unavailable"
@@ -79,17 +80,17 @@ export function FieldOverview({ source }: { source: FarmDataSource }) {
   );
   const selected = plots.find((p) => p.id === selectedId);
   return (
-    <main className={`workspace ${phoneMap ? "workspace--map" : ""}`}>
-      <div className="page-heading">
-        <div>
-          <p className="metadata">
+    <main className="mx-auto grid max-w-[1600px] gap-4 p-4 md:gap-6 md:p-6">
+      <div className="flex flex-wrap items-end justify-between gap-6">
+        <div className="grid gap-2">
+          <p className="text-sm leading-normal text-muted-foreground tabular-nums">
             {data.farm.province}
             {data.farm.locality ? ` · ${data.farm.locality}` : ""}
           </p>
           <h1>{data.farm.name}</h1>
           <p>Understand your fields. Decide what needs attention.</p>
         </div>
-        <div className="select-field">
+        <div className="flex w-full flex-col gap-2 font-semibold md:w-auto">
           <label htmlFor={cropId}>Crop</label>
           <NativeSelect
             id={cropId}
@@ -109,7 +110,7 @@ export function FieldOverview({ source }: { source: FarmDataSource }) {
           </NativeSelect>
         </div>
       </div>
-      <div className="workspace-status" role="status">
+      <div className="flex flex-wrap items-center gap-3 text-sm" role="status">
         {data.farm.dataMode === "demo" && (
           <Badge variant="info">Demonstration weather and risk data</Badge>
         )}
@@ -137,17 +138,29 @@ export function FieldOverview({ source }: { source: FarmDataSource }) {
           </>
         )}
       </div>
-      <div className="phone-view-switch">
+      <div className="md:hidden">
         <Button variant="outline" onClick={() => setPhoneMap((v) => !v)}>
           {phoneMap ? "Back to priorities" : "View farm map"}
         </Button>
       </div>
-      <div className="overview-layout">
-        <section className="map-panel panel" aria-label="Farm view">
+      <div className="grid grid-cols-1 items-start gap-4 md:gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
+        <section
+          className={cn(
+            "min-w-0 space-y-4 rounded-xl border bg-card p-4 md:block",
+            !phoneMap && "hidden",
+          )}
+          aria-label="Farm view"
+        >
           <h2>Farm view</h2>
           <MapBoundary>
             <Suspense
-              fallback={<DataState title="Loading the farm map…" pending />}
+              fallback={
+                <DataState
+                  className="min-h-96 md:min-h-144"
+                  title="Loading the farm map…"
+                  pending
+                />
+              }
             >
               <FieldMap
                 data={data}
@@ -165,7 +178,10 @@ export function FieldOverview({ source }: { source: FarmDataSource }) {
           />
         </section>
         <section
-          className="priorities-panel panel"
+          className={cn(
+            "row-start-1 min-w-0 space-y-4 rounded-xl border bg-card p-4 md:block lg:row-auto",
+            phoneMap && "hidden",
+          )}
           aria-label={selected ? "Field details" : "Field priorities"}
         >
           {selected ? (
@@ -200,7 +216,7 @@ class MapBoundary extends Component<
   }
   render() {
     return this.state.failed ? (
-      <DataState title="Map unavailable">
+      <DataState className="min-h-96 md:min-h-144" title="Map unavailable">
         Use the field list to review your fields. Reload the page to try loading
         the map again.
       </DataState>

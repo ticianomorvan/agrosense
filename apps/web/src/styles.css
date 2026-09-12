@@ -1,18 +1,8 @@
 @import "tailwindcss";
 @import "leaflet/dist/leaflet.css" layer(base);
-@import "tw-animate-css";
-@import "shadcn/tailwind.css";
 
 :root {
   color-scheme: light;
-  --space-1: 0.25rem;
-  --space-2: 0.5rem;
-  --space-3: 0.75rem;
-  --space-4: 1rem;
-  --space-6: 1.5rem;
-  --space-8: 2rem;
-  --space-12: 3rem;
-  --space-16: 4rem;
   --background: #f4f3eb;
   --foreground: #173c2d;
   --card: #ffffff;
@@ -45,7 +35,6 @@
   --radius: 0.25rem;
 }
 @theme inline {
-  --font-heading: var(--font-sans);
   --font-sans:
     system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --color-ring: var(--ring);
@@ -88,56 +77,31 @@
     @apply border-border outline-ring;
   }
   body {
-    @apply bg-background text-foreground;
-  }
-  html {
-    @apply font-sans;
-  }
-}
-@layer components {
-  * {
-    box-sizing: border-box;
-  }
-  body {
-    margin: 0;
-    font-size: 1rem;
-    line-height: 1.5;
+    @apply bg-background font-sans text-base leading-normal text-foreground;
   }
   h1,
   h2,
   h3,
   p {
-    margin: 0;
-    overflow-wrap: anywhere;
+    @apply wrap-anywhere;
   }
   h1 {
-    font-size: 2rem;
-    line-height: 1.25;
-    font-weight: 600;
+    @apply text-2xl leading-[1.3] font-semibold lg:text-[2rem] lg:leading-tight;
   }
   h2 {
-    font-size: 1.25rem;
-    line-height: 1.4;
-    font-weight: 600;
+    @apply text-xl leading-[1.4] font-semibold;
   }
   h3 {
-    font-size: 1rem;
-    line-height: 1.5;
-    font-weight: 600;
+    @apply text-base leading-normal font-semibold;
   }
   a {
-    color: var(--primary);
-    text-decoration: underline;
+    @apply text-primary underline;
   }
   :focus-visible:not([data-slot]) {
-    outline: 2px solid var(--ring);
-    outline-offset: 2px;
+    @apply outline-2 outline-offset-2 outline-ring;
   }
   a:not(p a):not([data-slot]) {
-    display: inline-flex;
-    align-items: center;
-    min-height: 44px;
-    min-width: 44px;
+    @apply inline-flex min-h-11 min-w-11 items-center;
   }
   button,
   input,
@@ -149,313 +113,15 @@
   select {
     cursor: pointer;
   }
-  .select-field,
-  .satellite-form label {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-    font-weight: 600;
-  }
-  .site-header {
-    min-height: 64px;
-    display: flex;
-    align-items: center;
-    gap: var(--space-6);
-    flex-wrap: wrap;
-    padding: var(--space-4) var(--space-6);
-    background: var(--card);
-    border-bottom: 1px solid var(--border);
-  }
-  .wordmark {
-    font-weight: 600;
-    font-size: 1.25rem;
-  }
-  .workspace {
-    max-width: 1600px;
-    margin: 0 auto;
-    padding: var(--space-6);
-    display: grid;
-    gap: var(--space-6);
-  }
-  .page-heading {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-end;
-    gap: var(--space-6);
-    flex-wrap: wrap;
-  }
-  .page-heading > div {
-    display: grid;
-    gap: var(--space-2);
-  }
-  .page-heading select {
-    min-width: 12rem;
-  }
-  .metadata {
-    color: var(--muted-foreground);
-    font-size: 0.875rem;
-    line-height: 1.5;
-    font-variant-numeric: tabular-nums;
-  }
-  .workspace-status {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-3);
-    font-size: 0.875rem;
-  }
-  .overview-layout {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) 20rem;
-    gap: var(--space-6);
-    align-items: start;
-  }
-  .panel {
-    background: var(--card);
-    padding: var(--space-4);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-xl);
-    min-width: 0;
-  }
-  .panel > * + * {
-    margin-top: var(--space-4);
-  }
-  .map-toolbar {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-2);
-  }
-  .field-map {
-    min-height: 480px;
-    height: 36rem;
-    background: var(--muted);
-    border: 1px solid var(--muted-foreground);
-    border-radius: var(--radius-md);
-    z-index: 0;
-    font-family: var(--font-sans);
-  }
+}
+
+/* Leaflet creates these elements outside React. */
+@layer components {
   .field-map .leaflet-tooltip {
-    box-shadow: none;
-    background: var(--card);
-    color: var(--foreground);
-    border: 1px solid var(--muted-foreground);
-    border-radius: var(--radius-md);
-    padding: var(--space-1) var(--space-2);
-    font: 600 0.875rem / 1.5 var(--font-sans);
-    white-space: normal;
-    max-width: 12rem;
-    overflow-wrap: anywhere;
-    text-align: center;
+    @apply w-max max-w-23 rounded-lg border border-muted-foreground bg-card px-2 py-1 text-center font-sans text-sm leading-normal font-semibold whitespace-normal text-foreground wrap-anywhere shadow-none md:max-w-48;
   }
   .field-map .leaflet-tooltip::before {
     display: none;
-  }
-  .map-legend {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-2);
-    font-size: 0.875rem;
-  }
-  .legend-boundary,
-  .legend-selected {
-    display: inline-block;
-    width: 1rem;
-    height: 1rem;
-    border: 2px solid var(--muted-foreground);
-    background: var(--card);
-  }
-  .legend-selected {
-    border-color: var(--primary);
-    background: var(--muted);
-  }
-  .field-list {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-  }
-  .field-list__item {
-    padding: var(--space-6) 0;
-    border-bottom: 1px solid var(--border);
-  }
-  .field-list__item:last-child {
-    border-bottom: 0;
-    padding-bottom: 0;
-  }
-  .field-list__item > * + * {
-    margin-top: var(--space-3);
-  }
-  .field-list__item h3,
-  .priorities-panel h2 {
-    overflow-wrap: anywhere;
-  }
-  .recommended-actions {
-    padding-left: var(--space-6);
-    overflow-wrap: anywhere;
-  }
-  .recommended-actions > * + * {
-    margin-top: var(--space-2);
-  }
-  .field-facts {
-    margin: var(--space-6) 0;
-    display: grid;
-    gap: var(--space-3);
-  }
-  .field-facts div {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: space-between;
-    gap: var(--space-4);
-  }
-  .field-facts dt {
-    color: var(--muted-foreground);
-  }
-  .field-facts dd {
-    margin: 0;
-    font-variant-numeric: tabular-nums;
-    text-align: right;
-    overflow-wrap: anywhere;
-    min-width: 0;
-  }
-  .satellite-controls {
-    border-top: 1px solid var(--border);
-    padding-top: var(--space-4);
-  }
-  .satellite-controls > * + * {
-    margin-top: var(--space-3);
-  }
-  .satellite-form {
-    display: flex;
-    align-items: end;
-    gap: var(--space-3);
-    flex-wrap: wrap;
-  }
-  .satellite-form label {
-    flex: 1 1 9rem;
-  }
-  .satellite-form input {
-    width: 100%;
-  }
-  .data-state {
-    min-height: 8rem;
-    display: flex;
-    align-items: flex-start;
-    flex-direction: column;
-    justify-content: center;
-    gap: var(--space-4);
-  }
-  .data-state__title {
-    font-weight: 600;
-  }
-  .data-state > p,
-  .data-state > div {
-    max-width: 60ch;
-  }
-  .phone-view-switch {
-    display: none;
-  }
-  .skip-link {
-    position: absolute;
-    left: var(--space-4);
-    top: var(--space-2);
-    transform: translateY(-200%);
-    padding: var(--space-3);
-    min-height: 44px;
-    background: var(--card);
-    z-index: 1000;
-  }
-  .skip-link:focus {
-    transform: none;
-  }
-  @media (max-width: 1023px) {
-    h1 {
-      font-size: 1.5rem;
-      line-height: 1.3;
-    }
-    .site-header {
-      min-height: 56px;
-    }
-    .overview-layout {
-      grid-template-columns: minmax(0, 1fr);
-    }
-    .priorities-panel {
-      grid-row: 1;
-    }
-    .field-list {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: var(--space-6);
-    }
-    .field-list__item {
-      border-bottom: 0;
-      padding: var(--space-4) 0 0;
-    }
-  }
-  @media (max-width: 767px) {
-    .workspace {
-      padding: var(--space-4);
-      gap: var(--space-4);
-    }
-    .site-header {
-      padding: var(--space-3) var(--space-4);
-      gap: var(--space-4);
-    }
-    .overview-layout {
-      gap: var(--space-4);
-    }
-    .phone-view-switch {
-      display: block;
-    }
-    .map-panel,
-    .workspace--map .priorities-panel {
-      display: none;
-    }
-    .workspace--map .map-panel {
-      display: block;
-    }
-    .field-map {
-      min-height: 320px;
-      height: 24rem;
-    }
-    .field-list {
-      display: block;
-    }
-    .field-list__item {
-      border-bottom: 1px solid var(--border);
-      padding: var(--space-6) 0;
-    }
-    .page-heading .select-field,
-    .page-heading select {
-      width: 100%;
-    }
-    .satellite-form {
-      align-items: stretch;
-      flex-direction: column;
-    }
-    .satellite-form label {
-      flex: auto;
-    }
-  }
-  .field-map.leaflet-container {
-    background: var(--muted);
-  }
-  .field-map .map-field-label {
-    width: max-content;
-  }
-
-  @media (max-width: 767px) {
-    .field-map .map-field-label {
-      max-width: 5.75rem;
-    }
-  }
-
-  .map-panel .data-state {
-    min-height: 36rem;
-  }
-  @media (max-width: 767px) {
-    .map-panel .data-state {
-      min-height: 24rem;
-    }
   }
 }
 

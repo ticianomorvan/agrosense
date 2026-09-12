@@ -30,11 +30,10 @@ export function SatelliteControls({
   const query = useQuery({
     queryKey: ["satellite", source.scope, source.farmId, requested],
     queryFn: ({ signal }) => {
-      if (!source.loadSatellite || !requested)
-        throw new Error("Satellite imagery is unavailable.");
+      if (!requested) throw new Error("Choose a satellite date window first.");
       return source.loadSatellite(requested, signal);
     },
-    enabled: !!requested && !!source.loadSatellite,
+    enabled: !!requested,
     retry: false,
     staleTime: 3600000,
     gcTime: 60000,
@@ -46,16 +45,16 @@ export function SatelliteControls({
     onImage(query.data);
   }, [query.data, onImage]);
   return (
-    <div className="satellite-controls">
+    <div className="space-y-3 border-t pt-4">
       <h3>Sentinel-2 · True color</h3>
-      <p className="metadata">
+      <p className="text-sm leading-normal text-muted-foreground tabular-nums">
         Dated imagery of the farm. Clouds may obscure the land; image color does
         not indicate crop risk.
       </p>
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          if (query.isFetching || !source.loadSatellite) return;
+          if (query.isFetching) return;
           const result = satelliteRequestSchema.safeParse({
             from: `${from}T00:00:00Z`,
             to: `${to}T23:59:59Z`,
@@ -72,9 +71,12 @@ export function SatelliteControls({
             void query.refetch();
           else setRequested(result.data);
         }}
-        className="satellite-form"
+        className="flex flex-col items-stretch gap-3 md:flex-row md:flex-wrap md:items-end"
       >
-        <label htmlFor={`${id}-from`}>
+        <label
+          className="flex flex-col gap-2 font-semibold md:flex-[1_1_9rem]"
+          htmlFor={`${id}-from`}
+        >
           From (UTC)
           <Input
             id={`${id}-from`}
@@ -89,7 +91,10 @@ export function SatelliteControls({
             }}
           />
         </label>
-        <label htmlFor={`${id}-to`}>
+        <label
+          className="flex flex-col gap-2 font-semibold md:flex-[1_1_9rem]"
+          htmlFor={`${id}-to`}
+        >
           To (UTC)
           <Input
             id={`${id}-to`}
@@ -107,7 +112,7 @@ export function SatelliteControls({
         <Button
           variant="default"
           type="submit"
-          disabled={!source.loadSatellite || query.isFetching}
+          disabled={query.isFetching}
           aria-busy={query.isFetching || undefined}
         >
           {query.isFetching ? "Loading imagery…" : "Load imagery"}
@@ -116,11 +121,6 @@ export function SatelliteControls({
       {error && (
         <p id={`${id}-error`} role="alert">
           {error}
-        </p>
-      )}
-      {!source.loadSatellite && (
-        <p className="metadata">
-          Satellite imagery is unavailable for this farm.
         </p>
       )}
       {query.isError && (
@@ -136,7 +136,7 @@ export function SatelliteControls({
           <Badge variant="info">
             Acquired {formatInstant(query.data.acquiredAt)} (UTC−3)
           </Badge>
-          <p className="metadata">
+          <p className="text-sm leading-normal text-muted-foreground tabular-nums">
             {query.data.source} · Scene cloud cover:{" "}
             {query.data.cloudCoverPercent === null
               ? "Unavailable"

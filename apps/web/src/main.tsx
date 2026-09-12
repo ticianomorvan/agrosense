@@ -20,11 +20,14 @@ const queryClient = new QueryClient({
 function App({ source }: { source?: FarmDataSource }) {
   return (
     <QueryClientProvider client={queryClient}>
-      <a className="skip-link" href="#workspace-content">
+      <a
+        className="absolute top-2 left-4 z-[1000] min-h-11 -translate-y-[200%] bg-card p-3 focus:translate-y-0"
+        href="#workspace-content"
+      >
         Skip to workspace
       </a>
-      <header className="site-header">
-        <span className="wordmark">AgroSense</span>
+      <header className="flex min-h-14 flex-wrap items-center gap-4 border-b bg-card px-4 py-3 md:gap-6 md:px-6 md:py-4 lg:min-h-16">
+        <span className="text-xl font-semibold">AgroSense</span>
         <span>Field workspace</span>
       </header>
       <div id="workspace-content" tabIndex={-1}>
@@ -34,7 +37,7 @@ function App({ source }: { source?: FarmDataSource }) {
             source={source}
           />
         ) : (
-          <main className="workspace">
+          <main className="mx-auto grid max-w-[1600px] gap-4 p-4 md:gap-6 md:p-6">
             <h1>Your field workspace</h1>
             <DataState title="Farm connection unavailable">
               Field information will appear when your farm is connected.

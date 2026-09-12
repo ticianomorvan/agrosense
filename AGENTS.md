@@ -15,8 +15,9 @@
 ## Implementation and verification
 
 - Follow `docs/stack.md`: React/Vite, shadcn/ui, Tailwind v4, Hono and shared
-  Zod contracts. Use plain CSS for app layout where appropriate; do not introduce
-  another UI kit or a parallel set of custom primitives.
+  Zod contracts. Use Tailwind utilities for application layout; keep custom CSS
+  for theme tokens, global defaults and third-party generated markup. Do not
+  introduce another UI kit or a parallel set of custom primitives.
 - Read `docs/domain-model.md` before implementation and verification.
 - Read existing code before editing and preserve unrelated user changes.
 - Implement only the requested slice. A map, action, or metric in the guide is

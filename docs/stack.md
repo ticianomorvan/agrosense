@@ -2,10 +2,10 @@
 
 ## Objective and acceptance
 
-Provide a TypeScript monorepo for a Vite React SPA and a Hono API on Cloudflare
-Workers. The initial slice proves browser-to-API connectivity without credentials.
-Success means a clean install, type check, lint, API tests, production build, and
-local runtime checks for API responses and SPA fallback.
+Provide a TypeScript monorepo for a Vite React field workspace and a Hono API on
+Cloudflare Workers. Shared contracts validate API data; Supabase supplies
+authentication and persistence. Verification includes type checking, linting,
+API/frontend/database tests, production builds and browser checks.
 
 ## Decisions
 
@@ -17,7 +17,7 @@ local runtime checks for API responses and SPA fallback.
 | API | Hono + Wrangler | Web-standard handlers running on Cloudflare Workers |
 | Contracts | Shared Zod schemas | Runtime response validation and inferred TypeScript types |
 | Hosting | Workers Static Assets + API Worker | One deployment and origin; explicit `/api` routing |
-| Quality | Biome + Vitest | Formatting, linting, and API contract tests |
+| Quality | Biome + Vitest | Formatting, linting, and API/frontend tests |
 | Persistence | Supabase Postgres + Auth | Typed Data API client, JWT verification, and owner-scoped RLS |
 
 Use Node 24 and the pnpm version pinned in package.json. Exact dependency
@@ -67,8 +67,10 @@ the authentication boundary. The authenticated dashboard route reads stored farm
 snapshots. The [weather adapter](domain-model.md#implemented-weather-adapter)
 fetches and normalizes Open-Meteo data and detects hazards using the same forecast
 and evidence contracts as the dashboard. It does not publish forecasts.
-Demo imports, refresh/publication, and sign-in UI remain subsequent feature
-slices; crop-cycle mutation is implemented by the API route and Supabase RPC.
+The refresh endpoint publishes synthetic forecasts for demo farms; live refresh
+returns unavailable. Crop-cycle mutation is implemented by the API route and
+Supabase RPC. Live publication and sign-in UI remain subsequent feature slices.
+
 
 ## References
 
@@ -88,7 +90,10 @@ validated with shared Zod schemas. Failed requests never substitute sample data.
 Risk and forecast freshness update at response deadlines and tab resume without a
 network fetch; sub-millisecond PostgreSQL deadlines are not rounded down.
 Shared controls use shadcn Button, Badge, NativeSelect and Input with AgroSense
-semantic tokens and status variants. Map rendering loads lazily.
+semantic tokens and status variants. Application layouts use Tailwind utilities;
+custom CSS is limited to tokens, global defaults and Leaflet-generated markup.
+Map rendering loads lazily. Add primitives with `pnpm dlx shadcn@latest add` from
+`apps/web`; the CLI and unused animation styles are not application dependencies.
 
 The dashboard API, weather adapter and UI share one dashboard schema, with land
 and geometry definitions reused by satellite previews. Four hazard kinds, critical

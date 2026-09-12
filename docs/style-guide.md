@@ -13,8 +13,9 @@ this guide is not authorization to add features, routes, data, or agronomic logi
 
 MUST use **shadcn/ui with the AgroSense theme defined below**.
 [components.json](../apps/web/components.json) defines the component configuration;
-[styles.css](../apps/web/src/styles.css) contains the theme tokens and app
-layout rules. Use Tailwind v4 through the Vite integration.
+[styles.css](../apps/web/src/styles.css) contains theme tokens, global defaults
+and Leaflet overrides. Use Tailwind v4 utilities for application layout and
+responsive behavior through the Vite integration.
 
 - Add required primitives through the official shadcn CLI. Use the existing
   Button, Badge, NativeSelect and Input before adding more components.
@@ -22,6 +23,8 @@ layout rules. Use Tailwind v4 through the Vite integration.
   primitives. Preserve their native semantics, accessibility behavior and APIs.
   MUST NOT introduce a parallel primitive library or another UI kit.
 - Keep theme values centralized in `styles.css` and shared component variants.
+  Keep application spacing, layout and responsive rules in component utilities;
+  reserve custom selectors for global defaults and third-party generated markup.
   The `base-nova` registry style supplies the component structure; its scaffold
   palette MUST NOT replace the AgroSense tokens when adding components.
 - Compose application behavior around the primitives. Keep business rules and
