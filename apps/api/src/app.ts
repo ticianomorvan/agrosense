@@ -5,7 +5,6 @@ import {
   uuidSchema,
 } from "@agrosense/contracts";
 import { Hono } from "hono";
-import { whatsappAgentRoutes } from "./agent/routes";
 import type { ApiEnv } from "./env";
 import { requireAuth } from "./lib/auth";
 import { CropCycleError, updateCropCycle } from "./lib/crop-cycle";
@@ -19,7 +18,6 @@ import { whatsapp } from "./whatsapp";
 const app = new Hono<ApiEnv>();
 
 app.route("/api/whatsapp", whatsapp);
-app.route("/api/whatsapp", whatsappAgentRoutes);
 
 app.get("/api/health", (c) =>
   c.json({ status: "ok", service: "agrosense-api" } satisfies HealthResponse),
