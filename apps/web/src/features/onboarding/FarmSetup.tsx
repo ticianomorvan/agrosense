@@ -108,7 +108,9 @@ export function FarmSetup({
             className="grid gap-2 font-semibold"
             htmlFor={`${id}-locality`}
           >
-            Locality <span className="font-normal">(optional)</span>
+            <span>
+              Locality <span className="font-normal">(optional)</span>
+            </span>
             <Input
               id={`${id}-locality`}
               name="locality"

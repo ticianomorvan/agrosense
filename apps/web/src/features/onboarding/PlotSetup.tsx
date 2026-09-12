@@ -180,7 +180,9 @@ export function PlotSetup({
             />
           </label>
           <label className="grid gap-2 font-semibold" htmlFor={`${id}-sown`}>
-            Sowing date <span className="font-normal">(optional)</span>
+            <span>
+              Sowing date <span className="font-normal">(optional)</span>
+            </span>
             <Input
               id={`${id}-sown`}
               name="sownOn"
@@ -190,7 +192,9 @@ export function PlotSetup({
             />
           </label>
           <label className="grid gap-2 font-semibold" htmlFor={`${id}-stage`}>
-            Growth stage <span className="font-normal">(optional)</span>
+            <span>
+              Growth stage <span className="font-normal">(optional)</span>
+            </span>
             <NativeSelect
               id={`${id}-stage`}
               className="w-full"

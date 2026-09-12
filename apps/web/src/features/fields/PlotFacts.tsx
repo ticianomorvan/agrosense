@@ -42,8 +42,9 @@ export function PlotFacts({
     >
       <div className="space-y-2">
         <h2 id="plot-facts-title">Plot and crop</h2>
+        <h3>{plot.name}</h3>
         <label className="grid gap-2 font-semibold" htmlFor={`${id}-plot`}>
-          Selected plot
+          Choose plot
           <NativeSelect
             id={`${id}-plot`}
             className="w-full"
