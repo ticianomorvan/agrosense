@@ -83,6 +83,14 @@ ownership and version/attempt checks. Withdrawn hazards are cancelled only when
 newer evidence covers their whole previous interval. Crop-cycle mutation uses its
 authenticated Supabase RPC; sign-in UI remains a subsequent feature slice.
 
+[Automatic monitoring](weather-automation.md) centralizes scheduling and operations
+in Supabase Cron, pg_net and Vault. Authenticated Worker job endpoints reuse the
+refresh engine and send Kapso templates. Postgres owns due-work leases, the
+transactional notification outbox, contacts, delivery receipts and execution
+history. A daily source event key and per-owner/plot risk level deduplicate
+notification intent. Unknown external send outcomes remain explicit for
+reconciliation. All automation mutation RPCs are service-only.
+
 
 ## References
 
