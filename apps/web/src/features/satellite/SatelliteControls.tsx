@@ -19,13 +19,12 @@ export function SatelliteControls({
   onImage: (data: SatellitePreview | undefined) => void;
 }) {
   const id = useId();
-  const [from, setFrom] = useState(() =>
-    new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10),
+  const [initialWindow] = useState(() => defaultSatelliteWindow());
+  const [from, setFrom] = useState(() => initialWindow.from.slice(0, 10));
+  const [to, setTo] = useState(() => initialWindow.to.slice(0, 10));
+  const [requested, setRequested] = useState<SatelliteRequest | null>(
+    initialWindow,
   );
-  const [to, setTo] = useState(() =>
-    new Date(Date.now() - 86400000).toISOString().slice(0, 10),
-  );
-  const [requested, setRequested] = useState<SatelliteRequest | null>(null);
   const [error, setError] = useState("");
   const query = useQuery({
     queryKey: ["satellite", source.scope, source.farmId, requested],
@@ -150,4 +149,14 @@ export function SatelliteControls({
       )}
     </div>
   );
+}
+
+export function defaultSatelliteWindow(now = new Date()): SatelliteRequest {
+  const day = 86_400_000;
+  const from = new Date(now.getTime() - 30 * day).toISOString().slice(0, 10);
+  const to = new Date(now.getTime() - day).toISOString().slice(0, 10);
+  return {
+    from: `${from}T00:00:00Z`,
+    to: `${to}T23:59:59Z`,
+  };
 }

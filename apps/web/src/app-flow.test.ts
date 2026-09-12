@@ -47,6 +47,8 @@ describe("onboarding geometry", () => {
     [{ west: "", south: "-31.5", east: "-64.1", north: "-31.4" }],
     [{ west: "-64.1", south: "-31.5", east: "-64.2", north: "-31.4" }],
     [{ west: "-64.2", south: "-31.4", east: "-64.1", north: "-31.5" }],
+    [{ west: "-181", south: "-31.5", east: "-180.9", north: "-31.4" }],
+    [{ west: "-64.2", south: "-91", east: "-64.1", north: "-90.9" }],
   ])("rejects incomplete or reversed bounds", (bounds) => {
     expect(rectangleFromBounds(bounds).ok).toBe(false);
   });

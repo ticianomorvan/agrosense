@@ -6,6 +6,7 @@ import {
   satelliteRequestSchema,
 } from "@agrosense/contracts";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { defaultSatelliteWindow } from "../satellite/SatelliteControls";
 import { subscribeToRiskClock } from "./clock";
 import {
   assessmentSource,
@@ -124,6 +125,13 @@ it("rejects reversed, excessive and unexpected satellite request values", () => 
     { from: "2026-09-01T00:00:00Z", to: "2026-09-02T00:00:00Z", bbox: [] },
   ])
     expect(satelliteRequestSchema.safeParse(input).success).toBe(false);
+});
+
+it("prepares a past 30-day imagery window for the initial dashboard", () => {
+  expect(defaultSatelliteWindow(new Date("2026-09-12T12:00:00Z"))).toEqual({
+    from: "2026-08-13T00:00:00Z",
+    to: "2026-09-11T23:59:59Z",
+  });
 });
 
 it("does not present expired, stale or cancelled assessments as current risk", () => {

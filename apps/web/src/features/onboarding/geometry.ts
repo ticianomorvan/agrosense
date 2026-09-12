@@ -18,6 +18,12 @@ export function rectangleFromBounds(bounds: CoordinateBounds): RectangleResult {
   const north = number(bounds.north);
   if (west === null || south === null || east === null || north === null)
     return { ok: false, message: "Enter all four boundary coordinates." };
+  if (west < -180 || east > 180 || south < -90 || north > 90)
+    return {
+      ok: false,
+      message:
+        "Longitude must be from −180 to 180 and latitude from −90 to 90.",
+    };
   if (west >= east || south >= north)
     return {
       ok: false,
