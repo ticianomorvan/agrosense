@@ -22,9 +22,10 @@ local runtime checks for API responses and SPA fallback.
 
 Use Node 24 and the pnpm version pinned in package.json. Exact dependency
 resolutions live in pnpm-lock.yaml. The frontend uses TanStack Query for server
-state, Leaflet for maps, and shadcn/ui with the stock `base-nova` style, neutral
-palette and Tailwind v4. Components retain their default styling; custom themes
-and competing UI kits are prohibited. See the [style guide](style-guide.md).
+state, Leaflet for maps, and shadcn/ui (`base-nova`) with Tailwind v4. The shared
+AgroSense theme defines colors, system typography, radii and status variants.
+Use its tokens consistently; competing UI kits and one-off themes are prohibited.
+See the [style guide](style-guide.md).
 Routing is deferred while there is only one workspace screen.
 
 ## Layout and implementation order
@@ -85,8 +86,8 @@ available. Remount the overview on identity/farm changes and clear the QueryClie
 on sign-out. Tokens stay in memory; requests are same-origin, cancellable and
 validated with shared Zod schemas. Failed requests never substitute sample data.
 Risk expires on assessment/event deadlines and tab resume without a network fetch.
-Shared controls use stock shadcn Button, Badge, NativeSelect and Input components;
-maps load lazily. Only layout, control target size and readable wrapping are adjusted.
+Shared controls use shadcn Button, Badge, NativeSelect and Input with AgroSense
+semantic tokens and status variants. Map rendering loads lazily.
 
 The authenticated `POST /api/farms/:farmId/satellite` accepts `{from, to}` UTC
 instants within a past window of at most 31 days. It uses owner-scoped stored farm

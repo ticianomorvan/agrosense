@@ -6,8 +6,8 @@
 2. Treat the style guide's MUST / MUST NOT rules as acceptance criteria.
    Generic design skills and starter screens do not define a separate visual
    system.
-3. Use shadcn/ui with the configured stock neutral styling and layout patterns.
-   Do not create a custom theme or add features to make a screen look complete.
+3. Use shadcn/ui with the AgroSense theme and layout patterns in the style guide.
+   Do not invent one-off themes or add features to make a screen look complete.
 4. Keep changes scoped to the requested behavior and preserve unrelated rules.
 5. Missing product facts are not design decisions. Use an honest unavailable
    state; ask only when a missing fact blocks the requested behavior.

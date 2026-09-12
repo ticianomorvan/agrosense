@@ -88,7 +88,7 @@ it("presents missing weather and risk as unavailable", () => {
   for (const plot of data.plots)
     expect(plotStatus(data, plot.id)).toMatchObject({
       label: "Risk unavailable",
-      badgeVariant: "outline",
+      badgeVariant: "unknown",
       time: null,
     });
   expect(formatInstant(null)).toBe("Unavailable");

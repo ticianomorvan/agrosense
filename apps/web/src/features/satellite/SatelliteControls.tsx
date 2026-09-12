@@ -104,7 +104,7 @@ export function SatelliteControls({
           />
         </label>
         <Button
-          variant="outline"
+          variant="default"
           className="min-h-11 min-w-11"
           type="submit"
           disabled={!source.loadSatellite || query.isFetching}
@@ -133,10 +133,7 @@ export function SatelliteControls({
       )}
       {query.data?.status === "available" && (
         <>
-          <Badge
-            variant="secondary"
-            className="h-auto whitespace-normal text-sm"
-          >
+          <Badge variant="info" className="h-auto whitespace-normal text-sm">
             Acquired {formatInstant(query.data.acquiredAt)} (UTC−3)
           </Badge>
           <p className="metadata">

@@ -4,12 +4,12 @@ import type {
   PlotAlert,
 } from "@agrosense/contracts";
 
-type StatusVariant = "destructive" | "secondary" | "outline";
+type StatusVariant = "destructive" | "warning" | "success" | "unknown";
 
 const riskPresentation = {
   high: { label: "High risk", badgeVariant: "destructive" },
-  moderate: { label: "Moderate risk", badgeVariant: "secondary" },
-  low: { label: "Low risk", badgeVariant: "outline" },
+  moderate: { label: "Moderate risk", badgeVariant: "warning" },
+  low: { label: "Low risk", badgeVariant: "success" },
 } satisfies Record<
   NonNullable<PlotAlert["riskLevel"]>,
   { label: string; badgeVariant: StatusVariant }
@@ -79,14 +79,14 @@ export function plotStatus(
   if (previous)
     return {
       label: "Risk unavailable",
-      badgeVariant: "outline",
+      badgeVariant: "unknown",
       reason:
         "The previous evaluation is no longer current. A current risk assessment is unavailable.",
       time: previous.generatedAt,
     };
   return {
     label: "Risk unavailable",
-    badgeVariant: "outline",
+    badgeVariant: "unknown",
     reason:
       data.monitoring.status === "never_refreshed"
         ? "No weather evaluation is available for this field."

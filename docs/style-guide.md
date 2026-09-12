@@ -11,20 +11,24 @@ MUST means required. MUST NOT means prohibited.
 interaction rules. Implement only the requested slice. A component or pattern in
 this guide is not authorization to add features, routes, data, or agronomic logic.
 
-MUST use **shadcn/ui with its stock `base-nova` style and neutral palette**.
+MUST use **shadcn/ui with the AgroSense theme defined below**.
 [components.json](../apps/web/components.json) defines the component configuration;
-[styles.css](../apps/web/src/styles.css) contains the generated tokens and app
+[styles.css](../apps/web/src/styles.css) contains the theme tokens and app
 layout rules. Use Tailwind v4 through the Vite integration.
 
 - Add required primitives through the official shadcn CLI. Use the existing
   Button, Badge, NativeSelect and Input before adding more components.
-- Preserve the generated palette, font, radii, variants, borders, shadows and
-  interaction styling. MUST NOT introduce a custom AgroSense theme, brand-color
-  substitutions, a parallel primitive library, or another UI kit.
+- Apply AgroSense colors, typography, radii and status variants to the shadcn
+  primitives. Preserve their native semantics, accessibility behavior and APIs.
+  MUST NOT introduce a parallel primitive library or another UI kit.
+- Keep theme values centralized in `styles.css` and shared component variants.
+  The `base-nova` registry style supplies the component structure; its scaffold
+  palette MUST NOT replace the AgroSense tokens when adding components.
 - Compose application behavior around the primitives. Keep business rules and
   data-source assumptions out of generated component files.
 - Caller-side classes may adjust layout, width, minimum target size, readable text
-  size and wrapping. They MUST NOT recolor or restyle the primitives.
+  size and wrapping. Use shared variants for visual states; MUST NOT add one-off
+  colors or create a different theme for an individual screen.
 - Use the existing semantic CSS variables for app-authored surfaces and map
   overlays. MUST NOT introduce raw colors or duplicate theme tokens. Source
   imagery is exempt; authored overlays are not.
@@ -38,20 +42,41 @@ Use these semantic roles:
 | Secondary text | `muted-foreground` on `background` or `card` |
 | Primary action | Button `default` |
 | Secondary action | Button `outline` or `secondary` |
-| Informational status | Badge `secondary` |
+| Informational status | Badge `info` |
 | High or critical risk | Badge `destructive`, with an explicit risk label |
-| Moderate risk | Badge `secondary`, with an explicit risk label |
-| Low or unavailable risk | Badge `outline`, with distinct explicit labels |
-| Panel | `card`, `border`, `radius-lg` |
+| Moderate risk | Badge `warning`, with an explicit risk label |
+| Low risk | Badge `success`, with an explicit risk label |
+| Unavailable risk | Badge `unknown`, with an explicit unavailable label |
+| Panel | `card`, `border`, `radius-xl` |
 | Map selection | `primary` outline, contrasting casing and a visible selected label |
+
+The following token values are required. Use matching foreground/background pairs;
+do not reduce text opacity or use decorative border colors for essential controls.
+
+| Role | CSS tokens and values |
+| --- | --- |
+| Canvas and text | `background: #f4f3eb`, `foreground: #173c2d` |
+| Surface | `card` / `popover: #ffffff`; matching foreground: `#173c2d` |
+| Primary action | `primary: #245c3b`, `primary-hover: #173c2d`, `primary-foreground: #ffffff` |
+| Subtle surface | `secondary` / `muted` / `accent: #e8ede7`; secondary/accent foreground: `#173c2d` |
+| Secondary text | `muted-foreground: #4b6054` |
+| Decorative border | `border: #b9c7bc` |
+| Essential control border | `input: #728879` |
+| Focus | `ring: #235eaa` |
+| Low-risk status | `success: #e9f2e8`, `success-foreground: #245c3b` |
+| Warning status | `warning: #fff3db`, `warning-foreground: #854600` |
+| Critical status | `destructive-muted: #fbeaea`, `destructive: #a32d2d` |
+| Information status | `info: #eaf2f8`, `info-foreground: #285c8a` |
+| Unavailable status | `unknown: #eef0ed`, `unknown-foreground: #58635c` |
 
 Status words MUST carry the meaning independently of color. Component variants
 MUST NOT define agronomic thresholds or imply that a field is healthy.
 
 ## 2. Type, spacing, and surfaces
 
-Use the preset's bundled Geist font through `font-sans`. MUST NOT add display
-fonts, external font downloads, decorative letter spacing or all-caps headings.
+Use `system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif` through
+`font-sans`. MUST NOT add display fonts, font downloads, decorative letter spacing
+or all-caps headings.
 Leave the browser root font size unchanged.
 
 | Role | Size / line-height | Weight |
@@ -60,7 +85,7 @@ Leave the browser root font size unchanged.
 | Section title | 1.25rem / 1.4 | 600 |
 | Body and field names | 1rem / 1.5 | 400; 600 for names/headings |
 | Metadata and status | 0.875rem / 1.5 | 400; 600 for headings |
-| Controls | Stock shadcn typography, at least 14px equivalent | Stock weight |
+| Controls | At least 14px equivalent with a 44px minimum target | 500 or 600 |
 | Key measurement, only when requested | 2rem / 1.25; unit at body size | 600 |
 
 Status badges MUST use readable text and wrap when necessary. MUST NOT hide the
@@ -72,9 +97,10 @@ App layout padding and gaps use the existing spacing scale: 4, 8, 12, 16, 24, 32
 48 and 64px, expressed through spacing variables or equivalent Tailwind utilities.
 Zero is also allowed. Preserve the primitives' own internal spacing.
 
-App panels use `card`, a 1px `border`, `radius-lg`, 16px padding and no shadow.
-MUST NOT nest bordered panels. Use shadcn defaults for component surfaces rather
-than adding panel rules to every control. Do not add decorative cards or shadows.
+Set `--radius` to 0.25rem: controls and badges use `radius-lg` (4px), while panels
+use `radius-xl` (8px). Badges MUST NOT be pills. App panels use `card`, a 1px
+`border`, 16px padding and no shadow. MUST NOT nest bordered panels or add
+decorative cards and shadows.
 
 ## 3. Device layouts
 
@@ -108,7 +134,7 @@ no floating action bar by default.
 
 | Component | Required contract |
 | --- | --- |
-| Button | Use the stock shadcn Button. At most one primary action per task group. Minimum 44px height and width. Buttons perform actions. |
+| Button | Use the themed shadcn Button. At most one primary action per task group. Minimum 44px height and width. Buttons perform actions. |
 | Link | Links navigate. Underlined with visible focus; at least a 44px target unless embedded within a sentence. |
 | Input/select | Use shadcn Input or NativeSelect for native controls. Persistent visible label, minimum 44px height. Errors are adjacent and programmatically associated. Placeholder is not a label. |
 | Field priority item | Field name → labeled status → reason → observation time/source → supported next action. Reason is visible without hover. |
@@ -116,9 +142,11 @@ no floating action bar by default.
 | Table | Semantic headers; numbers right-aligned with units. Place wide comparisons in a labeled scroll region. |
 | Dialog/menu, only if needed | Use the appropriate shadcn component. Keyboard-operable, visible focus, Escape closes; dialogs trap focus and return it to the trigger. |
 
-Preserve stock hover, focus-visible, active and disabled states. Focus MUST remain
-visible, logical and unobscured. App CSS MUST NOT suppress the primitives' focus
-rings. Map controls sit on an opaque surface. Explain unavailable actions when
+Controls MUST provide hover, focus-visible, active and disabled states using the
+shared theme. Primary hover uses `primary-hover`; outlined controls use `card` and
+`input`. Disabled controls use `muted` and `muted-foreground` without fading their
+text. Focus uses the full-opacity `ring` color and MUST remain visible, logical
+and unobscured. App CSS MUST NOT suppress the primitives' focus rings. Map controls sit on an opaque surface. Explain unavailable actions when
 needed. Pending writes disable duplicate submission, retain a meaningful action
 label and expose `aria-busy`.
 
@@ -180,8 +208,8 @@ movement. Reduced-motion rules MUST take precedence over component utilities.
 Every UI task MUST report evidence for applicable checks below. N/A requires a
 reason. Unperformed checks remain unverified; a build is not browser evidence.
 
-- [ ] Controls use the configured shadcn primitives and stock neutral styling;
-  no custom theme or competing primitive library was introduced.
+- [ ] Controls use the configured shadcn primitives and AgroSense theme tokens;
+  no one-off theme or competing primitive library was introduced.
 - [ ] App typography, spacing, surfaces and component behavior match this guide.
 - [ ] No prohibited decoration or unrequested features were introduced.
 - [ ] Browser screenshots inspected at 1440×900, 1024×768, 768×1024, 390×844,
@@ -192,9 +220,9 @@ reason. Unperformed checks remain unverified; a build is not browser evidence.
   field names; controls stay reachable.
 - [ ] Tab/Shift+Tab/Enter/Space and Escape where applicable work. Focus is visible,
   logical and unobscured; equivalent map information is accessible in the list.
-- [ ] App-authored text meets 4.5:1 contrast and essential map/state graphics
-  meet 3:1. Measure component text, borders and focus indicators; report any
-  limitations in the stock styling without claiming blanket compliance.
+- [ ] Text meets 4.5:1 contrast and essential controls, focus indicators and
+  map/state graphics meet 3:1 against adjacent backgrounds. Measure the rendered
+  states and report any limitations without claiming blanket compliance.
 - [ ] Status is understandable without color. Applicable loading, empty, error,
   partial, stale, disabled and pending states were exercised.
 - [ ] Reduced-motion behavior works; controls have 44×44px minimum targets.
@@ -203,8 +231,8 @@ reason. Unperformed checks remain unverified; a build is not browser evidence.
 
 Contrast checks follow [WCAG text guidance](https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html)
 and [non-text guidance](https://www.w3.org/WAI/WCAG22/Understanding/non-text-contrast.html).
-Stock components do not by themselves establish WCAG conformance. Keep measured
-limitations explicit; do not create an ad hoc theme to conceal them.
+Using shadcn does not by itself establish WCAG conformance. Keep measured
+limitations explicit; resolve styling consistently through the shared theme.
 
 Missing product facts belong in the [product context](../PRODUCT.md) and
 [domain model](domain-model.md). Use honest unavailable states and ask only when a

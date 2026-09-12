@@ -114,10 +114,7 @@ export function FieldOverview({ source }: { source: FarmDataSource }) {
       </div>
       <div className="workspace-status" role="status">
         {data.farm.dataMode === "demo" && (
-          <Badge
-            variant="secondary"
-            className="h-auto whitespace-normal text-sm"
-          >
+          <Badge variant="info" className="h-auto whitespace-normal text-sm">
             Demonstration weather and risk data
           </Badge>
         )}
