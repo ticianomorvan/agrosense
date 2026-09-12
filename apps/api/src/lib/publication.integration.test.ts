@@ -83,8 +83,8 @@ const polygon = {
     [
       [0, 0],
       [4, 0],
-      [4, 4],
-      [0, 4],
+      [4, 8],
+      [0, 8],
       [0, 0],
     ],
   ],
@@ -99,10 +99,69 @@ const seed = {
   },
   plots: [
     {
-      name: "Plot",
-      boundary: polygon,
-      samplePoint: { type: "Point", coordinates: [1, 1] },
+      name: "Lote Norte",
+      boundary: {
+        type: "Polygon",
+        coordinates: [
+          [
+            [0, 0],
+            [2, 0],
+            [2, 4],
+            [0, 4],
+            [0, 0],
+          ],
+        ],
+      },
+      samplePoint: { type: "Point", coordinates: [1, 2] },
       declaredAreaHa: 10,
+      cropCycle: {
+        cropCode: "maize",
+        seasonLabel: "2026/27",
+        stageCode: "V6",
+        stageAsOf: "2026-09-10",
+        sownOn: null,
+      },
+    },
+    {
+      name: "Lote Centro",
+      boundary: {
+        type: "Polygon",
+        coordinates: [
+          [
+            [2, 0],
+            [4, 0],
+            [4, 4],
+            [2, 4],
+            [2, 0],
+          ],
+        ],
+      },
+      samplePoint: { type: "Point", coordinates: [3, 2] },
+      declaredAreaHa: 12,
+      cropCycle: {
+        cropCode: "soybean",
+        seasonLabel: "2026/27",
+        stageCode: "R4",
+        stageAsOf: "2026-09-10",
+        sownOn: null,
+      },
+    },
+    {
+      name: "Lote Sur",
+      boundary: {
+        type: "Polygon",
+        coordinates: [
+          [
+            [0, 4],
+            [2, 4],
+            [2, 8],
+            [0, 8],
+            [0, 4],
+          ],
+        ],
+      },
+      samplePoint: { type: "Point", coordinates: [1, 6] },
+      declaredAreaHa: 9,
       cropCycle: {
         cropCode: "maize",
         seasonLabel: "2026/27",
@@ -141,9 +200,11 @@ it("imports alerts with actual event and complete current-cycle snapshots", asyn
     new Date(now),
   );
   const dashboard = await loadDashboard(userClient, imported.farmId, now);
-  expect(dashboard?.events).toHaveLength(1);
+  expect(dashboard?.events).toHaveLength(2);
   const event = dashboard?.events[0];
-  const alert = event?.alerts[0];
+  const alert = event?.alerts.find(
+    (item) => item.plotId === dashboard?.plots[0]?.id,
+  );
   expect(alert?.inputSnapshot.event.id).toBe(event?.id);
   expect(alert?.inputSnapshot.cropCycle).toEqual(
     dashboard?.plots[0]?.activeCropCycle,
@@ -163,7 +224,7 @@ async function liveFarm() {
   const imported = await importDemoSeed(
     serviceClient,
     owner,
-    seed,
+    { ...seed, plots: [seed.plots[0]] },
     new Date(now),
   );
   const approvedRule = riskRuleSchema.parse({
@@ -208,7 +269,7 @@ it("publishes generated alerts that the dashboard can read and preserves IDs on 
     isStale: false,
   });
   expect(alert?.inputSnapshot.cropCycle).toEqual(
-    first?.plots[0]?.activeCropCycle,
+    first?.plots.find((plot) => plot.id === alert?.plotId)?.activeCropCycle,
   );
   expect(alert?.inputSnapshot.event.id).toBe(event?.id);
 

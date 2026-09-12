@@ -60,3 +60,31 @@ function number(value: string): number | null {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
 }
+
+export function boundsFromPoints(
+  points: ReadonlyArray<{ lat: number; lng: number }>,
+): CoordinateBounds | null {
+  if (points.length < 4) return null;
+  const lats = points.map((p) => p.lat);
+  const lngs = points.map((p) => p.lng);
+  return {
+    west: Math.min(...lngs).toFixed(6),
+    east: Math.max(...lngs).toFixed(6),
+    south: Math.min(...lats).toFixed(6),
+    north: Math.max(...lats).toFixed(6),
+  };
+}
+
+export function polygonFromPoints(
+  points: ReadonlyArray<{ lat: number; lng: number }>,
+): Polygon | null {
+  if (points.length < 3) return null;
+  const ring = points.map((p) => [p.lng, p.lat] as [number, number]);
+  const first = ring[0];
+  if (!first) return null;
+  ring.push(first);
+  return {
+    type: "Polygon",
+    coordinates: [ring],
+  };
+}

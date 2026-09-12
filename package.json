@@ -7,7 +7,7 @@
     "node": ">=24 <25"
   },
   "scripts": {
-    "dev": "pnpm --parallel --filter './apps/*' dev",
+    "dev": "pnpm --parallel --filter @agrosense/api --filter @agrosense/web dev",
     "build": "pnpm --filter @agrosense/web build && pnpm --filter @agrosense/api build",
     "preview": "pnpm build && pnpm --parallel --filter './apps/*' preview",
     "typecheck": "pnpm -r typecheck",

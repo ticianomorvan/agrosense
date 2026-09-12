@@ -8,6 +8,11 @@ import * as L from "leaflet";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "../../components/ui/button";
 
+export const ESRI_WORLD_IMAGERY_URL =
+  "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
+export const ESRI_ATTRIBUTION =
+  "Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community";
+
 export default function FieldMap({
   data,
   plots,
@@ -34,15 +39,24 @@ export default function FieldMap({
     if (!container.current) return;
     const instance = L.map(container.current, {
       zoomControl: false,
-      attributionControl: false,
+      attributionControl: true,
       zoomAnimation: false,
       fadeAnimation: false,
       markerZoomAnimation: false,
       minZoom: 5,
       maxZoom: 19,
-      scrollWheelZoom: false,
+      scrollWheelZoom: true,
+      dragging: true,
     });
     map.current = instance;
+    const imageryPane = instance.createPane("sentinelImagery");
+    imageryPane.style.zIndex = "250";
+
+    L.tileLayer(ESRI_WORLD_IMAGERY_URL, {
+      maxZoom: 19,
+      attribution: ESRI_ATTRIBUTION,
+    }).addTo(instance);
+
     instance.fitBounds(farmBounds, {
       padding: [24, 24],
       animate: false,
@@ -73,6 +87,12 @@ export default function FieldMap({
     const token = (name: string) => styles.getPropertyValue(`--${name}`).trim();
     polygonLayer(data.farm.boundary, {
       interactive: false,
+      color: token("card"),
+      weight: 4,
+      fill: false,
+    }).addTo(group);
+    polygonLayer(data.farm.boundary, {
+      interactive: false,
       color: token("foreground"),
       weight: 2,
       fill: false,
@@ -83,14 +103,14 @@ export default function FieldMap({
       polygonLayer(plot.boundary, {
         interactive: false,
         color: token("card"),
-        weight: 4,
+        weight: selected ? 5 : 4,
         fill: false,
       }).addTo(group);
       const shape = polygonLayer(plot.boundary, {
         color: token(selected ? "primary" : "muted-foreground"),
-        weight: 2,
+        weight: selected ? 3 : 2,
         fillColor: token("muted"),
-        fillOpacity: selected ? 0.4 : 0.15,
+        fillOpacity: selected ? 0.35 : 0.15,
       });
       const label = document.createElement("span");
       label.textContent = `${plot.name}${selected ? " · Selected" : ""}`;
@@ -98,7 +118,9 @@ export default function FieldMap({
         permanent: true,
         opacity: 1,
         direction: "center",
-        className: "map-field-label",
+        className: selected
+          ? "map-field-label map-field-label-selected"
+          : "map-field-label",
       });
       shape.on("click", () => onSelect(plot.id));
       shape.addTo(group);
@@ -119,7 +141,7 @@ export default function FieldMap({
         [s, w],
         [n, e],
       ],
-      { pane: "tilePane", interactive: false },
+      { pane: "sentinelImagery", interactive: false },
     );
     image.on("error", () => setImageError(true));
     image.addTo(map.current);
@@ -157,8 +179,8 @@ export default function FieldMap({
       </div>
       <section
         ref={container}
-        className="field-map relative z-0 h-96 min-h-80 rounded-lg border border-muted-foreground bg-muted font-sans md:h-144 md:min-h-120"
-        aria-label="Farm map. Use arrow keys to pan; select plots with the plot selector."
+        className="field-map relative z-0 h-96 min-h-80 overflow-hidden rounded-lg border border-muted-foreground bg-muted font-sans md:h-144 md:min-h-120"
+        aria-label="Farm map. Use arrow keys or drag to pan; scroll or buttons to zoom; select plots with the plot selector."
       />
       <div className="flex flex-wrap items-center gap-2 text-sm">
         <span

@@ -118,10 +118,19 @@
 /* Leaflet creates these elements outside React. */
 @layer components {
   .field-map .leaflet-tooltip {
-    @apply w-max max-w-23 rounded-lg border border-muted-foreground bg-card px-2 py-1 text-center font-sans text-sm leading-normal font-semibold whitespace-normal text-foreground wrap-anywhere shadow-none md:max-w-48;
+    @apply w-max max-w-23 rounded-lg border border-muted-foreground bg-card px-2 py-1 text-center font-sans text-sm leading-normal font-semibold whitespace-normal text-foreground wrap-anywhere opacity-100 shadow-none md:max-w-48;
   }
   .field-map .leaflet-tooltip::before {
     display: none;
+  }
+  .field-map .leaflet-tooltip.map-field-label-selected {
+    @apply border-2 border-primary;
+  }
+  .field-map .leaflet-control-attribution {
+    @apply m-0 rounded-tl border-t border-l border-border bg-card px-2 py-0.5 font-sans text-xs text-muted-foreground;
+  }
+  .field-map .leaflet-control-attribution a {
+    @apply text-primary underline;
   }
 }
 
