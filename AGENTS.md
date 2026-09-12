@@ -28,3 +28,11 @@
   `git diff --check`; no application test run is required.
 - Do not claim compliance for checks that were not performed. If browser
   verification is unavailable, name that limitation in the task summary.
+
+## WhatsApp and agent work
+
+- Read `docs/agent-development.md` for official skills, version-matched sources,
+  and review checks before changing Kapso, model/tool execution, or durable state.
+- Use the relevant installed provider skill when available; follow the linked
+  official docs otherwise. Skill examples do not override this repository's
+  OpenRouter route, data boundaries, small-footprint goal, or authorized scope.

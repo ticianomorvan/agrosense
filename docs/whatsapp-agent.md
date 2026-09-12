@@ -6,6 +6,7 @@ The final answer is sent through the shared
 [Kapso adapter](kapso.md). The agent supports one configured producer per deployment.
 Automatic alerts, scheduled forecast refreshes, farm mutations, media, templates,
 and account-linking flows are outside this slice.
+For implementation changes, see the [official skills and development references](agent-development.md).
 
 ## Tools and data boundaries
 
@@ -71,11 +72,13 @@ account settings. Direct `OPENAI_*` settings are unused.
    `pnpm --filter @agrosense/api exec wrangler secret put <NAME>`, then deploy
    with `pnpm deploy`. Wrangler creates the SQLite Durable Object via migration
    `whatsapp-agent-v1`; no Supabase migration is added by this feature.
-3. Subscribe Kapso v2 `whatsapp.message.received` events to
+3. Create a phone-number-scoped Kapso v2 webhook for the configured business
+   `phone_number_id`, subscribing to `whatsapp.message.received` events at
    `https://<your-worker-host>/api/whatsapp/webhook` with the same signing secret.
    Use unbuffered events or batches of at most 20 messages and 128 KiB.
 4. Enable the agent and have the linked producer message the business number.
-   Verify an actual tool-backed answer and inspect the run's status.
+   Verify an actual tool-backed answer, a follow-up question in the same
+   conversation, and the run's status.
 
 Setting `WHATSAPP_AGENT_ENABLED=false` stops admission and subsequent run/send
 operations. Current identity is checked again before processing and sending.
@@ -144,6 +147,13 @@ deduplication, and history after object eviction. It never reads `.env` or sends
 real WhatsApp message. Live model behavior and delivery remain a deployment check.
 Recovery from intermediate run/send states is covered by unit tests; runtime
 eviction coverage verifies completed receipts and history.
+
+For delivery problems, correlate the run and reply message IDs with Kapso's
+webhook deliveries and message status. Check whether Kapso paused the webhook
+after repeated failures; retries are finite and batches may fall back to
+individual delivery. Consult the current delivery documentation for retry and
+pause settings. Re-enable only after fixing the endpoint, and inspect Kapso
+before retrying an uncertain send.
 
 References: [AI SDK ToolLoopAgent](https://ai-sdk.dev/docs/reference/ai-sdk-core/tool-loop-agent),
 [OpenRouter AI SDK provider](https://github.com/OpenRouterTeam/ai-sdk-provider),
