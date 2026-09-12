@@ -1,7 +1,7 @@
 # AgroSense
 
 TypeScript monorepo: React + Vite SPA, Hono API on Cloudflare Workers, and shared
-Zod contracts. See [stack decisions](docs/stack.md) for boundaries and [Supabase setup](docs/supabase.md).
+Zod contracts. See [stack decisions](docs/stack.md) for boundaries, [Supabase setup](docs/supabase.md), [Kapso outbound WhatsApp](docs/kapso.md), and the [WhatsApp reasoning agent](docs/whatsapp-agent.md).
 
 See [product context](PRODUCT.md) for the intended audience and core job, and the
 [frontend implementation contract](docs/style-guide.md) for required visual
@@ -23,7 +23,7 @@ use the Supabase settings in `apps/api/.env`. The initial web build supplies Wra
 Vite provides live frontend changes at port 5173.
 
 ```sh
-pnpm check    # type checking, Biome, API/web/database tests, and production builds
+pnpm check    # types, lint, API/web/DB tests, builds, and mocked Worker integration
 pnpm preview  # built SPA + real local Worker at http://127.0.0.1:8787
 ```
 
@@ -38,7 +38,8 @@ pnpm preview  # built SPA + real local Worker at http://127.0.0.1:8787
 The backend includes authenticated dashboard reads and a standalone Open-Meteo
 forecast adapter with frost, heat, severe-storm, and hail detection. See the
 [implemented adapter scope](docs/domain-model.md#implemented-weather-adapter).
-Fetching is not wired to an HTTP refresh route or persistence.
+The authenticated refresh route publishes synthetic forecasts for demo farms;
+live refresh remains unavailable.
 
 ## Deployment
 

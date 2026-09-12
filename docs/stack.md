@@ -18,6 +18,7 @@ API/frontend/database tests, production builds and browser checks.
 | Contracts | Shared Zod schemas | Runtime response validation and inferred TypeScript types |
 | Hosting | Workers Static Assets + API Worker | One deployment and origin; explicit `/api` routing |
 | Quality | Biome + Vitest | Formatting, linting, and API/frontend tests |
+| Agent | Vercel AI SDK + official OpenRouter provider | Native Zod tools and bounded `ToolLoopAgent` execution |
 | Persistence | Supabase Postgres + Auth | Typed Data API client, JWT verification, and owner-scoped RLS |
 
 Use Node 24 and the pnpm version pinned in package.json. Exact dependency
@@ -34,6 +35,9 @@ Routing is deferred while there is only one workspace screen.
 2. `apps/api`: Hono routes under `/api`; JSON errors for unknown API routes.
 3. `apps/web`: React SPA using same-origin `/api` requests. Vite proxies them to
    Wrangler locally. Production assets are served by Workers Static Assets.
+
+The API entrypoint exports the Hono app and Durable Object class. Wrangler minifies
+the production Worker bundle.
 
 Both apps depend on contracts; contracts never imports application code.
 TypeScript uses ESM, named exports, and inferred schema types:
@@ -59,6 +63,10 @@ See [Supabase setup](supabase.md) for credentials, migrations, types, and comman
 The Worker uses `supabase-js` over the HTTP Data API. `requireAuth` verifies user
 JWTs against Supabase JWKS and provides a request-scoped client that preserves
 row-level security. Secret-key operations are reserved for explicit administration.
+The [WhatsApp agent](whatsapp-agent.md) additionally uses a dedicated read-only
+adapter with server-selected identity and mandatory owner filters after verifying
+the linked sender's signed webhook. Its conversation state uses Cloudflare SQLite
+Durable Objects, separately from the five agricultural tables.
 Never put a secret/service-role key in Vite variables or a browser bundle.
 
 Shared contracts stay browser-safe. Database row types live in the API; product

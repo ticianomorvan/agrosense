@@ -145,3 +145,43 @@ it("rejects redirects at every provider step without following them", async () =
       expect(init?.redirect).toBe("manual");
   }
 });
+
+it.each([
+  [0, 1_048_576],
+  [2, 6_000_000],
+])("rejects oversized provider bodies at step %i", async (step, limit) => {
+  const responses = [
+    Response.json({ access_token: "provider-token" }),
+    Response.json({ features: [scene] }),
+  ];
+  responses[step] = new Response(new Uint8Array(limit + 1));
+  const fetcher = vi.fn<typeof fetch>(async () => {
+    const response = responses.shift();
+    if (!response) throw new Error("Unexpected request after oversized body");
+    return response;
+  });
+  await expect(
+    loadSatellitePreview(env, boundary, window, fetcher),
+  ).rejects.toThrow("Satellite imagery is temporarily unavailable");
+  expect(fetcher).toHaveBeenCalledTimes(step + 1);
+});
+
+it("cancels a stalled provider body at the request deadline", async () => {
+  vi.useFakeTimers();
+  const cancel = vi.fn();
+  try {
+    const fetcher = vi.fn<typeof fetch>(
+      async () => new Response(new ReadableStream({ cancel })),
+    );
+    const result = loadSatellitePreview(env, boundary, window, fetcher);
+    const rejected = expect(result).rejects.toThrow(
+      "Satellite imagery is temporarily unavailable",
+    );
+    await vi.advanceTimersByTimeAsync(8000);
+    expect(cancel).toHaveBeenCalledTimes(1);
+    await rejected;
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  } finally {
+    vi.useRealTimers();
+  }
+});

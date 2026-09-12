@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 afterEach(() => vi.unstubAllGlobals());
 
-import app from "./index";
+import app from "./app";
 
 describe("API contract", () => {
   it("responds to the SPA with the shared health contract", async () => {

@@ -7,6 +7,7 @@ import {
   satelliteRequestSchema,
 } from "@agrosense/contracts";
 import { decode, hasPngSignature } from "fast-png";
+import { boundedFetch } from "../lib/http";
 
 export type SatelliteBindings = {
   COPERNICUS_CLIENT_ID?: string;
@@ -25,33 +26,6 @@ const evalscript = `//VERSION=3
 function setup() { return { input: ["B02", "B03", "B04", "dataMask"], output: { bands: 4 } }; }
 function evaluatePixel(s) { return [2.5*s.B04, 2.5*s.B03, 2.5*s.B02, s.dataMask]; }`;
 
-async function boundedBody(response: Response, maxBytes: number) {
-  if (!response.ok || !response.body) {
-    await response.body?.cancel();
-    throw new Error("Provider response failed");
-  }
-  const reader = response.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let size = 0;
-  try {
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      size += value.length;
-      if (size > maxBytes) throw new Error("Provider response too large");
-      chunks.push(value);
-    }
-  } finally {
-    await reader.cancel();
-  }
-  const result = new Uint8Array(size);
-  let offset = 0;
-  for (const chunk of chunks) {
-    result.set(chunk, offset);
-    offset += chunk.length;
-  }
-  return result;
-}
 function mercator([lng, lat]: readonly [number, number]): [number, number] {
   return [
     (6378137 * lng * Math.PI) / 180,
@@ -94,14 +68,14 @@ export async function loadSatellitePreview(
       init: RequestInit,
       maxBytes = 1_048_576,
     ) => {
-      const response = await fetcher(url, {
-        ...init,
-        // workerd supports manual/follow; boundedBody rejects every 3xx.
-        // Never follow a redirect carrying credentials or a bearer token.
-        redirect: "manual",
-        signal: AbortSignal.timeout(8000),
+      const response = await boundedFetch(url, init, {
+        fetcher,
+        timeoutMs: 8000,
+        maxBytes,
       });
-      return { response, bytes: await boundedBody(response, maxBytes) };
+      if (!response.ok || !response.body)
+        throw new Error("Provider response failed");
+      return { response, bytes: new Uint8Array(await response.arrayBuffer()) };
     };
     const auth = await request(tokenUrl, {
       method: "POST",
