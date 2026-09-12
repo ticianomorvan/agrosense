@@ -69,7 +69,10 @@ are activated; keep the reasoning agent disabled until its owner, provider keys,
 and webhook signing secret are configured. Never use a `VITE_` variable for a
 secret.
 
-For subsequent releases, export the same Worker origin and run `pnpm run deploy`.
+For subsequent releases, apply pending Supabase migrations with `pnpm db:push`
+using the linked project before deploying API changes. The multi-event demo seed
+requires `20260912122000_demo_seed_events.sql` on existing installations.
+Then export the same Worker origin and run `pnpm run deploy`.
 It validates the origin, runs the complete `pnpm check` suite, and dry-runs both
 Worker packages before publishing either one. Run `pnpm deploy:check` for the same
 preflight without publishing. A frontend build failure therefore leaves both live
