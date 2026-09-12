@@ -10,6 +10,8 @@ export type HealthResponse = z.infer<typeof healthResponseSchema>;
 export const sessionResponseSchema = z.object({ userId: z.uuid() });
 export type SessionResponse = z.infer<typeof sessionResponseSchema>;
 
+export const uuidSchema = z.uuid();
+
 const instantSchema = z.iso.datetime({ offset: true });
 const localDateSchema = z.iso.date();
 const positionSchema = z
@@ -153,7 +155,7 @@ const eventCardSchema = z.object({
   temporalState: z.enum(["upcoming", "ongoing", "recent"]),
   source: sourceSchema,
   evidence: eventEvidenceSchema,
-  alerts: z.array(plotAlertSchema).min(1).max(10),
+  alerts: z.array(plotAlertSchema).max(10),
 });
 const monitoringSchema = z.object({
   status: z.enum(["never_refreshed", "fresh", "stale", "failed"]),
@@ -175,7 +177,7 @@ export const dashboardResponseSchema = z.object({
   schemaVersion: z.literal(1),
   asOf: instantSchema,
   farm: farmSchema,
-  plots: z.array(plotSchema).min(1).max(10),
+  plots: z.array(plotSchema).max(10),
   basemap: basemapSchema,
   forecast: forecastSummarySchema.nullable(),
   events: z.array(eventCardSchema).max(50),

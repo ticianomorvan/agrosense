@@ -1,4 +1,8 @@
-import type { HealthResponse, SessionResponse } from "@agrosense/contracts";
+import {
+  type HealthResponse,
+  type SessionResponse,
+  uuidSchema,
+} from "@agrosense/contracts";
 import { Hono } from "hono";
 import { type ApiEnv, requireAuth } from "./lib/auth";
 import { loadDashboard } from "./lib/dashboard";
@@ -25,11 +29,7 @@ app.get("/api/farms/:farmId/dashboard", requireAuth, async (c) => {
       400,
     );
   const farmId = c.req.param("farmId");
-  if (
-    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-      farmId,
-    )
-  )
+  if (!uuidSchema.safeParse(farmId).success)
     return c.json(
       { error: { code: "BAD_REQUEST", message: "farmId must be a UUID" } },
       400,

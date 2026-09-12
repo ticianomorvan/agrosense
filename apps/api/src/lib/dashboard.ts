@@ -1,6 +1,7 @@
 import type { DashboardResponse } from "@agrosense/contracts";
 import { dashboardResponseSchema } from "@agrosense/contracts";
-import type { Database, Json } from "./database.types";
+import type { Database } from "./database.types";
+import { iso, json } from "./database-utils";
 import type { createUserClient } from "./supabase";
 
 type FarmRow = Database["public"]["Tables"]["farms"]["Row"];
@@ -10,9 +11,6 @@ type EventRow = Database["public"]["Tables"]["events"]["Row"];
 type AlertRow = Database["public"]["Tables"]["plot_alerts"]["Row"];
 
 type DashboardClient = ReturnType<typeof createUserClient>;
-
-const json = <T>(value: Json): T => value as T;
-const iso = (value: string) => new Date(value).toISOString();
 
 function temporalState(
   asOf: string,

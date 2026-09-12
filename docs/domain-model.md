@@ -662,7 +662,7 @@ Additional conditional validation:
 | temporalState | upcoming, ongoing, recent | required | — |
 | source | Source | required | — |
 | evidence | EventEvidence | required | — |
-| alerts | array of PlotAlert | required | 1–10 items; each item: — |
+| alerts | array of PlotAlert | required | 0–10 items; each item: — |
 
 ### Monitoring
 
@@ -681,7 +681,7 @@ Additional conditional validation:
 | schemaVersion | 1 (constant) | required | — |
 | asOf | Instant | required | — |
 | farm | Farm | required | — |
-| plots | array of Plot | required | 1–10 items; each item: — |
+| plots | array of Plot | required | 0–10 items; each item: — |
 | basemap | Basemap | required | — |
 | forecast | ForecastSummary or null | required | —; — |
 | events | array of EventCard | required | 0–50 items; each item: — |
