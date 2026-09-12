@@ -1,7 +1,7 @@
 import { whatsappMessageResponseSchema } from "@agrosense/contracts";
 import { exportJWK, generateKeyPair, SignJWT } from "jose";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import app from "./index";
+import app from "./app";
 
 const userId = "11111111-1111-4111-8111-111111111111";
 const env = {
@@ -145,7 +145,9 @@ describe("outbound WhatsApp", () => {
     const provider = mockProvider();
     const response = await send(body, { ...env, ...overrides });
     expect(response.status).toBe(503);
-    expect((await response.json()).error.code).toBe("KAPSO_UNAVAILABLE");
+    expect(await response.json()).toMatchObject({
+      error: { code: "KAPSO_UNAVAILABLE" },
+    });
     expect(provider).not.toHaveBeenCalled();
   });
 
@@ -230,7 +232,7 @@ describe("outbound WhatsApp", () => {
       const response = await send();
       expect(response.status).toBe(status);
       const result = await response.json();
-      expect(result.error.code).toBe(code);
+      expect(result).toMatchObject({ error: { code } });
       expect(JSON.stringify(result)).not.toContain(env.KAPSO_API_KEY);
       expect(provider).toHaveBeenCalledTimes(1);
       expect(log).not.toHaveBeenCalled();
@@ -247,7 +249,9 @@ describe("outbound WhatsApp", () => {
       const provider = mockProvider(async () => Response.json(data));
       const response = await send();
       expect(response.status).toBe(502);
-      expect((await response.json()).error.code).toBe("SEND_OUTCOME_UNKNOWN");
+      expect(await response.json()).toMatchObject({
+        error: { code: "SEND_OUTCOME_UNKNOWN" },
+      });
       expect(provider).toHaveBeenCalledTimes(1);
     },
   );
@@ -258,7 +262,9 @@ describe("outbound WhatsApp", () => {
     });
     const response = await send();
     expect(response.status).toBe(502);
-    expect((await response.json()).error.code).toBe("SEND_OUTCOME_UNKNOWN");
+    expect(await response.json()).toMatchObject({
+      error: { code: "SEND_OUTCOME_UNKNOWN" },
+    });
     expect(provider).toHaveBeenCalledTimes(1);
   });
 
@@ -271,7 +277,9 @@ describe("outbound WhatsApp", () => {
     );
     const response = await send();
     expect(response.status).toBe(502);
-    expect((await response.json()).error.code).toBe("SEND_OUTCOME_UNKNOWN");
+    expect(await response.json()).toMatchObject({
+      error: { code: "SEND_OUTCOME_UNKNOWN" },
+    });
     expect(provider).toHaveBeenCalledTimes(1);
   });
 
@@ -281,7 +289,9 @@ describe("outbound WhatsApp", () => {
     );
     const response = await send();
     expect(response.status).toBe(502);
-    expect((await response.json()).error.code).toBe("SEND_OUTCOME_UNKNOWN");
+    expect(await response.json()).toMatchObject({
+      error: { code: "SEND_OUTCOME_UNKNOWN" },
+    });
     expect(provider).toHaveBeenCalledTimes(1);
   });
 
@@ -307,7 +317,9 @@ describe("outbound WhatsApp", () => {
     await vi.advanceTimersByTimeAsync(8000);
     const response = await responsePromise;
     expect(response.status).toBe(504);
-    expect((await response.json()).error.code).toBe("SEND_OUTCOME_UNKNOWN");
+    expect(await response.json()).toMatchObject({
+      error: { code: "SEND_OUTCOME_UNKNOWN" },
+    });
     expect(provider).toHaveBeenCalledTimes(1);
   });
 });

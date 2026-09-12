@@ -1,9 +1,9 @@
-import type { DurableObjectNamespace } from "@cloudflare/workers-types";
 import { z } from "zod";
 import { type KapsoBindings, readKapsoConfig } from "../lib/kapso";
 import { readSupabaseConfig, type SupabaseBindings } from "../lib/supabase";
 import { phoneSchema } from "./inbound";
 import { type ModelBindings, readModelConfig } from "./model";
+import type { WhatsAppConversation } from "./worker";
 
 export type AgentBindings = KapsoBindings &
   SupabaseBindings &
@@ -11,7 +11,7 @@ export type AgentBindings = KapsoBindings &
     WHATSAPP_AGENT_ENABLED?: string;
     WHATSAPP_AGENT_PHONE_NUMBER?: string;
     KAPSO_WEBHOOK_SECRET?: string;
-    WHATSAPP_CONVERSATIONS?: DurableObjectNamespace;
+    WHATSAPP_CONVERSATIONS?: DurableObjectNamespace<WhatsAppConversation>;
   };
 export class AgentConfigurationError extends Error {
   constructor() {

@@ -97,25 +97,11 @@ whatsappAgentRoutes.post(
       const stub = c.env.WHATSAPP_CONVERSATIONS.getByName(
         await conversationName(config),
       );
-      const admitted = await stub.fetch("https://conversation/enqueue", {
-        method: "POST",
-        body: JSON.stringify({ ownerId: config.ownerId, messages }),
-      });
-      if (!admitted.ok) {
-        if (admitted.status === 409 || admitted.status === 429) {
-          if (admitted.status === 429) c.header("Retry-After", "60");
-          return c.newResponse(await admitted.text(), admitted.status, {
-            "Content-Type": "application/json",
-          });
-        }
-        throw new AgentConfigurationError();
+      const result = await stub.enqueue(messages, config.ownerId);
+      if ("error" in result) {
+        if (result.status === 429) c.header("Retry-After", "60");
+        return c.json({ error: result.error }, result.status);
       }
-      const result = z
-        .strictObject({
-          accepted: z.number().int().min(0),
-          duplicates: z.number().int().min(0),
-        })
-        .parse(await admitted.json());
       return c.json(
         whatsappWebhookResponseSchema.parse({
           ...result,
@@ -168,14 +154,10 @@ whatsappAgentRoutes.get("/agent/runs/:messageId", requireAuth, async (c) => {
     const stub = c.env.WHATSAPP_CONVERSATIONS.getByName(
       await conversationName(config),
     );
-    const response = await stub.fetch(
-      `https://conversation/run?${new URLSearchParams({ messageId })}`,
-    );
-    if (response.status !== 200 && response.status !== 404)
-      throw new AgentConfigurationError();
-    return c.newResponse(await response.text(), response.status, {
-      "Content-Type": "application/json",
-    });
+    const run = await stub.status(messageId);
+    return run
+      ? c.json(run)
+      : c.json({ error: { code: "NOT_FOUND", message: "Run not found" } }, 404);
   } catch {
     return c.json(
       {

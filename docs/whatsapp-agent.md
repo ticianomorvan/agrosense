@@ -90,7 +90,8 @@ No Supabase bearer token is required. Wrong senders/business IDs, outbound echoe
 history imports, non-text events and messages older than 24 hours are ignored.
 BSUID-only contacts are unsupported.
 
-HTTP 200 follows durable admission and wakeup scheduling:
+The Worker calls the Durable Object through typed RPC. HTTP 200 follows durable
+admission and wakeup scheduling:
 
 ```json
 {"accepted":1,"duplicates":0,"ignored":0}
@@ -151,6 +152,7 @@ References: [AI SDK ToolLoopAgent](https://ai-sdk.dev/docs/reference/ai-sdk-core
 [Kapso events](https://docs.kapso.ai/docs/platform/webhooks/message-events),
 [signatures](https://docs.kapso.ai/docs/platform/webhooks/security),
 [delivery/batches](https://docs.kapso.ai/docs/platform/webhooks/advanced),
+[Durable Object RPC](https://developers.cloudflare.com/durable-objects/best-practices/create-durable-object-stubs-and-send-requests/),
 [Durable Object alarms](https://developers.cloudflare.com/durable-objects/api/alarms/),
 [storage](https://developers.cloudflare.com/durable-objects/api/sqlite-storage-api/),
 [Open-Meteo](https://open-meteo.com/en/docs).
