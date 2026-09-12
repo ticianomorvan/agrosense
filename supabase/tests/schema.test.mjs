@@ -321,6 +321,24 @@ test("rejects cross-farm alerts and invalid risk state", async () => {
     ]),
     /check constraint/,
   );
+
+  for (const actions of [[], Array.from({ length: 11 }, () => "Act")]) {
+    await db.exec("BEGIN");
+    try {
+      await assert.rejects(
+        db.query(
+          `UPDATE plot_alerts
+             SET assessment_state='evaluated', risk_level='high', recommended_actions=$1
+           WHERE plot_id=$2`,
+          [JSON.stringify(actions), plots[0]],
+        ),
+        /check constraint/,
+      );
+    } finally {
+      await db.exec("ROLLBACK");
+    }
+  }
+
   await db.query(
     `UPDATE plot_alerts SET assessment_state='evaluated', risk_level='critical', recommended_actions='["Suspend spraying"]' WHERE plot_id=$1`,
     [plots[0]],

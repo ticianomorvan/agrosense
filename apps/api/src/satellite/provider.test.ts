@@ -88,6 +88,152 @@ it("returns dated true-color imagery and identifies fully empty rasters", async 
     );
   }
 });
+it("selects the acquisition with the least cloud over the farm", async () => {
+  const olderClearScene = {
+    id: "S2-clear-over-farm",
+    properties: {
+      datetime: "2026-09-02T14:00:00Z",
+      "eo:cloud_cover": 30,
+    },
+  };
+  const newerCloudyScene = {
+    id: "S2-cloudy-over-farm",
+    properties: {
+      datetime: "2026-09-10T14:00:00Z",
+      "eo:cloud_cover": 5,
+    },
+  };
+  const png = encode({
+    width: 1,
+    height: 1,
+    data: new Uint8Array([20, 60, 30, 255]),
+    channels: 4,
+  });
+  const fetcher = vi
+    .fn()
+    .mockResolvedValueOnce(Response.json({ access_token: "provider-token" }))
+    .mockResolvedValueOnce(
+      Response.json({
+        features: [newerCloudyScene, olderClearScene],
+        context: {},
+      }),
+    )
+    .mockResolvedValueOnce(
+      Response.json({
+        status: "OK",
+        data: [
+          {
+            interval: {
+              from: "2026-09-02T00:00:00Z",
+              to: "2026-09-03T00:00:00Z",
+            },
+            outputs: {
+              cloud: { bands: { B0: { stats: { mean: 0.01 } } } },
+            },
+          },
+          {
+            interval: {
+              from: "2026-09-10T00:00:00Z",
+              to: "2026-09-11T00:00:00Z",
+            },
+            outputs: {
+              cloud: { bands: { B0: { stats: { mean: 0.8 } } } },
+            },
+          },
+        ],
+      }),
+    )
+    .mockResolvedValueOnce(
+      new Response(new Uint8Array(png), {
+        headers: { "content-type": "image/png" },
+      }),
+    );
+
+  await expect(
+    loadSatellitePreview(env, boundary, window, fetcher),
+  ).resolves.toMatchObject({
+    status: "available",
+    sceneId: olderClearScene.id,
+    acquiredAt: new Date(olderClearScene.properties.datetime).toISOString(),
+  });
+
+  expect(String(fetcher.mock.calls[2]?.[0])).toContain("/statistics/v1");
+  const statisticsRequest = JSON.parse(
+    fetcher.mock.calls[2]?.[1]?.body as string,
+  );
+  expect(statisticsRequest).toMatchObject({
+    input: {
+      bounds: {
+        properties: {
+          crs: "http://www.opengis.net/def/crs/EPSG/0/3857",
+        },
+      },
+      data: [
+        {
+          type: "sentinel-2-l2a",
+          dataFilter: { mosaickingOrder: "mostRecent" },
+        },
+      ],
+    },
+    aggregation: {
+      timeRange: window,
+      aggregationInterval: {
+        of: "P1D",
+        lastIntervalBehavior: "SHORTEN",
+      },
+      width: 128,
+      height: 128,
+    },
+  });
+  const processRequest = JSON.parse(fetcher.mock.calls[3]?.[1]?.body as string);
+  expect(processRequest.input.data[0].dataFilter.timeRange.from).toBe(
+    new Date(olderClearScene.properties.datetime).toISOString(),
+  );
+});
+it("falls back to scene cloud metadata when local statistics fail", async () => {
+  const olderClearScene = {
+    id: "S2-lower-reported-cloud",
+    properties: {
+      datetime: "2026-09-02T14:00:00Z",
+      "eo:cloud_cover": 4,
+    },
+  };
+  const newerCloudyScene = {
+    id: "S2-higher-reported-cloud",
+    properties: {
+      datetime: "2026-09-10T14:00:00Z",
+      "eo:cloud_cover": 70,
+    },
+  };
+  const png = encode({
+    width: 1,
+    height: 1,
+    data: new Uint8Array([20, 60, 30, 255]),
+    channels: 4,
+  });
+  const fetcher = vi
+    .fn()
+    .mockResolvedValueOnce(Response.json({ access_token: "provider-token" }))
+    .mockResolvedValueOnce(
+      Response.json({
+        features: [newerCloudyScene, olderClearScene],
+        context: {},
+      }),
+    )
+    .mockResolvedValueOnce(Response.json({ status: "FAILED" }))
+    .mockResolvedValueOnce(
+      new Response(new Uint8Array(png), {
+        headers: { "content-type": "image/png" },
+      }),
+    );
+
+  await expect(
+    loadSatellitePreview(env, boundary, window, fetcher),
+  ).resolves.toMatchObject({
+    status: "available",
+    sceneId: olderClearScene.id,
+  });
+});
 it("rejects oversized geometry before authenticating with the provider", async () => {
   const fetcher = vi.fn();
   const oversized = structuredClone(boundary);

@@ -176,7 +176,6 @@ export async function runAgent(options: {
     const reply = whatsappTextSchema.parse(formatForWhatsapp(result.text));
     return { reply, trace, modelSteps };
   } catch (error) {
-    console.error("[agent:error]", error);
     const code =
       failure ??
       (signal.aborted
@@ -184,6 +183,7 @@ export async function runAgent(options: {
         : error instanceof AgentError
           ? error.code
           : "MODEL_UNAVAILABLE");
+    console.error(JSON.stringify({ event: "whatsapp_agent_run_failed", code }));
     throw new AgentRunError(code, trace, modelSteps);
   } finally {
     clearTimeout(timer);

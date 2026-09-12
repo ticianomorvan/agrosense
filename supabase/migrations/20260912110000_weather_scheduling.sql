@@ -10,8 +10,7 @@ CREATE TABLE public.weather_schedules (
 );
 CREATE INDEX weather_schedules_due ON public.weather_schedules(next_run_at);
 ALTER TABLE public.weather_schedules ENABLE ROW LEVEL SECURITY;
-REVOKE ALL ON public.weather_schedules FROM PUBLIC, anon, authenticated;
-GRANT ALL ON public.weather_schedules TO service_role;
+REVOKE ALL ON public.weather_schedules FROM PUBLIC, anon, authenticated, service_role;
 
 -- A committed publication is also the scheduler acknowledgement. A crash between
 -- the database commit and the HTTP response cannot cause the same run to repeat.

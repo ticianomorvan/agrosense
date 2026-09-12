@@ -100,9 +100,7 @@ describe("Agronomic engine regression boundaries", () => {
         "Z-rule",
         "a-rule",
       ]);
-      expect(alert.reason).toBe(
-        "Synthetic scenario: rule Z-rule matches.",
-      );
+      expect(alert.reason).toBe("Synthetic scenario: rule Z-rule matches.");
     }
   });
   it("requires an explicit hazard when storm and hail share evidence", () => {

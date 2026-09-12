@@ -16,8 +16,7 @@ BEGIN
   RETURN jsonb_build_object('dataVersion', f.data_version, 'dataMode', f.data_mode);
 END;
 $$;
-REVOKE ALL ON FUNCTION public.admit_farm_refresh(uuid, timestamptz) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.admit_farm_refresh(uuid, timestamptz) TO authenticated;
+REVOKE ALL ON FUNCTION public.admit_farm_refresh(uuid, timestamptz) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.admit_farm_refresh(uuid, timestamptz) TO service_role;
 
 CREATE FUNCTION public.publish_farm_refresh(
@@ -83,8 +82,7 @@ EXCEPTION WHEN OTHERS THEN
   RETURN jsonb_build_object('errorCode', 'PUBLISH_FAILED');
 END;
 $$;
-REVOKE ALL ON FUNCTION public.publish_farm_refresh(uuid, integer, timestamptz, timestamptz, jsonb, jsonb, jsonb) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.publish_farm_refresh(uuid, integer, timestamptz, timestamptz, jsonb, jsonb, jsonb) TO authenticated;
+REVOKE ALL ON FUNCTION public.publish_farm_refresh(uuid, integer, timestamptz, timestamptz, jsonb, jsonb, jsonb) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.publish_farm_refresh(uuid, integer, timestamptz, timestamptz, jsonb, jsonb, jsonb) TO service_role;
 
 CREATE FUNCTION public.fail_farm_refresh(
@@ -104,8 +102,7 @@ BEGIN
   RETURN FOUND;
 END;
 $$;
-REVOKE ALL ON FUNCTION public.fail_farm_refresh(uuid, integer, timestamptz, timestamptz, text) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.fail_farm_refresh(uuid, integer, timestamptz, timestamptz, text) TO authenticated;
+REVOKE ALL ON FUNCTION public.fail_farm_refresh(uuid, integer, timestamptz, timestamptz, text) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.fail_farm_refresh(uuid, integer, timestamptz, timestamptz, text) TO service_role;
 
 CREATE FUNCTION public.import_demo_seed(p_owner_id uuid, p_payload jsonb)

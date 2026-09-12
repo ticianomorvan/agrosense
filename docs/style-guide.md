@@ -115,14 +115,15 @@ sizes below may be expressed as equivalent rem values, except breakpoints.
 
 | Width | Required overview structure |
 | --- | --- |
-| 1024px and above | Header, page title/filters, then map `minmax(0, 1fr)` and priority/detail panel `20rem`, gap 24px. Outer padding 24px; max content width 1600px, centered. |
-| 768–1023px | Single column, outer padding 24px. Priorities precede the map; details appear in the content flow. |
-| Below 768px | Single column, outer padding 16px, gap 16px. Priorities lead; map is a user-selected alternate view. No compressed desktop sidebar. |
+| 1280px and above | Header, page title/filters, then plot/crop facts `18rem`, map `minmax(0, 1fr)`, and event timeline `20rem`, gap 24px. Outer padding 24px; max content width 1600px, centered. |
+| 1024–1279px | The same three regions at `15rem`, `minmax(0, 1fr)`, and `17rem`; stack if text zoom makes them unable to fit. |
+| 768–1023px | Single column, outer padding 24px. Plot/crop facts and the event record remain in normal flow with the map. |
+| Below 768px | Single column, outer padding 16px, gap 16px. Plot/crop facts and events lead; map is a user-selected alternate view. No compressed desktop sidebar. |
 
 Desktop map MUST be the largest content region, minimum height 480px; allow
-page scrolling. Selecting a field replaces the side panel with details and a
-visible Back action, not a third column. Phone map minimum height is 320px and
-includes an obvious way back to priorities. Preserve selection and filters.
+page scrolling. Selecting a plot updates the facts, map outline, and filtered
+newest-first event timeline together. Phone map minimum height is 320px and
+includes an obvious way back to the plot overview. Preserve selection.
 
 Header minimum height: 64px desktop, 56px below 1024px. Let it grow with wrapped
 content. MUST NOT lock the page to `100vh`, clip text to preserve dimensions,
@@ -219,8 +220,9 @@ reason. Unperformed checks remain unverified; a build is not browser evidence.
 - [ ] No prohibited decoration or unrequested features were introduced.
 - [ ] Browser screenshots inspected at 1440×900, 1024×768, 768×1024, 390×844,
   and 320×568; report saved paths.
-- [ ] Desktop overview is map-led; phone priorities precede its optional map.
-  The first priority's identity, reason and action are easy to find.
+- [ ] Desktop overview is map-led with plot/crop facts left and weather events
+  right; phone facts and events precede its optional map. Plot identity and
+  selection are easy to find.
 - [ ] No clipped text or page-wide overflow, including at 200% zoom and with long
   field names; controls stay reachable.
 - [ ] Tab/Shift+Tab/Enter/Space and Escape where applicable work. Focus is visible,

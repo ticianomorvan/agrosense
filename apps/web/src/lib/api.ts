@@ -17,6 +17,32 @@ type RequestOptions = {
   method?: "GET" | "POST";
 };
 
+export function apiUrl(
+  path: `/api/${string}`,
+  configuredBaseUrl = import.meta.env.VITE_API_BASE_URL,
+) {
+  const baseUrl = configuredBaseUrl?.trim();
+  if (!baseUrl) return path;
+
+  let url: URL;
+  try {
+    url = new URL(baseUrl);
+  } catch {
+    throw new Error("VITE_API_BASE_URL must be an HTTPS origin");
+  }
+  if (
+    url.protocol !== "https:" ||
+    url.username !== "" ||
+    url.password !== "" ||
+    url.pathname !== "/" ||
+    url.search !== "" ||
+    url.hash !== ""
+  )
+    throw new Error("VITE_API_BASE_URL must be an HTTPS origin");
+
+  return `${url.origin}${path}`;
+}
+
 export async function getJson<T>(
   path: `/api/${string}`,
   schema: Schema<T>,
@@ -27,7 +53,7 @@ export async function getJson<T>(
     headers.set("Content-Type", "application/json");
   if (options.accessToken)
     headers.set("Authorization", `Bearer ${options.accessToken}`);
-  const response = await fetch(path, {
+  const response = await fetch(apiUrl(path), {
     headers,
     signal: options.signal,
     cache: "no-store",

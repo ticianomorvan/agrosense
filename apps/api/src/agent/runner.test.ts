@@ -115,6 +115,7 @@ describe("AI SDK agent through OpenRouter", () => {
       expect(request.provider).toEqual({
         require_parameters: true,
         allow_fallbacks: false,
+        sort: "throughput",
       });
       expect(request.reasoning).toEqual({ effort: "medium" });
       expect(request).not.toHaveProperty("parallel_tool_calls");
@@ -274,6 +275,33 @@ describe("AI SDK agent through OpenRouter", () => {
       expect(fetcher).toHaveBeenCalledTimes(1);
     },
   );
+
+  it("logs only a stable code when the model provider exposes private details", async () => {
+    const errorLog = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    const fetcher = vi.fn<typeof fetch>(async () =>
+      Response.json(
+        { error: { message: "private upstream details" } },
+        { status: 401 },
+      ),
+    );
+    const { tools } = testTools();
+
+    await expect(run(fetcher, tools)).rejects.toMatchObject({
+      code: "MODEL_UNAVAILABLE",
+    });
+
+    expect(errorLog).toHaveBeenCalledWith(
+      JSON.stringify({
+        event: "whatsapp_agent_run_failed",
+        code: "MODEL_UNAVAILABLE",
+      }),
+    );
+    expect(JSON.stringify(errorLog.mock.calls)).not.toContain(
+      "private upstream details",
+    );
+  });
 
   it("bounds stalled requests and never retries them", async () => {
     vi.useFakeTimers();

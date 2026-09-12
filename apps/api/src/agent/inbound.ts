@@ -18,11 +18,13 @@ const eventSchema = z.object({
     type: z.string(),
     from: z.string().optional(),
     text: z.object({ body: z.string().max(4096) }).optional(),
-    kapso: z.object({
-      direction: z.string(),
-      status: z.string(),
-      origin: z.string().optional(),
-    }),
+    kapso: z
+      .object({
+        direction: z.string(),
+        status: z.string(),
+        origin: z.string().optional(),
+      })
+      .optional(),
   }),
   conversation: z.object({
     phone_number: z.string().optional(),
@@ -30,6 +32,7 @@ const eventSchema = z.object({
   }),
 });
 const envelopeSchema = z.object({
+  type: z.string().optional(),
   batch: z.boolean().optional(),
   data: z.unknown().optional(),
 });
@@ -60,15 +63,17 @@ export async function verifyWebhookSignature(
 export function normalizeInbound(
   payload: unknown,
   event: string | undefined,
-  config: { phoneNumberId: string; sender: string },
+  config: { phoneNumberId: string },
   now = new Date(),
 ): { messages: InboundMessage[]; ignored: number } {
   const envelope = envelopeSchema.safeParse(payload);
-  if (event !== "whatsapp.message.received") {
-    console.log("[inbound:skip] event mismatch:", {
-      received: event,
-      expected: "whatsapp.message.received",
-    });
+  const expectedEvent = "whatsapp.message.received";
+  // The v2 body type is covered by the raw-body HMAC verified by the route.
+  // Some unbuffered deliveries omit the duplicate header and Kapso extension.
+  const bodyEvent = envelope.success ? envelope.data.type : undefined;
+  const eventsConflict =
+    event !== undefined && bodyEvent !== undefined && event !== bodyEvent;
+  if (eventsConflict || (bodyEvent ?? event) !== expectedEvent)
     return {
       messages: [],
       ignored:
@@ -78,7 +83,6 @@ export function normalizeInbound(
           ? envelope.data.data.length
           : 1,
     };
-  }
   if (!envelope.success) throw envelope.error;
   const entries = envelope.data.batch
     ? batchSchema.parse(payload).data
@@ -88,49 +92,23 @@ export function normalizeInbound(
     const { message, conversation } = entry;
     if (
       entry.phone_number_id !== config.phoneNumberId ||
-      conversation.phone_number_id !== config.phoneNumberId
-    ) {
-      console.log("[inbound:skip] phone_number_id mismatch:", {
-        entry: entry.phone_number_id,
-        conv: conversation.phone_number_id,
-        expected: config.phoneNumberId,
-      });
-      continue;
-    }
-    if (
-      message.kapso.direction !== "inbound" ||
-      (message.kapso.status !== "received" &&
-        message.kapso.status !== "delivered") ||
-      message.kapso.origin === "history_sync" ||
+      conversation.phone_number_id !== config.phoneNumberId ||
+      (message.kapso
+        ? message.kapso.direction !== "inbound" ||
+          message.kapso.status !== "received" ||
+          message.kapso.origin === "history_sync"
+        : bodyEvent !== expectedEvent) ||
       message.type !== "text"
-    ) {
-      console.log("[inbound:skip] message metadata mismatch:", {
-        direction: message.kapso.direction,
-        status: message.kapso.status,
-        origin: message.kapso.origin,
-        type: message.type,
-      });
+    )
       continue;
-    }
     const from = whatsappPhoneSchema.safeParse(
       message.from ?? conversation.phone_number,
     );
     const contact = whatsappPhoneSchema.safeParse(
       conversation.phone_number ?? message.from,
     );
-    if (
-      !from.success ||
-      !contact.success ||
-      from.data !== contact.data ||
-      from.data !== config.sender
-    ) {
-      console.log("[inbound:skip] sender mismatch:", {
-        from: from.success ? from.data : from.error.message,
-        contact: contact.success ? contact.data : contact.error.message,
-        expectedSender: config.sender,
-      });
+    if (!from.success || !contact.success || from.data !== contact.data)
       continue;
-    }
     const timestamp = Number(message.timestamp) * 1000;
     if (
       timestamp > now.getTime() + 5 * 60000 ||

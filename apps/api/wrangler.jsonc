@@ -4,12 +4,27 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-09-12",
   "minify": true,
-  "assets": {
-    "directory": "../web/dist",
-    "not_found_handling": "single-page-application",
-    "run_worker_first": ["/api", "/api/*"]
+  "observability": {
+    "enabled": true,
+    "redact_query_string": true,
+    "logs": {
+      "enabled": true,
+      "head_sampling_rate": 1,
+      "invocation_logs": true,
+      "persist": true
+    },
+    "traces": {
+      "enabled": true,
+      "head_sampling_rate": 1,
+      "persist": true
+    }
   },
-  "observability": { "enabled": true },
+  "vars": {
+    "CORS_ORIGIN": "https://agrosense-web.ticiano-morvan.workers.dev",
+    "WHATSAPP_AGENT_ENABLED": "true",
+    "OPENROUTER_MODEL": "deepseek/deepseek-v4.1-flash",
+    "OPENROUTER_REASONING_EFFORT": "medium"
+  },
   "durable_objects": {
     "bindings": [
       { "name": "WHATSAPP_CONVERSATIONS", "class_name": "WhatsAppConversation" }

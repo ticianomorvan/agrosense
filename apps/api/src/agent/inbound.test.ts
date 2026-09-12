@@ -3,19 +3,24 @@ import { normalizeInbound, verifyWebhookSignature } from "./inbound";
 
 const secret = "webhook-test-secret";
 const now = new Date("2026-09-12T12:00:00Z");
-const config = { phoneNumberId: "647015955153740", sender: "5493511234567" };
-const event = (id = "wamid.inbound", text = "How is the weather?") => ({
+const config = { phoneNumberId: "647015955153740" };
+const sender = "5493511234567";
+const event = (
+  id = "wamid.inbound",
+  text = "How is the weather?",
+  from = sender,
+) => ({
   message: {
     id,
     timestamp: String(now.getTime() / 1000),
     type: "text",
-    from: config.sender,
+    from,
     text: { body: text },
     kapso: { direction: "inbound", status: "received", origin: "cloud_api" },
   },
   conversation: {
     id: "conv_1",
-    phone_number: `+${config.sender}`,
+    phone_number: `+${from}`,
     phone_number_id: config.phoneNumberId,
   },
   phone_number_id: config.phoneNumberId,
@@ -62,7 +67,7 @@ describe("Kapso webhook primitives", () => {
     },
   );
 
-  it("normalizes an authorized v2 text message", () => {
+  it("normalizes a v2 text message from any valid sender", () => {
     expect(
       normalizeInbound(event(), "whatsapp.message.received", config, now),
     ).toEqual({
@@ -70,7 +75,44 @@ describe("Kapso webhook primitives", () => {
         {
           messageId: "wamid.inbound",
           phoneNumberId: config.phoneNumberId,
-          sender: config.sender,
+          sender,
+          text: "How is the weather?",
+          sentAt: now.toISOString(),
+        },
+      ],
+      ignored: 0,
+    });
+    expect(
+      normalizeInbound(
+        event("wamid.other", "Hola", "15551234567"),
+        "whatsapp.message.received",
+        config,
+        now,
+      ).messages[0]?.sender,
+    ).toBe("15551234567");
+  });
+
+  it("uses the signed v2 body event when duplicate header and message enrichment are absent", () => {
+    const payload = event();
+    const { kapso: _kapso, ...message } = payload.message;
+
+    expect(
+      normalizeInbound(
+        {
+          ...payload,
+          type: "whatsapp.message.received",
+          message,
+        },
+        undefined,
+        config,
+        now,
+      ),
+    ).toEqual({
+      messages: [
+        {
+          messageId: "wamid.inbound",
+          phoneNumberId: config.phoneNumberId,
+          sender,
           text: "How is the weather?",
           sentAt: now.toISOString(),
         },
@@ -79,7 +121,7 @@ describe("Kapso webhook primitives", () => {
     });
   });
 
-  it("accepts the conversation phone when from is absent, and rejects mismatches", () => {
+  it("accepts the conversation phone when from is absent", () => {
     const payload = event();
     const { from: _from, ...message } = payload.message;
     expect(
@@ -90,14 +132,6 @@ describe("Kapso webhook primitives", () => {
         now,
       ).messages,
     ).toHaveLength(1);
-    expect(
-      normalizeInbound(
-        { ...payload, message: { ...message, from: "15551234567" } },
-        "whatsapp.message.received",
-        config,
-        now,
-      ),
-    ).toEqual({ messages: [], ignored: 1 });
   });
 
   it("preserves Kapso batch order even when timestamps match and IDs sort differently", () => {
@@ -149,11 +183,6 @@ describe("Kapso webhook primitives", () => {
     { ...event(), phone_number_id: "99999" },
     {
       ...event(),
-      message: { ...event().message, from: "15551234567" },
-      conversation: { ...event().conversation, phone_number: "15551234567" },
-    },
-    {
-      ...event(),
       message: { ...event().message, type: "image", text: undefined },
     },
     {
@@ -189,7 +218,7 @@ describe("Kapso webhook primitives", () => {
       },
     },
   ])(
-    "ignores unsupported, unauthorized, stale or echoed messages (case %#)",
+    "ignores unsupported, misaddressed, stale or echoed messages (case %#)",
     (payload) => {
       expect(
         normalizeInbound(payload, "whatsapp.message.received", config, now),
@@ -205,6 +234,23 @@ describe("Kapso webhook primitives", () => {
     ).toEqual({ messages: [], ignored: 1 });
     expect(
       normalizeInbound(event(), "whatsapp.message.sent", config, now),
+    ).toEqual({ messages: [], ignored: 1 });
+    expect(
+      normalizeInbound(
+        { ...payload, type: "whatsapp.message.received" },
+        undefined,
+        config,
+        now,
+      ),
+    ).toEqual({ messages: [], ignored: 1 });
+    const { kapso: _kapso, ...message } = event().message;
+    expect(
+      normalizeInbound(
+        { ...event(), message },
+        "whatsapp.message.received",
+        config,
+        now,
+      ),
     ).toEqual({ messages: [], ignored: 1 });
   });
 });

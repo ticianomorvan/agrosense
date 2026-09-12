@@ -1,4 +1,3 @@
-import { whatsappPhoneSchema } from "@agrosense/contracts";
 import { z } from "zod";
 import { type KapsoBindings, readKapsoConfig } from "../lib/kapso";
 import { readSupabaseConfig, type SupabaseBindings } from "../lib/supabase";
@@ -10,7 +9,6 @@ export type AgentBindings = KapsoBindings &
   SupabaseBindings &
   ModelBindings & {
     WHATSAPP_AGENT_ENABLED?: string;
-    WHATSAPP_AGENT_PHONE_NUMBER?: string;
     KAPSO_WEBHOOK_SECRET?: string;
     WHATSAPP_CONVERSATIONS?: DurableObjectNamespace<WhatsAppConversation>;
   };
@@ -32,7 +30,6 @@ export function readAgentConfig(env: AgentBindings) {
       .parse(env.SUPABASE_SECRET_KEY);
     return {
       kapso,
-      sender: whatsappPhoneSchema.parse(env.WHATSAPP_AGENT_PHONE_NUMBER),
       webhookSecret: z
         .string()
         .min(16)

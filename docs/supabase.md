@@ -9,6 +9,10 @@ Migration `20260912070000_initial_schema.sql` was applied on 2026-09-12 to proje
 `obirprtxsujpgnxcjwwe` (AgroSense, PostgreSQL 17.6) through the Supabase dashboard.
 The same version is recorded in `supabase_migrations.schema_migrations`; its
 metadata table has RLS enabled. No application records or Auth users were seeded.
+Later that day, migrations through `20260912121000_privilege_hardening.sql` were
+applied with the linked CLI after a schema/data backup and restored-data rehearsal.
+The remote ledger, row counts, onboarding RPC schema cache, RLS and least-privilege
+Data API grants were verified after deployment. Supabase Cron was not activated.
 
 ## Local environment
 
@@ -68,8 +72,9 @@ For a disposable local Supabase stack, start Docker and run `pnpm db:start`.
 local records. `pnpm db:stop` stops that stack. To use it in the API, replace the
 `.env` settings with local values and configure asymmetric Auth signing keys per
 [Supabase local configuration](https://supabase.com/docs/guides/local-development/cli/config).
-The local config uses PostgreSQL 17 and SPA redirect URLs. Docker was unavailable
-during initial setup, so the full local stack has not been exercised.
+The local config uses PostgreSQL 17 and SPA redirect URLs. The migrations were
+rehearsed in a disposable PostgreSQL 17 container; the full local Supabase stack
+has not been exercised.
 
 `pnpm db:test` executes the migration in isolated PGlite PostgreSQL with mock
 Supabase roles/Auth. It checks both owners across all five tables, anonymous
@@ -92,12 +97,12 @@ complete payloads and geometry topology.
 Mutation RPCs verify ownership and implement the farm lock/version protocol from
 the domain model. Updating `updated_at` does not increment `data_version`.
 
-Apply `20260912102000_trusted_publication.sql` before deploying the updated
-refresh handler: it replaces the old RPC signatures, removes browser execution
-grants, and takes the verified owner explicitly. Migration and Worker deployment
-are separate operations. The integration tests execute all migrations through
-PGlite with real Supabase client serialization, including publication/readback,
-repeat refresh IDs, cancellation, provider failures, and concurrency rejection.
+`20260912102000_trusted_publication.sql` is applied in production. It replaces the
+old RPC signatures, removes browser execution grants, and takes the verified owner
+explicitly. Migration and Worker deployment remain separate operations. The
+integration tests execute all migrations through PGlite with real Supabase client
+serialization, including publication/readback, repeat refresh IDs, cancellation,
+provider failures, and concurrency rejection.
 
 For a Cloudflare deployment, provision the four Worker settings with Wrangler
 secrets or the Cloudflare dashboard; `.env` is for local development. Deployments

@@ -1,7 +1,8 @@
 # AgroSense: MVP schema reference v1
 
-Status: implementation reference for the confirmed **24-hour hackathon demo**.
-This change defines schemas; it does not provision a database or implement routes.
+Status: implemented reference for the confirmed **24-hour hackathon demo**.
+The migrations, shared contracts, owner-scoped routes, and browser workflow now
+implement the slices identified below.
 
 Source: [AgroSense product document](https://docs.google.com/document/d/1tcxZBTNtnSFpBFIxwPe1tD6QwrSWgnngrScm1vnrx-g/edit?tab=t.0)
 and the three-column sketch. Stack: [stack.md](stack.md).
@@ -15,18 +16,22 @@ Implementation code, migrations, and fixtures belong in the build work.
 
 ## Product and scope
 
-One seeded owner, one farm, two or three plots, maize/soybean, hazards
-(frost, severe-storm, hail, extreme-heat), one forecast
-adapter and one satellite basemap. Left: land, crop/stage and forecast. Center:
-seeded polygons and plot selection. Right: grouped events and plot-specific risk.
-Selection/filtering is local UI state. No database is required for the first
-fixture-backed page; fixtures must satisfy the same DashboardResponse schema.
+An authenticated owner may create live farms and plots, record maize/soybean crop
+context, and review hazards (frost, severe-storm, hail, extreme-heat) from one
+forecast adapter plus Sentinel-2 imagery. Desktop uses the requested three-column
+workspace: selected plot/crop facts on the left, the largest map/imagery region in
+the center, and the selected plot's weather events newest-first on the right.
+Selection is local UI state. Plot-alert risk and recommendations remain in the
+shared publication model for automation and WhatsApp, but are not rendered on the
+web timeline; alert delivery is a WhatsApp surface.
 
 Keep five tables: farms → plots → crop_cycles, and farms → events → plot_alerts.
 Plot alerts also reference plots. Supabase auth.users is pre-existing infrastructure.
-No membership, crop catalog, rule, queue, notification, image-history, or separate
-assessment-history tables. No land editor, signup flow, season-rollover UI,
-weather raster overlays, regional spatial matching, or outbound messages.
+No membership, crop catalog, rule, image-history, or separate assessment-history
+tables are added to the five-table agricultural model. There is no arbitrary land
+editor, signup flow, season-rollover UI, weather raster overlay, or regional
+spatial matching. Onboarding accepts new boundaries, but does not edit them after
+creation.
 
 The explicit 2026-09-12 WhatsApp requests add two scoped exceptions:
 [manual outbound messaging](kapso.md) and a [read-only conversational agent](whatsapp-agent.md).
@@ -67,9 +72,10 @@ erDiagram
   are exactly [longitude, latitude], with no altitude. Bounds are [-180,180] and
   [-90,90]. Ring closes with the same first/last pair, has at least three distinct
   non-collinear vertices, and must not self-intersect. Point is a two-value pair.
-- Seed import validates valid topology, plot containment in the farm, sample
-  point inside its plot, and no positive-area sibling overlap. Shared edges are
-  allowed. Shapes cannot be edited through MVP endpoints.
+- Seed import and onboarding validate topology, plot containment in the farm,
+  sample point inside its plot, and no positive-area sibling overlap. Shared
+  edges are allowed. Onboarding creates shapes; shapes cannot be edited through
+  MVP endpoints after creation.
 - Per farm: 10 plots; 50 retained events; 5,000 total coordinate positions across
   farm/plot boundaries including repeated closing points; 1 MiB UTF-8 dashboard
   JSON. Per plot: 168 hourly forecast samples. PATCH body limit: 16 KiB.
@@ -196,6 +202,10 @@ updated_at on every UPDATE. Only the server writes these timestamps.
   Service-role credentials stay server-side. Mutation RPC implementations must
   verify owner identity, validate inputs, lock the farm, and apply the version
   protocol below; no generic privileged SQL endpoint is permitted.
+- `create_user_farm` creates one owner-scoped live farm. `create_farm_plot`
+  atomically creates a contained plot and its open crop cycle under a locked
+  expected farm version. Both RPCs are service-only and receive the already
+  verified owner UUID from the Worker.
 - SQL checks structure/version markers on JSONB; it does **not** validate the
   complete JSON shapes below, polygon topology, or cross-row JSON references.
   The trusted import/publication boundary validates those before writing.
@@ -419,16 +429,37 @@ IDs and counts but increments the farm publication version.
 
 ## HTTP contracts and response derivation
 
-All paths require `Authorization: Bearer <Supabase access token>`. Local fixtures
-may bypass auth only in an explicitly local demo mode. Responses use
-`Cache-Control: private, no-store`. Query parameters are unsupported in v1.
-Exact body fields are defined below; the three operations are:
+`GET /api/auth/config` is public and returns only the Supabase URL and publishable
+key with `Cache-Control: no-store`. Every other path below requires
+`Authorization: Bearer <Supabase access token>` and uses `Cache-Control: private,
+no-store`. Local fixtures may bypass auth only in an explicitly local demo mode.
+Query parameters are unsupported in v1. Exact body fields are defined below:
 
 | Method/path | Input | Success |
 | --- | --- | --- |
+| GET /api/auth/config | no body/query | 200 AuthConfigResponse |
+| GET /api/session | no body/query | 200 SessionResponse |
+| GET /api/farms | no body/query | 200 FarmListResponse |
+| POST /api/farms | CreateFarmRequest | 201 Farm |
+| POST /api/farms/:farmId/plots | UUID path; CreatePlotRequest | 201 CreatePlotResponse |
 | GET /api/farms/:farmId/dashboard | UUID path; no body/query | 200 DashboardResponse |
+| POST /api/farms/:farmId/satellite | UUID path; SatelliteRequest | 200 SatellitePreview |
 | POST /api/farms/:farmId/refresh | UUID path; no body/query | 200 RefreshResponse after commit |
 | PATCH /api/farms/:farmId/plots/:plotId/crop-cycle | UpdateCropCycleRequest | 200 UpdateCropCycleResponse |
+
+CreateFarmRequest accepts name, province, nullable locality, boundary, and
+declaredAreaHa. It never accepts an owner, timezone, data mode, version, rules,
+forecast, or monitoring fields. The Worker limits the boundary extent to 0.25°
+per axis for the satellite preview and the RPC creates a live farm owned by the
+verified bearer.
+
+CreatePlotRequest accepts name, boundary, centered samplePoint, declaredAreaHa,
+and one required open cropCycle containing cropCode, seasonLabel, nullable
+sownOn, and the paired nullable stageCode/stageAsOf. The Worker requires the plot
+inside the owner farm, the sample inside the plot, no positive-area sibling
+overlap, plot area no greater than farm area, no future crop dates, and fewer than
+10 existing plots. The RPC repeats owner/version/limit checks while holding the
+farm lock and commits the plot plus crop cycle atomically.
 
 PATCH requires expectedDataVersion plus at least one of cropCode, sownOn,
 stageCode, stageAsOf. Omission preserves a value; null clears only nullable values.
@@ -459,6 +490,11 @@ forecast, events, monitoring. Read all DB data under one consistent snapshot.
   recent otherwise. Sort ongoing first, then upcoming, then recent; each of the
   first two groups uses startsAt ascending, recent descending; UUID ascending
   breaks ties. Cancelled cards keep that time grouping and a cancelled label.
+  This is the API projection order; the selected-plot web timeline filters by
+  evidence.plotIds and orders startsAt descending with UUID tie-breaking.
+- The web timeline renders event identity, state, bounds, and source evidence.
+  It deliberately omits EventCard.alerts, risk levels, reasons, and recommended
+  actions. Those alert notifications belong to the authenticated WhatsApp flow.
 - Only active, non-recent, non-stale evaluated alerts contribute to current risk.
   isStale is true when asOf >= validUntil, current rule-set version differs, or
   the snapshot's crop-cycle ID/updatedAt differs from the current open cycle
@@ -494,17 +530,20 @@ Version and rate-limit conflicts do not replace last_error_code.
 
 ## Implementation and verification
 
-Build order: fixture page → deterministic risk comparison → five-table persistence
-and owner-scoped access → one live forecast adapter/manual refresh → optional
-schedule and grounded AI wording. Keep shared Zod contracts browser-safe and
-mirror these documented shapes; no dependency on application code from contracts.
+Implemented order: shared contracts → five-table persistence and owner-scoped
+access → live weather/satellite adapters and refresh → WhatsApp automation and
+agent → browser authentication/onboarding and evidence workspace. Keep shared Zod
+contracts browser-safe and mirror these documented shapes; contracts never depend
+on application code.
 
 Required implementation tests: crop-specific differences; unknown stage; mismatch
 between crop/stage; invalid dates; event identity under a revised forecast; failed
 partial refresh preserving results; older concurrent refresh rejected; event
 cancellation clearing current risk; cross-owner/cross-farm denial; limits and
-freshness derivations. Run pnpm check after application changes, and inspect the
-three panels in a browser. This document is a reference, not completed runtime code.
+freshness derivations; owner-safe farm/plot creation; invalid/overlapping geometry;
+strict onboarding requests; and authenticated client request paths. Run
+`pnpm check` after application changes and inspect onboarding plus the three-panel
+workspace in a browser.
 
 ### Implemented weather adapter
 
@@ -563,6 +602,63 @@ Additional conditional validation:
 | --- | --- | --- | --- |
 | type | Polygon (constant) | required | — |
 | coordinates | array of array of Position | required | 1–1 items; each item: 4–5000 items; each item: — |
+
+### AuthConfigResponse
+
+| Field | Type | Presence | Validation |
+| --- | --- | --- | --- |
+| url | text | required | HTTPS URL, except HTTP localhost is allowed |
+| publishableKey | text | required | 1–500 characters |
+
+### SessionResponse
+
+| Field | Type | Presence | Validation |
+| --- | --- | --- | --- |
+| userId | Id | required | — |
+
+### FarmListItem and FarmListResponse
+
+| Field | Type | Presence | Validation |
+| --- | --- | --- | --- |
+| FarmListItem.id | Id | required | — |
+| FarmListItem.name | text | required | 1–100 characters |
+| FarmListItem.province | text | required | 1–100 characters |
+| FarmListItem.locality | text or null | required | 1–100 characters; — |
+| FarmListItem.dataMode | DataMode | required | — |
+| FarmListResponse.farms | array of FarmListItem | required | owner-scoped results only |
+
+### CreateFarmRequest
+
+| Field | Type | Presence | Validation |
+| --- | --- | --- | --- |
+| name | text | required | 1–100 trimmed characters |
+| province | text | required | 1–100 trimmed characters |
+| locality | text or null | required | 1–100 trimmed characters; — |
+| boundary | Polygon | required | extent at most 0.25° per axis |
+| declaredAreaHa | number | required | 0.01–1000000 |
+
+### CreateCropCycle
+
+| Field | Type | Presence | Validation |
+| --- | --- | --- | --- |
+| cropCode | CropCode | required | maize or soybean |
+| seasonLabel | text | required | YYYY/YY |
+| sownOn | LocalDate or null | required | not future; — |
+| stageCode | StageCode or null | required | belongs to crop; paired with stageAsOf; — |
+| stageAsOf | LocalDate or null | required | not future or before sowing; paired with stageCode; — |
+
+### CreatePlotRequest and CreatePlotResponse
+
+| Field | Type | Presence | Validation |
+| --- | --- | --- | --- |
+| CreatePlotRequest.name | text | required | 1–100 trimmed characters |
+| CreatePlotRequest.boundary | Polygon | required | contained in farm; no positive-area sibling overlap |
+| CreatePlotRequest.samplePoint | Point | required | inside plot |
+| CreatePlotRequest.declaredAreaHa | number | required | 0.01–1000000 and no greater than farm area |
+| CreatePlotRequest.cropCycle | CreateCropCycle | required | — |
+| CreatePlotResponse.farmId | Id | required | — |
+| CreatePlotResponse.dataVersion | integer | required | 1–2147483647 |
+| CreatePlotResponse.plot | Plot | required | includes the newly opened crop cycle |
 
 ### Source
 

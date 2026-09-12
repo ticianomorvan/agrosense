@@ -238,9 +238,10 @@ describe("durable conversation processing", () => {
     expect(run.mock.calls[1]?.[0]).toMatchObject({ history: [] });
   });
 
-  it("recovers interrupted reasoning without losing the durable input", async () => {
-    const { conversation, store, run } = setup();
+  it("terminates interrupted reasoning and advances queued work without rerunning the model", async () => {
+    const { conversation, store, run, send } = setup();
     await conversation.enqueue([message()], ownerId);
+    await conversation.enqueue([message("wamid.2", "And tomorrow?")], ownerId);
     const record = await store.get<Record<string, unknown>>("run:wamid.1");
     await store.put("run:wamid.1", {
       ...record,
@@ -248,8 +249,19 @@ describe("durable conversation processing", () => {
       attempts: 1,
     });
     await conversation.processNext();
+    expect(run).not.toHaveBeenCalled();
+    expect(send.mock.calls[0]?.[0]).toMatchObject({
+      message: message(),
+      reply: expect.stringContaining("couldn’t complete"),
+    });
+    expect(await conversation.status("wamid.1")).toMatchObject({
+      status: "accepted",
+      errorCode: "AGENT_RECOVERY_EXHAUSTED",
+    });
+
+    await conversation.processNext();
     expect(run).toHaveBeenCalledTimes(1);
-    expect((await conversation.status("wamid.1"))?.status).toBe("accepted");
+    expect((await conversation.status("wamid.2"))?.status).toBe("accepted");
   });
 
   it("uses a stored generated reply after restart without calling the model again", async () => {

@@ -409,8 +409,6 @@ it("runs scheduled weather → rules → outbox → Kapso → delivery with dupl
     const notificationConfig = readNotificationConfig({
       KAPSO_API_KEY: "test",
       KAPSO_PHONE_NUMBER_ID: "123456",
-      KAPSO_NOTIFICATION_TEMPLATE_NAME: "agrosense_weather_alert",
-      KAPSO_NOTIFICATION_TEMPLATE_LANGUAGE: "en_US",
     });
     const sent = await dispatchNotifications(
       serviceClient,

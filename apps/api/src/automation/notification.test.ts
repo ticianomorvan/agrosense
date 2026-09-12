@@ -1,7 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { KapsoError } from "../lib/kapso";
 import {
-  notificationTemplate,
+  notificationContent,
   readNotificationConfig,
   sendNotification,
 } from "./notification";
@@ -9,8 +9,6 @@ import {
 const env = {
   KAPSO_API_KEY: "test-key",
   KAPSO_PHONE_NUMBER_ID: "123456",
-  KAPSO_NOTIFICATION_TEMPLATE_NAME: "agrosense_weather_alert",
-  KAPSO_NOTIFICATION_TEMPLATE_LANGUAGE: "en_US",
 };
 const job = {
   id: "11111111-1111-4111-8111-111111111111",
@@ -63,9 +61,6 @@ it("sends a plain text notification to the persisted recipient with a callback t
 
 it("does not require the conversation agent's allowlisted owner or model config", () => {
   expect(() => readNotificationConfig(env)).not.toThrow();
-  expect(() =>
-    readNotificationConfig({ ...env, KAPSO_NOTIFICATION_TEMPLATE_NAME: "" }),
-  ).toThrow();
 });
 
 it.each([408, 500, 503])(
@@ -102,11 +97,11 @@ it("never turns malformed success into a retryable rejection", async () => {
   ).rejects.toMatchObject({ code: "SEND_OUTCOME_UNKNOWN" });
 });
 
-it("bounds template parameters and states withdrawal without declaring the plot safe", () => {
-  const template = notificationTemplate({ ...job, kind: "withdrawal" });
-  expect(template.details).toContain("withdrawn");
-  expect(template.details).not.toContain("seguro");
-  const lengthy = notificationTemplate({
+it("bounds notification content and states withdrawal without declaring the plot safe", () => {
+  const content = notificationContent({ ...job, kind: "withdrawal" });
+  expect(content.details).toContain("withdrawn");
+  expect(content.details).not.toContain("seguro");
+  const lengthy = notificationContent({
     ...job,
     payload: {
       ...job.payload,
