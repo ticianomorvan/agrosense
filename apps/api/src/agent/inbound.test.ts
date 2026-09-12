@@ -4,7 +4,7 @@ import { normalizeInbound, verifyWebhookSignature } from "./inbound";
 const secret = "webhook-test-secret";
 const now = new Date("2026-09-12T12:00:00Z");
 const config = { phoneNumberId: "647015955153740", sender: "5493511234567" };
-const event = (id = "wamid.inbound", text = "¿Cómo viene el tiempo?") => ({
+const event = (id = "wamid.inbound", text = "How is the weather?") => ({
   message: {
     id,
     timestamp: String(now.getTime() / 1000),
@@ -71,7 +71,7 @@ describe("Kapso webhook primitives", () => {
           messageId: "wamid.inbound",
           phoneNumberId: config.phoneNumberId,
           sender: config.sender,
-          text: "¿Cómo viene el tiempo?",
+          text: "How is the weather?",
           sentAt: now.toISOString(),
         },
       ],

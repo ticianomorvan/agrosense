@@ -1,11 +1,11 @@
 {
   "name": "agrosense_weather_alert",
   "category": "UTILITY",
-  "language": "es",
+  "language": "en",
   "components": [
     {
       "type": "BODY",
-      "text": "AgroSense: aviso meteorológico para {{farm}}, lote {{plot}}. Evento previsto: {{hazard}}. Detalles del aviso: {{details}}. Consultá AgroSense para revisar el pronóstico y la evaluación del lote.",
+      "text": "AgroSense: weather alert for {{farm}}, field {{plot}}. Forecast event: {{hazard}}. Alert details: {{details}}. Check AgroSense to review the forecast and field assessment.",
       "example": {
         "bodyTextNamedParams": [
           {
@@ -18,11 +18,11 @@
           },
           {
             "paramName": "hazard",
-            "example": "Helada"
+            "example": "Frost"
           },
           {
             "paramName": "details",
-            "example": "13/09, 03:00–05:00 (Córdoba). Riesgo del cultivo no disponible: falta una evaluación agronómica aplicable con datos vigentes"
+            "example": "13/09, 03:00–05:00 (Córdoba). Crop risk unavailable: no applicable agronomic assessment with current data"
           }
         ]
       }

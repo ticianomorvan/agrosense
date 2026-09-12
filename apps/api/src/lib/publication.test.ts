@@ -47,7 +47,7 @@ describe("refresh publication", () => {
       {
         sourceEventKey: "demo:frost:2026-09-12",
         kind: "frost" as const,
-        title: "Alerta de Helada (2026-09-12)",
+        title: "Frost Alert (2026-09-12)",
         startsAt: "2026-09-12T00:00:00.000Z",
         endsAt: "2026-09-12T01:00:00.000Z",
         evidence,

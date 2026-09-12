@@ -17,7 +17,7 @@ const env = {
   KAPSO_PHONE_NUMBER_ID: "123456",
   KAPSO_NOTIFICATION_WEBHOOK_SECRET: "test-notification-webhook-secret",
   KAPSO_NOTIFICATION_TEMPLATE_NAME: "agrosense_weather_alert",
-  KAPSO_NOTIFICATION_TEMPLATE_LANGUAGE: "es",
+  KAPSO_NOTIFICATION_TEMPLATE_LANGUAGE: "en",
 };
 function configureRpcs() {
   rpc.mockImplementation((name: string) => ({

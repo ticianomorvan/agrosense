@@ -6,24 +6,24 @@ import type { EventKind } from "./dashboard";
  */
 export const HAZARD_RECOMMENDED_ACTIONS: Record<EventKind, string[]> = {
   frost: [
-    "Aplicar riego previo si el lote cuenta con equipo para aumentar la inercia térmica del suelo.",
-    "Suspender aplicaciones de herbicidas post-emergentes y fertilizantes foliares hasta la recuperación térmica.",
-    "Monitorear ápice de crecimiento y daño foliar a las 48–72 hs posteriores a la helada.",
+    "Apply irrigation beforehand if the field has equipment to increase soil thermal inertia.",
+    "Suspend post-emergence herbicide and foliar fertilizer applications until thermal recovery.",
+    "Monitor the growing point and foliar damage 48–72 hours after the frost.",
   ],
   "extreme-heat": [
-    "Priorizar turnos de riego de alivio durante etapas de floración (VT/R1) para sostener el cuaje de granos.",
-    "Suspender pulverizaciones diurnas con temperaturas superiores a 32 °C para evitar deriva y fitotoxicidad.",
-    "Programar aplicaciones en ventanas nocturnas o matutinas con coadyuvantes antievaporantes.",
+    "Prioritize relief irrigation shifts during flowering stages (VT/R1) to sustain grain set.",
+    "Suspend daytime spraying above 32 °C to avoid drift and phytotoxicity.",
+    "Schedule applications in nighttime or morning windows with anti-evaporation adjuvants.",
   ],
   "severe-storm": [
-    "Resguardar pulverizadoras, tolvas y maquinaria en galpones antes del inicio de ráfagas intensas.",
-    "Suspender tratamientos fitosanitarios para evitar el lavado de producto por lluvias torrenciales.",
-    "Revisar y despejar canales aliviadores o vías de escurrimiento para prevenir anegamientos prolongados.",
+    "Store sprayers, hoppers, and machinery in sheds before intense gusts begin.",
+    "Suspend crop-protection treatments to prevent product wash-off from torrential rain.",
+    "Inspect and clear relief channels or drainage paths to prevent prolonged waterlogging.",
   ],
   hail: [
-    "Verificar la vigencia y cobertura de las pólizas de seguro agrícola para los lotes afectados.",
-    "Resguardar vehículos y maquinaria móvil en áreas cubiertas antes del inicio de la tormenta.",
-    "Planificar recorrida a campo post-tormenta para evaluar porcentaje de defoliación y viabilidad de nudos.",
+    "Verify the validity and coverage of agricultural insurance policies for affected fields.",
+    "Move vehicles and mobile machinery to covered areas before the storm begins.",
+    "Plan a post-storm field walk to assess defoliation percentage and node viability.",
   ],
 };
 
@@ -46,7 +46,7 @@ export const DEMO_V1_RULES: RiskRule[] = [
     riskLevel: "moderate",
     reviewState: "synthetic",
     evidenceUrl: null,
-    reasonTemplate: "Escenario sintético: la regla {code} coincide.",
+    reasonTemplate: "Synthetic scenario: rule {code} matches.",
     recommendedActionTemplates: HAZARD_RECOMMENDED_ACTIONS.frost,
   },
   {
@@ -63,7 +63,7 @@ export const DEMO_V1_RULES: RiskRule[] = [
     riskLevel: "high",
     reviewState: "synthetic",
     evidenceUrl: null,
-    reasonTemplate: "Escenario sintético: la regla {code} coincide.",
+    reasonTemplate: "Synthetic scenario: rule {code} matches.",
     recommendedActionTemplates: HAZARD_RECOMMENDED_ACTIONS.frost,
   },
   {
@@ -80,7 +80,7 @@ export const DEMO_V1_RULES: RiskRule[] = [
     riskLevel: "high",
     reviewState: "synthetic",
     evidenceUrl: null,
-    reasonTemplate: "Escenario sintético: la regla {code} coincide.",
+    reasonTemplate: "Synthetic scenario: rule {code} matches.",
     recommendedActionTemplates: HAZARD_RECOMMENDED_ACTIONS.frost,
   },
   {
@@ -97,7 +97,7 @@ export const DEMO_V1_RULES: RiskRule[] = [
     riskLevel: "critical",
     reviewState: "synthetic",
     evidenceUrl: null,
-    reasonTemplate: "Escenario sintético: la regla {code} coincide.",
+    reasonTemplate: "Synthetic scenario: rule {code} matches.",
     recommendedActionTemplates: HAZARD_RECOMMENDED_ACTIONS["extreme-heat"],
   },
   {
@@ -114,7 +114,7 @@ export const DEMO_V1_RULES: RiskRule[] = [
     riskLevel: "high",
     reviewState: "synthetic",
     evidenceUrl: null,
-    reasonTemplate: "Escenario sintético: la regla {code} coincide.",
+    reasonTemplate: "Synthetic scenario: rule {code} matches.",
     recommendedActionTemplates: HAZARD_RECOMMENDED_ACTIONS["severe-storm"],
   },
 ];

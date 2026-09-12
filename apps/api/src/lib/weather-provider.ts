@@ -113,26 +113,26 @@ const threats: {
 }[] = [
   {
     kind: "frost",
-    title: "Alerta de Helada",
+    title: "Frost Alert",
     threshold: 0,
     matches: (h) => h.temperatureC <= 0,
   },
   {
     kind: "extreme-heat",
-    title: "Ola de Calor / Estrés Térmico",
+    title: "Heat Wave / Thermal Stress",
     threshold: 35,
     matches: (h) => h.temperatureC >= 35,
   },
   {
     kind: "severe-storm",
-    title: "Tormenta Severa / Vientos Fuertes",
+    title: "Severe Storm / Strong Winds",
     threshold: null,
     matches: (h) =>
       (h.windGustKmh ?? 0) >= 60 || (h.precipitationMm ?? 0) >= 25,
   },
   {
     kind: "hail",
-    title: "Riesgo de Granizo",
+    title: "Hail Risk",
     threshold: null,
     matches: (h) => h.weatherCode === 96 || h.weatherCode === 99,
   },

@@ -101,7 +101,7 @@ describe("Agronomic engine regression boundaries", () => {
         "a-rule",
       ]);
       expect(alert.reason).toBe(
-        "Escenario sintético: la regla Z-rule coincide.",
+        "Synthetic scenario: rule Z-rule matches.",
       );
     }
   });
