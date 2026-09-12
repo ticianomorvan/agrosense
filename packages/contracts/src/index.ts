@@ -15,25 +15,31 @@ export const uuidSchema = z.uuid();
 
 const instantSchema = z.iso.datetime({ offset: false });
 const localDateSchema = z.iso.date();
-const sourceSchema = z.object({
+export const sourceSchema = z.object({
   code: z.enum(["demo", "open_meteo"]),
   url: z.url().nullable(),
   issuedAt: instantSchema.nullable(),
   retrievedAt: instantSchema,
   isDemo: z.boolean(),
 });
-const forecastHourSchema = z.object({
-  at: instantSchema,
+export const forecastHourSchema = z.object({
+  at: z.string().datetime(),
   temperatureC: z.number().min(-100).max(70),
+  windGustKmh: z.number().min(0).max(300).nullable(),
+  precipitationMm: z.number().min(0).max(500).nullable(),
+  precipitationProbability: z.number().int().min(0).max(100).nullable(),
+  weatherCode: z.number().int().min(0).max(100).optional(),
 });
-const plotForecastSchema = z.object({
+export type ForecastHour = z.infer<typeof forecastHourSchema>;
+
+export const plotForecastSchema = z.object({
   plotId: z.uuid(),
   samplePoint: pointSchema,
   source: sourceSchema,
   temperatureHeightM: z.literal(2),
   hours: z.array(forecastHourSchema).min(1).max(168),
 });
-const forecastSummarySchema = z.object({
+export const forecastSummarySchema = z.object({
   schemaVersion: z.literal(1),
   fetchedAt: instantSchema,
   windowStart: instantSchema,
@@ -51,17 +57,22 @@ const cropCycleSchema = z.object({
   endedOn: localDateSchema.nullable(),
   updatedAt: instantSchema,
 });
-const eventEvidenceSchema = z.object({
+export const eventEvidenceScopeSchema = z.enum(["farm_demo", "plot_forecast"]);
+export type EventEvidenceScope = z.infer<typeof eventEvidenceScopeSchema>;
+
+export const eventEvidenceSchema = z.object({
   schemaVersion: z.literal(1),
-  scope: z.enum(["farm_demo", "plot_forecast"]),
-  plotIds: z.array(z.uuid()).min(1).max(10),
-  forecastDate: localDateSchema,
+  scope: eventEvidenceScopeSchema,
+  plotIds: z.array(z.string().uuid()).min(1).max(10),
+  forecastDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   samplePoint: pointSchema.nullable(),
   source: sourceSchema,
   temperatureHeightM: z.literal(2),
-  detectionThresholdC: z.literal(0),
+  detectionThresholdC: z.number().nullable().optional(),
   hours: z.array(forecastHourSchema).min(1).max(24),
 });
+export type EventEvidence = z.infer<typeof eventEvidenceSchema>;
+
 const eventSnapshotSchema = z.object({
   id: z.uuid(),
   status: z.enum(["active", "cancelled"]),
@@ -174,3 +185,10 @@ export const dashboardResponseSchema = z.object({
   monitoring: monitoringSchema,
 });
 export type DashboardResponse = z.infer<typeof dashboardResponseSchema>;
+
+export { pointSchema };
+export type Point = z.infer<typeof pointSchema>;
+export type Source = z.infer<typeof sourceSchema>;
+export type PlotForecast = z.infer<typeof plotForecastSchema>;
+export type ForecastSummary = z.infer<typeof forecastSummarySchema>;
+export type EventKind = DashboardResponse["events"][number]["kind"];
