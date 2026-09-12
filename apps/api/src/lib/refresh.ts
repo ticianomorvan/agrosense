@@ -134,6 +134,21 @@ function syntheticForecast(
   windowStart.setUTCMinutes(0, 0, 0);
   const windowEnd = new Date(windowStart);
   windowEnd.setUTCHours(windowEnd.getUTCHours() + 24);
+  const source: PlotForecast["source"] = {
+    code: "demo",
+    url: null,
+    issuedAt: null,
+    retrievedAt: refreshedAt,
+    isDemo: true,
+  };
+  const hours = Array.from({ length: 24 }, (_, index) => ({
+    at: new Date(windowStart.getTime() + index * 3_600_000).toISOString(),
+    temperatureC: 8,
+    windGustKmh: null,
+    precipitationMm: null,
+    precipitationProbability: null,
+    weatherCode: null,
+  }));
   return {
     schemaVersion: 1 as const,
     fetchedAt: refreshedAt,
@@ -142,26 +157,9 @@ function syntheticForecast(
     plots: plots.map((plot) => ({
       plotId: plot.id,
       samplePoint: json<PlotForecast["samplePoint"]>(plot.sample_point_geojson),
-      source: {
-        code: "demo" as const,
-        url: null,
-        issuedAt: null,
-        retrievedAt: refreshedAt,
-        isDemo: true,
-      },
+      source,
       temperatureHeightM: 2 as const,
-      hours: Array.from({ length: 24 }, (_, index) => {
-        const at = new Date(windowStart);
-        at.setUTCHours(at.getUTCHours() + index);
-        return {
-          at: at.toISOString(),
-          temperatureC: 8,
-          windGustKmh: null,
-          precipitationMm: null,
-          precipitationProbability: null,
-          weatherCode: null,
-        };
-      }),
+      hours,
     })),
   };
 }

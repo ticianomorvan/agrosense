@@ -139,10 +139,6 @@ function signedArea(ring: Position[]): number {
   );
 }
 
-export function polygonArea(polygon: Position[][]): number {
-  return Math.abs(signedArea(polygon[0] ?? []));
-}
-
 function edges(ring: Position[]): [Position, Position][] {
   return ring.slice(0, -1).flatMap((a, i) => {
     const b = ring[i + 1];
