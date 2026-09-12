@@ -53,6 +53,69 @@ async function signature(body: string) {
 }
 
 describe("WhatsApp agent webhook routing", () => {
+  it("admits the minimal unbuffered v2 payload Kapso delivered in production", async () => {
+    const sender = "15551234567";
+    const admissions: InboundMessage[][] = [];
+    const getByName = vi.fn(() => ({
+      enqueue: async (messages: InboundMessage[]) => {
+        admissions.push(messages);
+        return { accepted: messages.length, duplicates: 0 };
+      },
+    }));
+    const body = JSON.stringify({
+      message: {
+        id: "wamid.production-v2",
+        from: sender,
+        text: { body: "hola" },
+        type: "text",
+        timestamp: String(Math.floor(Date.now() / 1000)),
+      },
+      conversation: {
+        id: "conversation-production-v2",
+        status: "active",
+        phone_number: sender,
+        phone_number_id: business,
+        business_scoped_user_id: "AR.production-v2",
+      },
+      phone_number_id: business,
+      is_new_conversation: false,
+      type: "whatsapp.message.received",
+    });
+
+    const response = await app.request(
+      "/api/whatsapp/webhook",
+      {
+        method: "POST",
+        body,
+        headers: {
+          "Content-Type": "application/json",
+          "X-Webhook-Signature": await signature(body),
+        },
+      },
+      {
+        ...env,
+        WHATSAPP_CONVERSATIONS: { getByName } as never,
+      },
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      accepted: 1,
+      duplicates: 0,
+      ignored: 0,
+    });
+    expect(admissions).toEqual([
+      [
+        expect.objectContaining({
+          messageId: "wamid.production-v2",
+          phoneNumberId: business,
+          sender,
+          text: "hola",
+        }),
+      ],
+    ]);
+  });
+
   it("admits a mixed batch into one isolated Durable Object per sender", async () => {
     const admissions: Array<{
       name: string;

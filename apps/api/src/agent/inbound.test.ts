@@ -92,6 +92,35 @@ describe("Kapso webhook primitives", () => {
     ).toBe("15551234567");
   });
 
+  it("uses the signed v2 body event when duplicate header and message enrichment are absent", () => {
+    const payload = event();
+    const { kapso: _kapso, ...message } = payload.message;
+
+    expect(
+      normalizeInbound(
+        {
+          ...payload,
+          type: "whatsapp.message.received",
+          message,
+        },
+        undefined,
+        config,
+        now,
+      ),
+    ).toEqual({
+      messages: [
+        {
+          messageId: "wamid.inbound",
+          phoneNumberId: config.phoneNumberId,
+          sender,
+          text: "¿Cómo viene el tiempo?",
+          sentAt: now.toISOString(),
+        },
+      ],
+      ignored: 0,
+    });
+  });
+
   it("accepts the conversation phone when from is absent, and rejects mismatches", () => {
     const payload = event();
     const { from: _from, ...message } = payload.message;
@@ -213,6 +242,23 @@ describe("Kapso webhook primitives", () => {
     ).toEqual({ messages: [], ignored: 1 });
     expect(
       normalizeInbound(event(), "whatsapp.message.sent", config, now),
+    ).toEqual({ messages: [], ignored: 1 });
+    expect(
+      normalizeInbound(
+        { ...payload, type: "whatsapp.message.received" },
+        undefined,
+        config,
+        now,
+      ),
+    ).toEqual({ messages: [], ignored: 1 });
+    const { kapso: _kapso, ...message } = event().message;
+    expect(
+      normalizeInbound(
+        { ...event(), message },
+        "whatsapp.message.received",
+        config,
+        now,
+      ),
     ).toEqual({ messages: [], ignored: 1 });
   });
 });

@@ -18,11 +18,13 @@ const eventSchema = z.object({
     type: z.string(),
     from: z.string().optional(),
     text: z.object({ body: z.string().max(4096) }).optional(),
-    kapso: z.object({
-      direction: z.string(),
-      status: z.string(),
-      origin: z.string().optional(),
-    }),
+    kapso: z
+      .object({
+        direction: z.string(),
+        status: z.string(),
+        origin: z.string().optional(),
+      })
+      .optional(),
   }),
   conversation: z.object({
     phone_number: z.string().optional(),
@@ -30,6 +32,7 @@ const eventSchema = z.object({
   }),
 });
 const envelopeSchema = z.object({
+  type: z.string().optional(),
   batch: z.boolean().optional(),
   data: z.unknown().optional(),
 });
@@ -64,7 +67,13 @@ export function normalizeInbound(
   now = new Date(),
 ): { messages: InboundMessage[]; ignored: number } {
   const envelope = envelopeSchema.safeParse(payload);
-  if (event !== "whatsapp.message.received")
+  const expectedEvent = "whatsapp.message.received";
+  // The v2 body type is covered by the raw-body HMAC verified by the route.
+  // Some unbuffered deliveries omit the duplicate header and Kapso extension.
+  const bodyEvent = envelope.success ? envelope.data.type : undefined;
+  const eventsConflict =
+    event !== undefined && bodyEvent !== undefined && event !== bodyEvent;
+  if (eventsConflict || (bodyEvent ?? event) !== expectedEvent)
     return {
       messages: [],
       ignored:
@@ -84,9 +93,11 @@ export function normalizeInbound(
     if (
       entry.phone_number_id !== config.phoneNumberId ||
       conversation.phone_number_id !== config.phoneNumberId ||
-      message.kapso.direction !== "inbound" ||
-      message.kapso.status !== "received" ||
-      message.kapso.origin === "history_sync" ||
+      (message.kapso
+        ? message.kapso.direction !== "inbound" ||
+          message.kapso.status !== "received" ||
+          message.kapso.origin === "history_sync"
+        : bodyEvent !== expectedEvent) ||
       message.type !== "text"
     )
       continue;
