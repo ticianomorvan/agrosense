@@ -98,7 +98,7 @@ describe("outbound WhatsApp", () => {
     expect(init?.method).toBe("POST");
     expect(new Headers(init?.headers).get("X-API-Key")).toBe(env.KAPSO_API_KEY);
     expect(new Headers(init?.headers).has("Authorization")).toBe(false);
-    expect(init?.redirect).toBe("error");
+    expect(init?.redirect).toBe("manual");
     expect(JSON.parse(String(init?.body))).toEqual({
       messaging_product: "whatsapp",
       recipient_type: "individual",
@@ -211,6 +211,7 @@ describe("outbound WhatsApp", () => {
   });
 
   it.each([
+    [302, 502, "SEND_OUTCOME_UNKNOWN"],
     [400, 502, "KAPSO_REJECTED"],
     [401, 502, "KAPSO_REJECTED"],
     [408, 502, "SEND_OUTCOME_UNKNOWN"],

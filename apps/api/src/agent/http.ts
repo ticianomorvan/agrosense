@@ -14,11 +14,15 @@ export async function boundedFetch(
   const signal = AbortSignal.any([options.signal, controller.signal]);
   try {
     signal.throwIfAborted();
-    const response = await options.fetcher(input, {
+    const response = await options.fetcher.call(globalThis, input, {
       ...init,
       signal,
-      redirect: "error",
+      redirect: "manual",
     });
+    if (response.status >= 300 && response.status < 400) {
+      await response.body?.cancel();
+      throw new Error("Provider redirect rejected");
+    }
     const reader = response.body?.getReader();
     if (!reader) return response;
     const chunks: Uint8Array[] = [];

@@ -1,15 +1,14 @@
 import { createMiddleware } from "hono/factory";
 import { errors } from "jose";
-import type { KapsoBindings } from "./kapso";
+import type { AgentBindings } from "../agent/config";
 import {
   createTokenVerifier,
   createUserClient,
   readSupabaseConfig,
-  type SupabaseBindings,
 } from "./supabase";
 
 export type ApiEnv = {
-  Bindings: SupabaseBindings & KapsoBindings;
+  Bindings: AgentBindings;
   Variables: { userId: string; supabase: ReturnType<typeof createUserClient> };
 };
 

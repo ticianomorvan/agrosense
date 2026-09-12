@@ -28,3 +28,9 @@ export const whatsappMessageResponseSchema = z.strictObject({
 export type WhatsappMessageResponse = z.infer<
   typeof whatsappMessageResponseSchema
 >;
+
+export {
+  type WhatsappAgentRun,
+  whatsappAgentRunSchema,
+  whatsappWebhookResponseSchema,
+} from "./whatsapp-agent";

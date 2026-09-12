@@ -1,11 +1,13 @@
 import type { HealthResponse, SessionResponse } from "@agrosense/contracts";
 import { Hono } from "hono";
+import { whatsappAgentRoutes } from "./agent/routes";
 import { type ApiEnv, requireAuth } from "./lib/auth";
 import { whatsapp } from "./whatsapp";
 
 const app = new Hono<ApiEnv>();
 
 app.route("/api/whatsapp", whatsapp);
+app.route("/api/whatsapp", whatsappAgentRoutes);
 
 app.get("/api/health", (c) =>
   c.json({ status: "ok", service: "agrosense-api" } satisfies HealthResponse),
@@ -28,3 +30,4 @@ app.onError((error, c) => {
 });
 
 export default app;
+export { WhatsAppConversation } from "./agent/worker";

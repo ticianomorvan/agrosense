@@ -14,7 +14,7 @@
     "lint": "biome check .",
     "format": "biome check --write .",
     "test": "pnpm --filter @agrosense/api test && pnpm db:test",
-    "check": "pnpm typecheck && pnpm lint && pnpm test && pnpm build",
+    "check": "pnpm typecheck && pnpm lint && pnpm test && pnpm build && pnpm --filter @agrosense/api test:runtime",
     "deploy": "pnpm build && pnpm --filter @agrosense/api deploy",
     "db:test": "node --test supabase/tests/*.test.mjs",
     "db:start": "supabase start",

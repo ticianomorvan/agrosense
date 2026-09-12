@@ -67,7 +67,7 @@ export async function sendWhatsappText(
       `https://api.kapso.ai/meta/whatsapp/v24.0/${config.KAPSO_PHONE_NUMBER_ID}/messages`,
       {
         method: "POST",
-        redirect: "error",
+        redirect: "manual",
         signal: controller.signal,
         headers: {
           "X-API-Key": config.KAPSO_API_KEY,
