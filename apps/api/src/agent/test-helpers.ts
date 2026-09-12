@@ -1,6 +1,7 @@
 import { tool } from "ai";
 import { vi } from "vitest";
 import { z } from "zod";
+import type { ToolResult } from "./tools";
 
 export const call = (name: string, args = "{}", id = "call_1") => ({
   id,
@@ -33,10 +34,12 @@ export const chatResponse = (
     usage: { prompt_tokens: 100, completion_tokens: 30, total_tokens: 130 },
   });
 export function testTools() {
-  const execute = vi.fn(async () => ({
-    ok: true as const,
-    data: { result: "available" },
-  }));
+  const execute = vi.fn(
+    async (): Promise<ToolResult> => ({
+      ok: true as const,
+      data: { result: "available" },
+    }),
+  );
   const tools = {
     list_farms: tool({ inputSchema: z.strictObject({}), execute }),
     list_plots: tool({

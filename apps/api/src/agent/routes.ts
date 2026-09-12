@@ -58,42 +58,25 @@ whatsappAgentRoutes.post(
       } catch {
         throw new SyntaxError("Invalid webhook encoding or JSON");
       }
-      const messages = normalizeInbound(
+      const { messages, ignored } = normalizeInbound(
         payload,
         c.req.header("X-Webhook-Event"),
         config,
       );
-      const envelope = z
-        .object({
-          batch: z.boolean().optional(),
-          data: z.array(z.unknown()).optional(),
-        })
-        .safeParse(payload);
-      const count =
-        envelope.success && envelope.data.batch
-          ? (envelope.data.data?.length ?? 1)
-          : 1;
-      if (!messages.length)
-        return c.json(
-          whatsappWebhookResponseSchema.parse({
-            accepted: 0,
-            duplicates: 0,
-            ignored: count,
-          }),
+      let admission = { accepted: 0, duplicates: 0 };
+      if (messages.length) {
+        const stub = c.env.WHATSAPP_CONVERSATIONS.getByName(
+          await conversationName(config),
         );
-      const stub = c.env.WHATSAPP_CONVERSATIONS.getByName(
-        await conversationName(config),
-      );
-      const result = await stub.enqueue(messages, config.ownerId);
-      if ("error" in result) {
-        if (result.status === 429) c.header("Retry-After", "60");
-        return c.json({ error: result.error }, result.status);
+        const result = await stub.enqueue(messages, config.ownerId);
+        if ("error" in result) {
+          if (result.status === 429) c.header("Retry-After", "60");
+          return c.json({ error: result.error }, result.status);
+        }
+        admission = result;
       }
       return c.json(
-        whatsappWebhookResponseSchema.parse({
-          ...result,
-          ignored: count - messages.length,
-        }),
+        whatsappWebhookResponseSchema.parse({ ...admission, ignored }),
       );
     } catch (error) {
       if (error instanceof z.ZodError || error instanceof SyntaxError)

@@ -1,4 +1,7 @@
-import type { WhatsappAgentRun } from "@agrosense/contracts";
+import {
+  type WhatsappAgentRun,
+  whatsappTextSchema,
+} from "@agrosense/contracts";
 import {
   isStepCount,
   type LanguageModel,
@@ -9,7 +12,7 @@ import {
 import { z } from "zod";
 import { FARM_TIMEZONE, localDate } from "./forecast";
 import { AgentError } from "./model";
-import type { ToolResult } from "./tools";
+import type { AgentTools, ToolResult } from "./tools";
 
 export const historySchema = z
   .array(
@@ -48,12 +51,11 @@ Reply in the user's language, concisely, with plain text suitable for WhatsApp, 
 export async function runAgent(options: {
   text: string;
   history: ChatMessage[];
-  tools: ToolSet;
+  tools: AgentTools;
   model: LanguageModel;
   now?: () => Date;
-  signal?: AbortSignal;
 }): Promise<AgentResult> {
-  const text = z.string().trim().min(1).max(4096).parse(options.text);
+  const text = whatsappTextSchema.parse(options.text);
   const messages = [
     ...historySchema.parse(options.history),
     { role: "user" as const, content: text },
@@ -62,13 +64,11 @@ export async function runAgent(options: {
   const context = `${instructions}\nCurrent date: ${localDate(now)}. Timezone: ${FARM_TIMEZONE}. Current UTC instant: ${now.toISOString()}.`;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 60000);
-  const signal = options.signal
-    ? AbortSignal.any([options.signal, controller.signal])
-    : controller.signal;
+  const signal = controller.signal;
   const trace: ToolTrace[] = [];
   let modelSteps = 0;
   const callIds = new Set<string>();
-  let failure: AgentError | undefined;
+  let failure: AgentError["code"] | undefined;
   // The SDK executes a batch concurrently. Serialize our read-only tools to
   // preserve the existing request bounds and deterministic outcome order.
   let pending: Promise<unknown> = Promise.resolve();
@@ -77,11 +77,12 @@ export async function runAgent(options: {
       name,
       {
         ...definition,
-        execute: ((input, execution) => {
+        execute: (input, execution) => {
           const task = pending.then(async () => {
             signal.throwIfAborted();
             const started = Date.now();
-            let result = (await definition.execute?.(
+            // Our registry returns single results; the SDK type also allows streams.
+            let result = (await definition.execute(
               input,
               execution,
             )) as ToolResult;
@@ -104,8 +105,8 @@ export async function runAgent(options: {
           });
           pending = task.catch(() => {});
           return task;
-        }) as Tool["execute"],
-      },
+        },
+      } satisfies Tool,
     ]),
   );
   try {
@@ -121,15 +122,13 @@ export async function runAgent(options: {
       },
       onLanguageModelCallEnd: ({ content, finishReason }) => {
         const calls = content.filter((part) => part.type === "tool-call");
-        if (callIds.size + calls.length > 8)
-          failure = new AgentError("AGENT_BUDGET_EXCEEDED");
+        if (callIds.size + calls.length > 8) failure = "AGENT_BUDGET_EXCEEDED";
         for (const call of calls) {
-          if (callIds.has(call.toolCallId))
-            failure = new AgentError("MODEL_UNAVAILABLE");
+          if (callIds.has(call.toolCallId)) failure = "MODEL_UNAVAILABLE";
           callIds.add(call.toolCallId);
         }
         if (finishReason !== "stop" && finishReason !== "tool-calls")
-          failure = new AgentError("MODEL_UNAVAILABLE");
+          failure = "MODEL_UNAVAILABLE";
         // SDK callbacks intentionally swallow throws. Abort also prevents tools
         // in this response from starting when the batch exceeds our bounds.
         if (failure) controller.abort();
@@ -152,18 +151,18 @@ export async function runAgent(options: {
     signal.throwIfAborted();
     if (result.steps.at(-1)?.toolCalls.length)
       throw new AgentError("AGENT_BUDGET_EXCEEDED");
-    const reply = result.text.trim();
-    if (result.finishReason !== "stop" || !reply || reply.length > 4096)
+    if (result.finishReason !== "stop")
       throw new AgentError("MODEL_UNAVAILABLE");
+    const reply = whatsappTextSchema.parse(result.text);
     return { reply, trace, modelSteps };
   } catch (error) {
-    const code = failure
-      ? failure.code
-      : signal.aborted
+    const code =
+      failure ??
+      (signal.aborted
         ? "AGENT_TIMEOUT"
         : error instanceof AgentError
           ? error.code
-          : "MODEL_UNAVAILABLE";
+          : "MODEL_UNAVAILABLE");
     throw new AgentRunError(code, trace, modelSteps);
   } finally {
     clearTimeout(timer);

@@ -11,12 +11,14 @@ export type HealthResponse = z.infer<typeof healthResponseSchema>;
 export const sessionResponseSchema = z.object({ userId: z.uuid() });
 export type SessionResponse = z.infer<typeof sessionResponseSchema>;
 
+export const whatsappPhoneSchema = z
+  .string()
+  .regex(/^\+?[1-9]\d{6,14}$/)
+  .transform((value) => value.replace(/^\+/, ""));
+export const whatsappTextSchema = z.string().trim().min(1).max(4096);
 export const whatsappMessageRequestSchema = z.strictObject({
-  to: z
-    .string()
-    .regex(/^\+?[1-9]\d{6,14}$/)
-    .transform((value) => value.replace(/^\+/, "")),
-  text: z.string().trim().min(1).max(4096),
+  to: whatsappPhoneSchema,
+  text: whatsappTextSchema,
 });
 export type WhatsappMessageRequest = z.infer<
   typeof whatsappMessageRequestSchema

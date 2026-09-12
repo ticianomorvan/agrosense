@@ -1,14 +1,12 @@
+import { whatsappPhoneSchema, whatsappTextSchema } from "@agrosense/contracts";
 import { z } from "zod";
+import { hashIdentity } from "./identity";
 
-export const phoneSchema = z
-  .string()
-  .regex(/^\+?[1-9]\d{6,14}$/)
-  .transform((value) => value.replace(/^\+/, ""));
 export const inboundMessageSchema = z.strictObject({
   messageId: z.string().min(1).max(512),
   phoneNumberId: z.string().regex(/^[1-9]\d{0,29}$/),
   sender: z.string().regex(/^[1-9]\d{6,14}$/),
-  text: z.string().trim().min(1).max(4096),
+  text: whatsappTextSchema,
   sentAt: z.iso.datetime(),
 });
 export type InboundMessage = z.infer<typeof inboundMessageSchema>;
@@ -30,6 +28,14 @@ const eventSchema = z.object({
     phone_number: z.string().optional(),
     phone_number_id: z.string(),
   }),
+});
+const envelopeSchema = z.object({
+  batch: z.boolean().optional(),
+  data: z.unknown().optional(),
+});
+const batchSchema = z.object({
+  type: z.literal("whatsapp.message.received"),
+  data: z.array(eventSchema).min(1).max(20),
 });
 
 export async function verifyWebhookSignature(
@@ -56,16 +62,21 @@ export function normalizeInbound(
   event: string | undefined,
   config: { phoneNumberId: string; sender: string },
   now = new Date(),
-): InboundMessage[] {
-  if (event !== "whatsapp.message.received") return [];
-  const batch = z.object({ batch: z.boolean().optional() }).parse(payload);
-  const entries = batch.batch
-    ? z
-        .object({
-          type: z.literal("whatsapp.message.received"),
-          data: z.array(eventSchema).min(1).max(20),
-        })
-        .parse(payload).data
+): { messages: InboundMessage[]; ignored: number } {
+  const envelope = envelopeSchema.safeParse(payload);
+  if (event !== "whatsapp.message.received")
+    return {
+      messages: [],
+      ignored:
+        envelope.success &&
+        envelope.data.batch &&
+        Array.isArray(envelope.data.data)
+          ? envelope.data.data.length
+          : 1,
+    };
+  if (!envelope.success) throw envelope.error;
+  const entries = envelope.data.batch
+    ? batchSchema.parse(payload).data
     : [eventSchema.parse(payload)];
   const result: InboundMessage[] = [];
   for (const entry of entries) {
@@ -79,10 +90,10 @@ export function normalizeInbound(
       message.type !== "text"
     )
       continue;
-    const from = phoneSchema.safeParse(
+    const from = whatsappPhoneSchema.safeParse(
       message.from ?? conversation.phone_number,
     );
-    const contact = phoneSchema.safeParse(
+    const contact = whatsappPhoneSchema.safeParse(
       conversation.phone_number ?? message.from,
     );
     if (
@@ -107,25 +118,15 @@ export function normalizeInbound(
     });
     if (normalized.success) result.push(normalized.data);
   }
-  return result;
+  return { messages: result, ignored: entries.length - result.length };
 }
 
-export async function messageFingerprint(
-  message: InboundMessage,
-): Promise<string> {
-  const hash = await crypto.subtle.digest(
-    "SHA-256",
-    new TextEncoder().encode(
-      JSON.stringify([
-        message.messageId,
-        message.phoneNumberId,
-        message.sender,
-        message.text,
-        message.sentAt,
-      ]),
-    ),
-  );
-  return [...new Uint8Array(hash)]
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("");
+export function messageFingerprint(message: InboundMessage): Promise<string> {
+  return hashIdentity([
+    message.messageId,
+    message.phoneNumberId,
+    message.sender,
+    message.text,
+    message.sentAt,
+  ]);
 }

@@ -1,7 +1,8 @@
+import { whatsappPhoneSchema } from "@agrosense/contracts";
 import { z } from "zod";
 import { type KapsoBindings, readKapsoConfig } from "../lib/kapso";
 import { readSupabaseConfig, type SupabaseBindings } from "../lib/supabase";
-import { phoneSchema } from "./inbound";
+import { hashIdentity } from "./identity";
 import { type ModelBindings, readModelConfig } from "./model";
 import type { WhatsAppConversation } from "./worker";
 
@@ -31,7 +32,7 @@ export function readAgentConfig(env: AgentBindings) {
       .parse(env.SUPABASE_SECRET_KEY);
     return {
       kapso,
-      sender: phoneSchema.parse(env.WHATSAPP_AGENT_PHONE_NUMBER),
+      sender: whatsappPhoneSchema.parse(env.WHATSAPP_AGENT_PHONE_NUMBER),
       webhookSecret: z
         .string()
         .min(16)
@@ -45,18 +46,10 @@ export function readAgentConfig(env: AgentBindings) {
   }
 }
 
-export async function conversationName(config: {
+export function conversationName(config: {
   ownerId: string;
   phoneNumberId: string;
   sender: string;
 }): Promise<string> {
-  const digest = await crypto.subtle.digest(
-    "SHA-256",
-    new TextEncoder().encode(
-      JSON.stringify([config.ownerId, config.phoneNumberId, config.sender]),
-    ),
-  );
-  return [...new Uint8Array(digest)]
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("");
+  return hashIdentity([config.ownerId, config.phoneNumberId, config.sender]);
 }

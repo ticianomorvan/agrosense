@@ -65,15 +65,18 @@ describe("Kapso webhook primitives", () => {
   it("normalizes an authorized v2 text message", () => {
     expect(
       normalizeInbound(event(), "whatsapp.message.received", config, now),
-    ).toEqual([
-      {
-        messageId: "wamid.inbound",
-        phoneNumberId: config.phoneNumberId,
-        sender: config.sender,
-        text: "¿Cómo viene el tiempo?",
-        sentAt: now.toISOString(),
-      },
-    ]);
+    ).toEqual({
+      messages: [
+        {
+          messageId: "wamid.inbound",
+          phoneNumberId: config.phoneNumberId,
+          sender: config.sender,
+          text: "¿Cómo viene el tiempo?",
+          sentAt: now.toISOString(),
+        },
+      ],
+      ignored: 0,
+    });
   });
 
   it("accepts the conversation phone when from is absent, and rejects mismatches", () => {
@@ -85,7 +88,7 @@ describe("Kapso webhook primitives", () => {
         "whatsapp.message.received",
         config,
         now,
-      ),
+      ).messages,
     ).toHaveLength(1);
     expect(
       normalizeInbound(
@@ -94,7 +97,7 @@ describe("Kapso webhook primitives", () => {
         config,
         now,
       ),
-    ).toEqual([]);
+    ).toEqual({ messages: [], ignored: 1 });
   });
 
   it("preserves Kapso batch order even when timestamps match and IDs sort differently", () => {
@@ -105,9 +108,12 @@ describe("Kapso webhook primitives", () => {
       data: [later, event("wamid.1")],
     };
     expect(
-      normalizeInbound(batch, "whatsapp.message.received", config, now).map(
-        (message) => message.messageId,
-      ),
+      normalizeInbound(
+        batch,
+        "whatsapp.message.received",
+        config,
+        now,
+      ).messages.map((message) => message.messageId),
     ).toEqual(["wamid.2", "wamid.1"]);
     expect(() =>
       normalizeInbound(
@@ -117,6 +123,26 @@ describe("Kapso webhook primitives", () => {
         now,
       ),
     ).toThrow();
+  });
+
+  it.each([
+    ["whatsapp.message.received", 1, 1],
+    ["whatsapp.message.sent", 0, 2],
+  ])("counts ignored batch entries for %s", (name, accepted, ignored) => {
+    const image = event("wamid.image");
+    image.message.type = "image";
+    const result = normalizeInbound(
+      {
+        type: "whatsapp.message.received",
+        batch: true,
+        data: [event(), image],
+      },
+      name,
+      config,
+      now,
+    );
+    expect(result.messages).toHaveLength(accepted);
+    expect(result.ignored).toBe(ignored);
   });
 
   it.each([
@@ -167,7 +193,7 @@ describe("Kapso webhook primitives", () => {
     (payload) => {
       expect(
         normalizeInbound(payload, "whatsapp.message.received", config, now),
-      ).toEqual([]);
+      ).toEqual({ messages: [], ignored: 1 });
     },
   );
 
@@ -176,9 +202,9 @@ describe("Kapso webhook primitives", () => {
     payload.message.kapso.direction = "outbound";
     expect(
       normalizeInbound(payload, "whatsapp.message.received", config, now),
-    ).toEqual([]);
+    ).toEqual({ messages: [], ignored: 1 });
     expect(
       normalizeInbound(event(), "whatsapp.message.sent", config, now),
-    ).toEqual([]);
+    ).toEqual({ messages: [], ignored: 1 });
   });
 });

@@ -75,10 +75,7 @@ whatsapp.post(
       return c.json(await sendWhatsappText(config, message.data));
     } catch (error) {
       if (error instanceof KapsoError) {
-        return c.json(
-          { error: { code: error.code, message: error.message } },
-          error.status,
-        );
+        return jsonError(c, error.status, error.code, error.message);
       }
       throw error;
     }

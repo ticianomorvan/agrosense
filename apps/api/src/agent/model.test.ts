@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { createOpenRouterModel, readModelConfig } from "./model";
 import { runAgent } from "./runner";
+import { testTools } from "./test-helpers";
 
 describe("OpenRouter model boundary", () => {
   it("requires an OpenRouter key and accepts provider-qualified model IDs", () => {
@@ -41,7 +42,12 @@ describe("OpenRouter model boundary", () => {
         fetcher,
       );
       await expect(
-        runAgent({ text: "Check", history: [], tools: {}, model }),
+        runAgent({
+          text: "Check",
+          history: [],
+          tools: testTools().tools,
+          model,
+        }),
       ).rejects.toThrow("MODEL_UNAVAILABLE");
       expect(fetcher).toHaveBeenCalledTimes(1);
     },

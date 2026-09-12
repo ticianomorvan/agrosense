@@ -2,8 +2,8 @@ import {
   type WhatsappAgentRun,
   type WhatsappMessageResponse,
   whatsappAgentRunSchema,
+  whatsappTextSchema,
 } from "@agrosense/contracts";
-import { z } from "zod";
 import { KapsoError } from "../lib/kapso";
 import { AgentConfigurationError } from "./config";
 import { type InboundMessage, messageFingerprint } from "./inbound";
@@ -190,7 +190,7 @@ export class Conversation {
             history:
               history && history.expiresAt > this.now() ? history.messages : [],
           });
-          record.reply = z.string().trim().min(1).max(4096).parse(result.reply);
+          record.reply = whatsappTextSchema.parse(result.reply);
           record.trace = result.trace;
           record.modelSteps = result.modelSteps;
         } catch (error) {
