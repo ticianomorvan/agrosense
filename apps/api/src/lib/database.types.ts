@@ -134,6 +134,7 @@ export type Database = {
           boundary_geojson: Json;
           declared_area_ha: number;
           data_version: number;
+          custom_rules?: Json;
           forecast_summary: Json | null;
           last_attempt_at: string | null;
           last_success_at: string | null;
@@ -152,6 +153,7 @@ export type Database = {
           boundary_geojson: Json;
           declared_area_ha: number;
           data_version?: number;
+          custom_rules?: Json;
           forecast_summary?: Json | null;
           last_attempt_at?: string | null;
           last_success_at?: string | null;
@@ -170,6 +172,7 @@ export type Database = {
           boundary_geojson?: Json;
           declared_area_ha?: number;
           data_version?: number;
+          custom_rules?: Json;
           forecast_summary?: Json | null;
           last_attempt_at?: string | null;
           last_success_at?: string | null;
@@ -318,6 +321,37 @@ export type Database = {
           p_expected_data_version: number;
           p_patch: Json;
         };
+        Returns: Json;
+      };
+      admit_farm_refresh: {
+        Args: { p_owner_id: string; p_farm_id: string; p_attempt_at: string };
+        Returns: Json;
+      };
+      publish_farm_refresh: {
+        Args: {
+          p_owner_id: string;
+          p_farm_id: string;
+          p_expected_data_version: number;
+          p_attempt_at: string;
+          p_published_at: string;
+          p_forecast: Json;
+          p_events: Json;
+        };
+        Returns: Json;
+      };
+      fail_farm_refresh: {
+        Args: {
+          p_owner_id: string;
+          p_farm_id: string;
+          p_expected_data_version: number;
+          p_attempt_at: string;
+          p_completed_at: string;
+          p_error_code: string;
+        };
+        Returns: boolean;
+      };
+      import_demo_seed: {
+        Args: { p_owner_id: string; p_payload: Json };
         Returns: Json;
       };
     };

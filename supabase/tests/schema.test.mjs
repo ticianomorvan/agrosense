@@ -61,6 +61,33 @@ before(async () => {
       "utf8",
     ),
   );
+  await db.exec(
+    await readFile(
+      new URL(
+        "../migrations/20260912100000_backend_completion.sql",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+  );
+  await db.exec(
+    await readFile(
+      new URL(
+        "../migrations/20260912101000_refresh_transaction.sql",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+  );
+  await db.exec(
+    await readFile(
+      new URL(
+        "../migrations/20260912102000_trusted_publication.sql",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+  );
   farms = [];
   plots = [];
   events = [];
@@ -208,6 +235,7 @@ test("RLS isolates both owners across all five tables and denies direct writes",
         owner,
       );
     });
+
   await asRole("anon", "", async () =>
     assert.rejects(db.exec("SELECT * FROM farms"), /permission denied/),
   );

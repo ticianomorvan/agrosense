@@ -31,9 +31,11 @@ revocation requires an Auth-server lookup when a future feature needs it.
 
 Authenticated handlers receive `c.get('userId')` and a typed,
 request-scoped `c.get('supabase')` client. It sends the publishable key and the
-verified user JWT to the Data API, preserving RLS. The secret key is reserved for
-explicit administrative/seed operations; there is no privileged request client or
-generic SQL endpoint.
+verified user JWT to the Data API, preserving RLS. Seed imports and the narrow
+refresh admission/publication/failure RPCs use the server-only secret key.
+The Worker passes the verified bearer subject as `p_owner_id`; each refresh RPC
+checks that owner under the farm version/attempt protocol. Anonymous and
+authenticated clients cannot execute these RPCs. There is no generic SQL endpoint.
 
 The [WhatsApp agent](whatsapp-agent.md) is an explicit exception: its isolated
 read-only adapter uses the secret key with mandatory owner filters for the
@@ -77,13 +79,25 @@ These tests validate SQL/RLS, not the full GoTrue/PostgREST stack.
 
 ## Remaining product slices
 
-The dashboard read route, snapshot RPC, and crop-cycle mutation RPC are
-implemented. A validated demo seed/importer, sign-in UI, and forecast
-publication remain separate features. The [weather adapter](domain-model.md#implemented-weather-adapter)
-returns forecasts and detected events without writing to Supabase. JSONB
-constraints currently check structural/version markers; trusted import/publication code must validate complete payloads and geometry topology.
+The dashboard read route, snapshot RPC, crop-cycle mutation, validated demo
+importer, and manual demo/live refresh are implemented. Sign-in UI remains a
+separate feature. The [weather adapter](domain-model.md#implemented-weather-adapter)
+returns forecasts and detected events without writing to Supabase. The refresh
+service validates the complete prospective dashboard, evaluates the shared rules,
+and atomically upserts events/alerts, including covered hazard withdrawals.
+Live risk requires approved rules with evidence URLs. SQL substitutes stored event
+IDs in alert snapshots; demo import also snapshots the actual inserted crop cycle.
+JSONB constraints check structural/version markers; trusted server code validates
+complete payloads and geometry topology.
 Mutation RPCs verify ownership and implement the farm lock/version protocol from
 the domain model. Updating `updated_at` does not increment `data_version`.
+
+Apply `20260912102000_trusted_publication.sql` before deploying the updated
+refresh handler: it replaces the old RPC signatures, removes browser execution
+grants, and takes the verified owner explicitly. Migration and Worker deployment
+are separate operations. The integration tests execute all migrations through
+PGlite with real Supabase client serialization, including publication/readback,
+repeat refresh IDs, cancellation, provider failures, and concurrency rejection.
 
 For a Cloudflare deployment, provision the four Worker settings with Wrangler
 secrets or the Cloudflare dashboard; `.env` is for local development. Deployments

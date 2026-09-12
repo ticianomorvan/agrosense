@@ -62,7 +62,8 @@ Supabase is provisioned with the five-table schema in `supabase/migrations`.
 See [Supabase setup](supabase.md) for credentials, migrations, types, and commands.
 The Worker uses `supabase-js` over the HTTP Data API. `requireAuth` verifies user
 JWTs against Supabase JWKS and provides a request-scoped client that preserves
-row-level security. Secret-key operations are reserved for explicit administration.
+row-level security. Secret-key writes are limited to validated seed imports and the narrow refresh
+RPCs, which verify the bearer owner passed by the Worker.
 The [WhatsApp agent](whatsapp-agent.md) additionally uses a dedicated read-only
 adapter with server-selected identity and mandatory owner filters after verifying
 the linked sender's signed webhook. Its conversation state uses Cloudflare SQLite
@@ -75,9 +76,12 @@ the authentication boundary. The authenticated dashboard route reads stored farm
 snapshots. The [weather adapter](domain-model.md#implemented-weather-adapter)
 fetches and normalizes Open-Meteo data and detects hazards using the same forecast
 and evidence contracts as the dashboard. It does not publish forecasts.
-The refresh endpoint publishes synthetic forecasts for demo farms; live refresh
-returns unavailable. Crop-cycle mutation is implemented by the API route and
-Supabase RPC. Live publication and sign-in UI remain subsequent feature slices.
+The refresh endpoint publishes synthetic forecasts for demo farms and complete
+Open-Meteo forecasts for live farms. It uses the shared agronomic engine, validates
+the prospective dashboard, and commits through service-only RPCs with verified
+ownership and version/attempt checks. Withdrawn hazards are cancelled only when
+newer evidence covers their whole previous interval. Crop-cycle mutation uses its
+authenticated Supabase RPC; sign-in UI remains a subsequent feature slice.
 
 
 ## References
@@ -106,11 +110,10 @@ Map rendering loads lazily. Add primitives with `pnpm dlx shadcn@latest add` fro
 The dashboard API, weather adapter and UI share one dashboard schema, with land
 and geometry definitions reused by satellite previews. Four hazard kinds, critical
 risk, and ordered `recommendedActions` are preserved through the same contract.
-The read contract remains compatible with the stored schema: up to 20 actions,
-including an evaluated assessment with no actions. The UI reports actions as
-unavailable in that case. The domain reference's stricter 1–10 publication rule
-still requires alignment in the publication/storage slice. `customRules` is also
-not yet stored or projected; the client does not fabricate an empty rule array.
+Evaluated alerts require 1–10 actions; other assessment states have no risk or
+actions. The shared engine enforces stage freshness and excludes synthetic rules
+from live evaluations. `customRules` is stored on the farm, projected by the API,
+and merged with the system rules before evaluation.
 
 The authenticated `POST /api/farms/:farmId/satellite` accepts `{from, to}` UTC
 instants within a past window of at most 31 days. It uses owner-scoped stored farm

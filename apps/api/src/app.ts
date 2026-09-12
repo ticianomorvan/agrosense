@@ -62,6 +62,7 @@ app.post("/api/farms/:farmId/refresh", requireAuth, async (c) => {
       c.get("supabase"),
       createServiceClient(c.env),
       farmId,
+      c.get("userId"),
     );
     return c.json(response);
   } catch (error) {
@@ -83,6 +84,20 @@ app.post("/api/farms/:farmId/refresh", requireAuth, async (c) => {
           409,
           "VERSION_CONFLICT",
           "Farm changed during refresh",
+        );
+      case "stale_provider":
+        return jsonError(
+          c,
+          409,
+          "STALE_PROVIDER_DATA",
+          "Provider issuance is older than stored data",
+        );
+      case "payload_limit":
+        return jsonError(
+          c,
+          413,
+          "PAYLOAD_LIMIT_EXCEEDED",
+          "Refresh exceeds its payload limits",
         );
       case "unavailable":
         return jsonError(
