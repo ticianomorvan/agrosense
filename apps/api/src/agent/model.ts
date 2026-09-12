@@ -18,7 +18,7 @@ const configSchema = z.object({
     .min(1)
     .max(100)
     .regex(/^[\w.-]+\/[\w.:-]+$/)
-    .default("openai/gpt-5.4-mini"),
+    .default("deepseek/deepseek-v4.1-flash"),
   OPENROUTER_REASONING_EFFORT: z
     .enum(["low", "medium", "high"])
     .default("medium"),
@@ -116,7 +116,6 @@ export function createOpenRouterModel(
               instructions,
               tools: definitions,
               tool_choice: "auto",
-              parallel_tool_calls: false,
               max_output_tokens: 4096,
             }),
           },

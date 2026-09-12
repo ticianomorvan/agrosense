@@ -6,7 +6,7 @@ import type { AgentTools } from "./tools";
 const now = () => new Date("2026-09-12T12:00:00Z");
 const modelEnv = {
   OPENROUTER_API_KEY: "test_model_key",
-  OPENROUTER_MODEL: "openai/gpt-5.4-mini",
+  OPENROUTER_MODEL: "deepseek/deepseek-v4.1-flash",
 };
 const call = (name: string, args = "{}", id = "call_1") => ({
   type: "function_call",
@@ -36,6 +36,43 @@ afterEach(() => {
 });
 
 describe("reasoning and tool loop", () => {
+  it("executes multiple returned tool calls in order and returns every result before answering", async () => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        response([call("list_farms"), call("list_plots", "{}", "call_2")]),
+      )
+      .mockResolvedValueOnce(response([answer("Which plot?")]));
+    let completedFirst = false;
+    const registry = tools();
+    registry.execute = vi.fn<AgentTools["execute"]>(async (name) => {
+      if (name === "list_farms") {
+        await Promise.resolve();
+        completedFirst = true;
+      } else expect(completedFirst).toBe(true);
+      return { ok: true, data: {} };
+    });
+    const result = await runAgent({
+      text: "Check my farm",
+      history: [],
+      tools: registry,
+      model: createOpenRouterModel(modelEnv, fetcher),
+      now,
+    });
+    expect(result.trace.map((item) => item.tool)).toEqual([
+      "list_farms",
+      "list_plots",
+    ]);
+    const input = JSON.parse(String(fetcher.mock.calls[1]?.[1]?.body)).input;
+    expect(
+      input
+        .filter(
+          (item: { type: string }) => item.type === "function_call_output",
+        )
+        .map((item: { call_id: string }) => item.call_id),
+    ).toEqual(["call_1", "call_2"]);
+  });
+
   it("discovers farms and plots, gets three-day weather, then answers using returned evidence", async () => {
     const reasoning = {
       type: "reasoning",
@@ -87,14 +124,14 @@ describe("reasoning and tool loop", () => {
     });
     for (const request of requests) {
       expect(request.store).toBe(false);
-      expect(request.model).toBe("openai/gpt-5.4-mini");
+      expect(request.model).toBe("deepseek/deepseek-v4.1-flash");
       expect(request.provider).toEqual({
         require_parameters: true,
         allow_fallbacks: false,
       });
       expect(request.include).toEqual(["reasoning.encrypted_content"]);
       expect(request.reasoning).toEqual({ effort: "medium" });
-      expect(request.parallel_tool_calls).toBe(false);
+      expect(request).not.toHaveProperty("parallel_tool_calls");
       expect(request.max_output_tokens).toBe(4096);
     }
     expect(JSON.stringify(result)).not.toContain("opaque_reasoning");

@@ -41,6 +41,12 @@ and reasoning. Provider fallbacks are disabled; errors follow the existing
 bounded failure path. The endpoint is stateless: every step sends the complete
 in-run context, without `previous_response_id`.
 
+The runner executes returned tool calls sequentially, including when a model
+returns several in one response. The request omits `parallel_tool_calls` because
+DeepSeek V4.1 Flash's listed providers do not advertise that parameter. Runtime
+tests cover preserving plain reasoning items as well as unit coverage for
+encrypted reasoning; neither form is included in WhatsApp replies or run status.
+
 Initial tools:
 
 - `list_farms`: discover farms owned by the configured user.
@@ -122,12 +128,12 @@ Wrangler secret prompts; never commit keys or put them in `VITE_*` variables.
 | `WHATSAPP_AGENT_PHONE_NUMBER` | Producer's verified WhatsApp number, 7–15 international digits; optional leading `+` |
 | `KAPSO_WEBHOOK_SECRET` | Subscription signing secret, at least 16 characters |
 | `OPENROUTER_API_KEY` | OpenRouter API credential |
-| `OPENROUTER_MODEL` | Responses reasoning model; default `openai/gpt-5.4-mini` |
+| `OPENROUTER_MODEL` | Responses reasoning model; default `deepseek/deepseek-v4.1-flash` |
 | `OPENROUTER_REASONING_EFFORT` | `low`, `medium` (default), or `high`; model must support the choice |
 | `WHATSAPP_AGENT_ENABLED` | Literal `true` to enable; `false` to disable |
 
 Use a provider-qualified model ID (`provider/model`) supporting both reasoning
-and function calling. The default is GPT-5.4 Mini through OpenRouter; changing
+and function calling. The default is DeepSeek V4.1 Flash through OpenRouter; changing
 `OPENROUTER_MODEL` requires no agent-loop change. Direct `OPENAI_*` settings are
 no longer read, and an OpenAI API key cannot substitute for an OpenRouter key.
 No new SDK or frontend configuration is required.
@@ -217,7 +223,7 @@ It never loads `.env` or sends a real WhatsApp message. Provider mocks verify
 transport and orchestration; they do not establish live model quality or delivery.
 
 Verified on 2026-09-12 with Node 24.19.0 and pnpm 11.21.0: `pnpm check` passed
-type checking, Biome, 113 API tests, four database tests, Vite and Wrangler dry-run
+type checking, Biome, 114 API tests, four database tests, Vite and Wrangler dry-run
 builds, and the local workerd integration test. `pnpm audit --prod` reported no
 known vulnerabilities. Runtime verification caught and fixed native fetch
 receiver binding and redirect-mode incompatibilities; provider redirects are
@@ -246,7 +252,7 @@ Reference documentation:
 - [OpenRouter tool calling](https://openrouter.ai/docs/api_reference/responses/tool-calling)
 - [OpenRouter reasoning](https://openrouter.ai/docs/api_reference/responses/reasoning)
 - [OpenRouter parameter-aware routing](https://openrouter.ai/docs/guides/routing/provider-selection)
-- [Default model](https://openrouter.ai/openai/gpt-5.4-mini)
+- [Default model](https://openrouter.ai/deepseek/deepseek-v4.1-flash)
 - [Kapso event shapes](https://docs.kapso.ai/docs/platform/webhooks/message-events)
 - [Kapso webhook signatures](https://docs.kapso.ai/docs/platform/webhooks/security)
 - [Kapso delivery and batches](https://docs.kapso.ai/docs/platform/webhooks/advanced)

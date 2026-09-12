@@ -137,7 +137,7 @@ test("signed webhook → durable alarm → three chosen tools → WhatsApp reply
               request.headers.get("Authorization"),
               "Bearer openrouter_test",
             );
-            assert.equal(body.model, "openai/gpt-5.4-mini");
+            assert.equal(body.model, "deepseek/deepseek-v4.1-flash");
             assert.deepEqual(body.provider, {
               require_parameters: true,
               allow_fallbacks: false,
@@ -162,7 +162,13 @@ test("signed webhook → durable alarm → three chosen tools → WhatsApp reply
                   {
                     type: "reasoning",
                     id: `rs_${results.length}`,
-                    encrypted_content: "opaque-test-reasoning",
+                    encrypted_content: null,
+                    content: [
+                      {
+                        type: "reasoning_text",
+                        text: "private-test-reasoning",
+                      },
+                    ],
                     summary: [],
                   },
                   {
@@ -177,6 +183,13 @@ test("signed webhook → durable alarm → three chosen tools → WhatsApp reply
             assert.equal(
               body.input.filter((item) => item.type === "reasoning").length,
               3,
+            );
+            assert.ok(
+              body.input
+                .filter((item) => item.type === "reasoning")
+                .every(
+                  (item) => item.content[0].text === "private-test-reasoning",
+                ),
             );
             assert.equal(JSON.parse(results[2].output).data.days.length, 3);
             return Response.json({
@@ -299,7 +312,7 @@ test("signed webhook → durable alarm → three chosen tools → WhatsApp reply
           );
           assert.ok(run.trace.every((item) => item.ok));
           assert.equal(
-            JSON.stringify(run).includes("opaque-test-reasoning"),
+            JSON.stringify(run).includes("private-test-reasoning"),
             false,
           );
           return;

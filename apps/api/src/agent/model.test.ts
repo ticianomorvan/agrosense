@@ -6,7 +6,7 @@ describe("OpenRouter model boundary", () => {
     expect(
       readModelConfig({ OPENROUTER_API_KEY: "router_test" }),
     ).toMatchObject({
-      OPENROUTER_MODEL: "openai/gpt-5.4-mini",
+      OPENROUTER_MODEL: "deepseek/deepseek-v4.1-flash",
       OPENROUTER_REASONING_EFFORT: "medium",
     });
     expect(
