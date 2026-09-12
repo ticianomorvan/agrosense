@@ -1,10 +1,15 @@
-import type { HealthResponse } from "@agrosense/contracts";
+import type { HealthResponse, SessionResponse } from "@agrosense/contracts";
 import { Hono } from "hono";
+import { type ApiEnv, requireAuth } from "./lib/auth";
 
-const app = new Hono();
+const app = new Hono<ApiEnv>();
 
 app.get("/api/health", (c) =>
   c.json({ status: "ok", service: "agrosense-api" } satisfies HealthResponse),
+);
+
+app.get("/api/session", requireAuth, (c) =>
+  c.json({ userId: c.get("userId") } satisfies SessionResponse),
 );
 
 app.notFound((c) =>
