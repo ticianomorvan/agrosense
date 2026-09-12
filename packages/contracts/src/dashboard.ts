@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { eventKindSchema } from "./agronomic";
+import { demoEconomicImpactSchema } from "./economic-impact";
 import { pointSchema } from "./geometry";
 import { cropCycleSchema, farmSchema, plotSchema } from "./land";
 import { compareInstants, instantSchema } from "./time";
@@ -146,6 +147,7 @@ export const inputSnapshotSchema = z.strictObject({
       "Matched rule codes must be unique",
     ),
   generation: generationSchema,
+  lossEstimate: demoEconomicImpactSchema.nullable().optional(),
 });
 export const plotAlertSchema = z
   .strictObject({
@@ -165,6 +167,7 @@ export const plotAlertSchema = z
     validUntil: instantSchema,
     generationMethod: z.enum(["template", "llm"]),
     inputSnapshot: inputSnapshotSchema,
+    lossEstimate: demoEconomicImpactSchema.nullable().optional(),
     isStale: z.boolean(),
   })
   .refine(

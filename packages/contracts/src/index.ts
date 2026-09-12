@@ -50,6 +50,7 @@ export type RefreshResponse = z.infer<typeof refreshResponseSchema>;
 export * from "./agronomic";
 export * from "./dashboard";
 export * from "./default-rules";
+export * from "./economic-impact";
 export * from "./engine";
 export * from "./geometry";
 export * from "./land";

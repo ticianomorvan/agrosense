@@ -133,6 +133,12 @@ export async function importDemoSeed(
   );
   const [event] = buildPublication({
     forecasts,
+    plotAreasHa: new Map(
+      seed.plots.map((plot, index) => [
+        plotIds[index] ?? "",
+        plot.declaredAreaHa,
+      ]),
+    ),
     cycles,
     now: nowIso,
     detect: detectThreatEvents,

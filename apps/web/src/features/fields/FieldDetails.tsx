@@ -80,6 +80,33 @@ export function FieldDetails({
           evaluation.
         </p>
       )}
+      {status.assessment?.alert.lossEstimate ? (
+        <>
+          <h3>Estimated production loss</h3>
+          <p className="text-lg font-semibold tabular-nums">
+            USD{" "}
+            {status.assessment.alert.lossEstimate.estimatedLossUsd.toLocaleString(
+              "en-US",
+              { minimumFractionDigits: 2, maximumFractionDigits: 2 },
+            )}
+          </p>
+          <p className="text-sm leading-normal text-muted-foreground">
+            Synthetic estimate:{" "}
+            {(
+              status.assessment.alert.lossEstimate.damageRate * 100
+            ).toLocaleString("en-US", {
+              maximumFractionDigits: 1,
+            })}
+            % of exposed production (
+            {status.assessment.alert.lossEstimate.exposedProductionTons.toLocaleString(
+              "en-US",
+              { maximumFractionDigits: 2 },
+            )}{" "}
+            t). Price: USD{" "}
+            {status.assessment.alert.lossEstimate.expectedPriceUsdPerTon}/t.
+          </p>
+        </>
+      ) : null}
       <h3>Weather context</h3>
       {forecast ? (
         <>
