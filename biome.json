@@ -1,0 +1,6 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.5.13/schema.json",
+  "files": { "includes": ["**", "!exa-results", "!**/dist", "!**/.wrangler"] },
+  "formatter": { "indentStyle": "space" },
+  "linter": { "rules": { "preset": "recommended" } }
+}

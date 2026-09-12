@@ -1,0 +1,24 @@
+{
+  "name": "agrosense",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.21.0",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @agrosense/web build && pnpm --parallel --filter './apps/*' dev",
+    "build": "pnpm --filter @agrosense/web build && pnpm --filter @agrosense/api build",
+    "preview": "pnpm build && pnpm --filter @agrosense/api dev",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "biome check .",
+    "format": "biome check --write .",
+    "test": "pnpm --filter @agrosense/api test",
+    "check": "pnpm typecheck && pnpm lint && pnpm test && pnpm build",
+    "deploy": "pnpm build && pnpm --filter @agrosense/api deploy"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.13",
+    "typescript": "7.0.2"
+  }
+}
