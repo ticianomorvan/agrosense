@@ -1,0 +1,227 @@
+import type { CropCode, SatellitePreview } from "@agrosense/contracts";
+import { useQuery } from "@tanstack/react-query";
+import { cn } from "cn";
+import {
+  Component,
+  lazy,
+  type ReactNode,
+  Suspense,
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+} from "react";
+import { DataState } from "../../components/data-state";
+import { Badge } from "../../components/ui/badge";
+import { Button } from "../../components/ui/button";
+import {
+  NativeSelect,
+  NativeSelectOption,
+} from "../../components/ui/native-select";
+import { SatelliteControls } from "../satellite/SatelliteControls";
+import { useRiskClock } from "./clock";
+import { FieldDetails } from "./FieldDetails";
+import { FieldList } from "./FieldList";
+import { formatInstant } from "./presentation";
+import { dashboardOptions, type FarmDataSource } from "./queries";
+
+const FieldMap = lazy(() => import("./FieldMap"));
+export function FieldOverview({ source }: { source: FarmDataSource }) {
+  const cropId = useId();
+  const query = useQuery(dashboardOptions(source));
+  const now = useRiskClock(query.data);
+  const [crop, setCrop] = useState<CropCode | "all" | "unknown">("all");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [phoneMap, setPhoneMap] = useState(false);
+  const [satellite, setSatellite] = useState<SatellitePreview>();
+  const previousSelection = useRef<string | null>(null);
+  const select = useCallback((id: string) => {
+    setSelectedId(id);
+    setPhoneMap(false);
+  }, []);
+  useEffect(() => {
+    if (selectedId) document.getElementById("field-detail-title")?.focus();
+    else if (previousSelection.current)
+      document
+        .getElementById(`view-field-${previousSelection.current}`)
+        ?.focus();
+    previousSelection.current = selectedId;
+  }, [selectedId]);
+  if (query.isPending)
+    return (
+      <main className="mx-auto grid max-w-[1600px] gap-4 p-4 md:gap-6 md:p-6">
+        <h1>Your fields</h1>
+        <DataState title="Loading your farm…" pending>
+          Field information will appear here.
+        </DataState>
+      </main>
+    );
+  if (!query.data)
+    return (
+      <main className="mx-auto grid max-w-[1600px] gap-4 p-4 md:gap-6 md:p-6">
+        <h1>Your fields</h1>
+        <DataState
+          title="Farm information unavailable"
+          retry={() => void query.refetch()}
+          pending={query.isFetching}
+        >
+          {query.error?.message ?? "Please try again."}
+        </DataState>
+      </main>
+    );
+  const data = query.data;
+  const plots = data.plots.filter(
+    (p) =>
+      crop === "all" ||
+      (crop === "unknown"
+        ? !p.activeCropCycle
+        : p.activeCropCycle?.cropCode === crop),
+  );
+  const selected = plots.find((p) => p.id === selectedId);
+  return (
+    <main className="mx-auto grid max-w-[1600px] gap-4 p-4 md:gap-6 md:p-6">
+      <div className="flex flex-wrap items-end justify-between gap-6">
+        <div className="grid gap-2">
+          <p className="text-sm leading-normal text-muted-foreground tabular-nums">
+            {data.farm.province}
+            {data.farm.locality ? ` · ${data.farm.locality}` : ""}
+          </p>
+          <h1>{data.farm.name}</h1>
+          <p>Understand your fields. Decide what needs attention.</p>
+        </div>
+        <div className="flex w-full flex-col gap-2 font-semibold md:w-auto">
+          <label htmlFor={cropId}>Crop</label>
+          <NativeSelect
+            id={cropId}
+            className="w-full"
+            value={crop}
+            onChange={(e) => {
+              setCrop(e.target.value as typeof crop);
+              setSelectedId(null);
+            }}
+          >
+            <NativeSelectOption value="all">All crops</NativeSelectOption>
+            <NativeSelectOption value="maize">Maize</NativeSelectOption>
+            <NativeSelectOption value="soybean">Soybean</NativeSelectOption>
+            <NativeSelectOption value="unknown">
+              Crop unavailable
+            </NativeSelectOption>
+          </NativeSelect>
+        </div>
+      </div>
+      <div className="flex flex-wrap items-center gap-3 text-sm" role="status">
+        {data.farm.dataMode === "demo" && (
+          <Badge variant="info">Demonstration weather and risk data</Badge>
+        )}
+        <span>
+          {data.monitoring.status === "never_refreshed"
+            ? "Weather has not been evaluated."
+            : `Monitoring at last update: ${data.monitoring.status.replaceAll("_", " ")}.`}{" "}
+          Last successful update: {formatInstant(data.monitoring.lastSuccessAt)}{" "}
+          · Córdoba time (UTC−3)
+        </span>
+        {query.isError && (
+          <>
+            <span>
+              Farm information could not be updated. Showing the last available
+              data.
+            </span>
+            <Button
+              variant="outline"
+              onClick={() => void query.refetch()}
+              disabled={query.isFetching}
+              aria-busy={query.isFetching || undefined}
+            >
+              {query.isFetching ? "Retrying update…" : "Retry update"}
+            </Button>
+          </>
+        )}
+      </div>
+      <div className="md:hidden">
+        <Button variant="outline" onClick={() => setPhoneMap((v) => !v)}>
+          {phoneMap ? "Back to priorities" : "View farm map"}
+        </Button>
+      </div>
+      <div className="grid grid-cols-1 items-start gap-4 md:gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
+        <section
+          className={cn(
+            "min-w-0 space-y-4 rounded-xl border bg-card p-4 md:block",
+            !phoneMap && "hidden",
+          )}
+          aria-label="Farm view"
+        >
+          <h2>Farm view</h2>
+          <MapBoundary>
+            <Suspense
+              fallback={
+                <DataState
+                  className="min-h-96 md:min-h-144"
+                  title="Loading the farm map…"
+                  pending
+                />
+              }
+            >
+              <FieldMap
+                data={data}
+                plots={plots}
+                selectedId={selectedId}
+                onSelect={select}
+                satellite={satellite}
+              />
+            </Suspense>
+          </MapBoundary>
+          <SatelliteControls
+            key={`${source.scope}:${source.farmId}`}
+            source={source}
+            onImage={setSatellite}
+          />
+        </section>
+        <section
+          className={cn(
+            "row-start-1 min-w-0 space-y-4 rounded-xl border bg-card p-4 md:block lg:row-auto",
+            phoneMap && "hidden",
+          )}
+          aria-label={selected ? "Field details" : "Field priorities"}
+        >
+          {selected ? (
+            <FieldDetails
+              data={data}
+              now={now}
+              plot={selected}
+              onBack={() => setSelectedId(null)}
+            />
+          ) : (
+            <FieldList
+              data={data}
+              now={now}
+              plots={plots}
+              onSelect={select}
+              onClear={() => setCrop("all")}
+            />
+          )}
+        </section>
+      </div>
+    </main>
+  );
+}
+
+class MapBoundary extends Component<
+  { children: ReactNode },
+  { failed: boolean }
+> {
+  state = { failed: false };
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+  render() {
+    return this.state.failed ? (
+      <DataState className="min-h-96 md:min-h-144" title="Map unavailable">
+        Use the field list to review your fields. Reload the page to try loading
+        the map again.
+      </DataState>
+    ) : (
+      this.props.children
+    );
+  }
+}

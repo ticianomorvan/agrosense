@@ -12,7 +12,7 @@ import {
   type RiskRule,
   sourceSchema,
 } from "./index";
-import { addMinutes, compareInstants } from "./instants";
+import { addMinutes, compareInstants } from "./time";
 
 export interface EvaluatePlotAlertInput {
   plot: {

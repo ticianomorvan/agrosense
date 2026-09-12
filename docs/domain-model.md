@@ -28,6 +28,11 @@ No membership, crop catalog, rule, queue, notification, image-history, or separa
 assessment-history tables. No land editor, signup flow, season-rollover UI,
 weather raster overlays, regional spatial matching, or outbound messages.
 
+The explicit 2026-09-12 WhatsApp requests add two scoped exceptions:
+[manual outbound messaging](kapso.md) and a [read-only conversational agent](whatsapp-agent.md).
+The agent's bounded reasoning loop and separate Durable Object transport state
+do not change these five tables, dashboard refresh budgets or agronomic rules.
+
 ```mermaid
 erDiagram
     AUTH_USERS ||--o{ FARMS : owns

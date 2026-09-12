@@ -35,6 +35,11 @@ verified user JWT to the Data API, preserving RLS. The secret key is reserved fo
 explicit administrative/seed operations; there is no privileged request client or
 generic SQL endpoint.
 
+The [WhatsApp agent](whatsapp-agent.md) is an explicit exception: its isolated
+read-only adapter uses the secret key with mandatory owner filters for the
+configured operator after signed sender authentication. It does not create a
+privileged browser client or permit arbitrary queries or agricultural writes.
+
 ## Migrations and types
 
 Authenticate the CLI once and link this checkout before future remote operations:
@@ -72,13 +77,13 @@ These tests validate SQL/RLS, not the full GoTrue/PostgREST stack.
 
 ## Remaining product slices
 
-The dashboard read route and snapshot RPC are implemented. A validated demo
-seed/importer, sign-in UI, cultivation mutation RPCs, and forecast publication
-remain separate features. The [weather adapter](domain-model.md#implemented-weather-adapter)
+The dashboard read route, snapshot RPC, and crop-cycle mutation RPC are
+implemented. A validated demo seed/importer, sign-in UI, and forecast
+publication remain separate features. The [weather adapter](domain-model.md#implemented-weather-adapter)
 returns forecasts and detected events without writing to Supabase. JSONB
 constraints currently check structural/version markers; trusted import/publication code must validate complete payloads and geometry topology.
-Mutation RPCs must verify ownership and implement the farm lock/version protocol
-from the domain model. Updating `updated_at` does not increment `data_version`.
+Mutation RPCs verify ownership and implement the farm lock/version protocol from
+the domain model. Updating `updated_at` does not increment `data_version`.
 
 For a Cloudflare deployment, provision the four Worker settings with Wrangler
 secrets or the Cloudflare dashboard; `.env` is for local development. Deployments

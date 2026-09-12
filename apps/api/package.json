@@ -8,16 +8,22 @@
     "build": "wrangler deploy --dry-run --outdir dist",
     "deploy": "wrangler deploy",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:runtime": "node --test tests/*.runtime.mjs"
   },
   "dependencies": {
     "@agrosense/contracts": "workspace:*",
+    "@openrouter/ai-sdk-provider": "3.0.0",
     "@supabase/supabase-js": "^2.116.0",
+    "ai": "7.0.99",
+    "fast-png": "^8.0.0",
     "hono": "4.13.7",
     "jose": "^6.2.12",
     "zod": "4.6.2"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "5.20260911.1",
+    "miniflare": "5.20260911.0-alpha",
     "vitest": "5.0.0",
     "wrangler": "4.131.1"
   }
