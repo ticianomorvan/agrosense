@@ -608,3 +608,71 @@ describe("dashboard polygon contract", () => {
     expect(acceptsRing(ring)).toBe(false);
   });
 });
+
+it("projects critical risk and every ordered recommended action", () => {
+  const actions = [
+    "Review the supplied weather evidence",
+    "Check the declared crop stage",
+  ];
+  const response = projectDashboard(
+    farm,
+    [plot],
+    [],
+    [{ ...event, kind: "hail" }],
+    [
+      {
+        ...alert,
+        assessment_state: "evaluated",
+        risk_level: "critical",
+        recommended_actions: actions,
+      },
+    ],
+    "2026-09-12T01:00:00Z",
+  );
+  expect(response.events[0]?.alerts[0]).toMatchObject({
+    riskLevel: "critical",
+    recommendedActions: actions,
+  });
+});
+it("preserves stored action-array cardinality, including an evaluated result without actions", () => {
+  for (const actions of [
+    [],
+    Array.from({ length: 20 }, (_, i) => `Action ${i + 1}`),
+  ]) {
+    const response = projectDashboard(
+      farm,
+      [plot],
+      [],
+      [event],
+      [
+        {
+          ...alert,
+          assessment_state: "evaluated",
+          risk_level: "high",
+          recommended_actions: actions,
+        },
+      ],
+    );
+    expect(response.events[0]?.alerts[0]?.recommendedActions).toEqual(actions);
+  }
+});
+it("accepts valid PostgreSQL assessment windows shorter than a millisecond", () => {
+  const response = projectDashboard(
+    farm,
+    [plot],
+    [],
+    [event],
+    [
+      {
+        ...alert,
+        generated_at: "2026-09-12T00:00:00.123456Z",
+        valid_until: "2026-09-12T00:00:00.123457Z",
+      },
+    ],
+    "2026-09-12T00:00:00.123456Z",
+  );
+  expect(response.events[0]?.alerts[0]).toMatchObject({
+    isStale: false,
+    validUntil: "2026-09-12T00:00:00.123457Z",
+  });
+});

@@ -11,8 +11,10 @@ import { DashboardPayloadLimitError, loadDashboard } from "./lib/dashboard";
 import { RefreshError, refreshFarm } from "./lib/refresh";
 import { readLimitedRequestBody } from "./lib/request-body";
 import { createServiceClient } from "./lib/supabase";
+import { satelliteRoutes } from "./satellite/routes";
 
 const app = new Hono<ApiEnv>();
+app.route("/", satelliteRoutes);
 
 app.get("/api/health", (c) =>
   c.json({ status: "ok", service: "agrosense-api" } satisfies HealthResponse),

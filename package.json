@@ -13,7 +13,7 @@
     "typecheck": "pnpm -r typecheck",
     "lint": "biome check .",
     "format": "biome check --write .",
-    "test": "pnpm --filter @agrosense/api test && pnpm db:test",
+    "test": "pnpm --filter @agrosense/api test && pnpm --filter @agrosense/web test && pnpm db:test",
     "check": "pnpm typecheck && pnpm lint && pnpm test && pnpm build",
     "deploy": "pnpm build && pnpm --filter @agrosense/api deploy",
     "db:test": "node --test supabase/tests/*.test.mjs",
