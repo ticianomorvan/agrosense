@@ -107,3 +107,41 @@ it("sanitizes provider failures and never silently substitutes a fixture", async
     loadSatellitePreview(env, boundary, window, fetcher),
   ).rejects.toThrow("Satellite imagery is temporarily unavailable");
 });
+it("uses a redirect mode supported by the Worker runtime", async () => {
+  const fetcher = vi.fn<typeof fetch>(async (url, init) => {
+    if (init?.redirect === "error")
+      throw new TypeError("Invalid redirect value in workerd");
+    return Response.json(
+      String(url).endsWith("/token")
+        ? { access_token: "provider-token" }
+        : { features: [] },
+    );
+  });
+  await expect(
+    loadSatellitePreview(env, boundary, window, fetcher),
+  ).resolves.toMatchObject({ reason: "no_scenes" });
+  expect(fetcher).toHaveBeenCalledTimes(2);
+});
+it("rejects redirects at every provider step without following them", async () => {
+  for (const step of [0, 1, 2]) {
+    const responses = [
+      Response.json({ access_token: "provider-token" }),
+      Response.json({ features: [scene] }),
+    ];
+    responses[step] = new Response("redirect body", {
+      status: 307,
+      headers: { Location: "https://example.invalid/collect" },
+    });
+    const fetcher = vi.fn<typeof fetch>(async () => {
+      const response = responses.shift();
+      if (!response) throw new Error("Unexpected request after redirect");
+      return response;
+    });
+    await expect(
+      loadSatellitePreview(env, boundary, window, fetcher),
+    ).rejects.toThrow("Satellite imagery is temporarily unavailable");
+    expect(fetcher).toHaveBeenCalledTimes(step + 1);
+    for (const [, init] of fetcher.mock.calls)
+      expect(init?.redirect).toBe("manual");
+  }
+});

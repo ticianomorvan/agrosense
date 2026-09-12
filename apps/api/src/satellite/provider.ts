@@ -96,7 +96,9 @@ export async function loadSatellitePreview(
     ) => {
       const response = await fetcher(url, {
         ...init,
-        redirect: "error",
+        // workerd supports manual/follow; boundedBody rejects every 3xx.
+        // Never follow a redirect carrying credentials or a bearer token.
+        redirect: "manual",
         signal: AbortSignal.timeout(8000),
       });
       return { response, bytes: await boundedBody(response, maxBytes) };

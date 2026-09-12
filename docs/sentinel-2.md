@@ -10,7 +10,9 @@ No NDVI, crop-health labels, boundary detection, or extra persistence tables.
 Use Copernicus Data Space's Sentinel Hub Catalog and Process APIs, called only
 by the Worker. Configure `COPERNICUS_CLIENT_ID` and `COPERNICUS_CLIENT_SECRET`
 as server secrets. The browser never receives credentials or provider URLs.
-The account's entitlement/quota still needs a real integration check.
+Real OAuth, Catalog and Process requests succeeded with the configured account
+in local verification; see [the evidence](frontend-verification.md#live-copernicus-verification).
+This verifies preview access, not sustained quota or production capacity.
 
 ## Contract
 
@@ -60,7 +62,11 @@ a sign-in flow. The default local fixture has no authenticated farm association.
 Test input/date/bounds validation, absent credentials, empty/truncated catalogs,
 timeout/HTTP failure, attribution, PNG validation, and auth/ownership rejection.
 Check map/list selection without imagery and preview georeferencing in a browser.
-Real provider validation requires configured credentials and an accessible farm.
+Real provider validation can use configured credentials and the synthetic farm
+boundary in an isolated local harness, independently of session/database wiring.
+The authenticated route still requires an accessible stored farm.
+Use `redirect: "manual"` for Worker compatibility and reject non-2xx responses
+before parsing; never follow redirects carrying credentials or bearer tokens.
 
 ## Official references
 
