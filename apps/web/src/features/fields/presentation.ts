@@ -25,8 +25,10 @@ export function formatInstant(value: string | null) {
 export function currentAlert(
   data: DashboardResponse,
   plotId: string,
+  now = Date.now(),
 ): { alert: PlotAlert; event: EventCard } | undefined {
   const rank = { high: 3, moderate: 2, low: 1 };
+  const asOf = Math.max(Date.parse(data.asOf), now);
   return data.events
     .flatMap((event) =>
       event.alerts
@@ -35,9 +37,10 @@ export function currentAlert(
             alert.plotId === plotId &&
             event.status === "active" &&
             event.temporalState !== "recent" &&
+            Date.parse(event.endsAt) > asOf &&
             !alert.isStale &&
             alert.assessmentState === "evaluated" &&
-            Date.parse(alert.validUntil) > Date.parse(data.asOf),
+            Date.parse(alert.validUntil) > asOf,
         )
         .map((alert) => ({ alert, event })),
     )
@@ -50,8 +53,9 @@ export function currentAlert(
 export function plotStatus(
   data: DashboardResponse,
   plotId: string,
+  now = Date.now(),
 ): { label: string; tone: Tone; reason: string; time: string | null } {
-  const current = currentAlert(data, plotId);
+  const current = currentAlert(data, plotId, now);
   if (current) {
     return {
       ...riskPresentation[current.alert.riskLevel ?? "low"],
@@ -59,6 +63,21 @@ export function plotStatus(
       time: current.alert.generatedAt,
     };
   }
+  const previous = data.events
+    .flatMap((event) => event.alerts)
+    .filter(
+      (alert) =>
+        alert.plotId === plotId && alert.assessmentState === "evaluated",
+    )
+    .sort((a, b) => Date.parse(b.generatedAt) - Date.parse(a.generatedAt))[0];
+  if (previous)
+    return {
+      label: "Risk unavailable",
+      tone: "unknown",
+      reason:
+        "The previous evaluation is no longer current. A current risk assessment is unavailable.",
+      time: previous.generatedAt,
+    };
   return {
     label: "Risk unavailable",
     tone: "unknown",

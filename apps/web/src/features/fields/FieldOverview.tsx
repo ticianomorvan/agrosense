@@ -16,6 +16,7 @@ import {
 } from "../../components/ui";
 import { MapBoundary } from "../../components/ui/MapBoundary";
 import { SatelliteControls } from "../satellite/SatelliteControls";
+import { useRiskClock } from "./clock";
 import { FieldDetails } from "./FieldDetails";
 import { FieldList } from "./FieldList";
 import { formatInstant } from "./presentation";
@@ -24,6 +25,7 @@ import { dashboardOptions, type FarmDataSource } from "./queries";
 const FieldMap = lazy(() => import("./FieldMap"));
 export function FieldOverview({ source }: { source: FarmDataSource }) {
   const query = useQuery(dashboardOptions(source));
+  const now = useRiskClock(query.data);
   const [crop, setCrop] = useState<CropCode | "all" | "unknown">("all");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [phoneMap, setPhoneMap] = useState(false);
@@ -107,7 +109,7 @@ export function FieldOverview({ source }: { source: FarmDataSource }) {
         <span>
           {data.monitoring.status === "never_refreshed"
             ? "Weather has not been evaluated."
-            : `Monitoring: ${data.monitoring.status.replaceAll("_", " ")}.`}{" "}
+            : `Monitoring at last update: ${data.monitoring.status.replaceAll("_", " ")}.`}{" "}
           Last successful update: {formatInstant(data.monitoring.lastSuccessAt)}
         </span>
         {query.isError && (
@@ -149,12 +151,14 @@ export function FieldOverview({ source }: { source: FarmDataSource }) {
           {selected ? (
             <FieldDetails
               data={data}
+              now={now}
               plot={selected}
               onBack={() => setSelectedId(null)}
             />
           ) : (
             <FieldList
               data={data}
+              now={now}
               plots={plots}
               selectedId={selectedId}
               onSelect={select}

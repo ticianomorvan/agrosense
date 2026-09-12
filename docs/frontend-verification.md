@@ -5,7 +5,7 @@ Verified locally on 2026-09-12, on `tmorvan/frontend-foundation`.
 ## Automated checks
 
 `WRANGLER_LOG_PATH=/tmp/agrosense-frontend-wrangler.log pnpm check` passes:
-22 API tests, 8 frontend/data tests, 4 database tests; TypeScript, Biome and both
+23 API tests, 12 frontend/data tests, 4 database tests; TypeScript, Biome and both
 production builds pass. The log override only relocates Wrangler's local log
 inside the sandbox. No deployment occurred.
 
@@ -97,6 +97,40 @@ Local evidence in the same `.playwright-mcp/` directory:
 `copernicus-live.png`, `copernicus-live-desktop.png`, `copernicus-live-phone.png`,
 and `copernicus-live-report.json`. The JSON records provider statuses, timings,
 acquisition, bounds and decoded PNG statistics; it contains no credentials.
+
+## Review regression fixes
+
+The two reproduced review findings were fixed and verified on 2026-09-12:
+
+- Current risk uses wall time as well as the response's `asOf`. Both `validUntil`
+  and event `endsAt` stop recommendations. The overview schedules local deadline
+  updates and rechecks on focus/visible-tab events, without fetching or changing
+  the cached response. Priorities and details use the same clock; previous
+  evaluation timestamps remain visible with an explicit no-longer-current state.
+  Monitoring is labeled as the status at the last update.
+- Satellite requests exceeding 1,024 bytes return JSON HTTP 413 with
+  `PAYLOAD_LIMIT_EXCEEDED` and private/no-store headers. Signed-identity tests
+  cover declared size, streamed size, and the exact allowed boundary; none of
+  these invalid bodies reaches farm lookup or Copernicus.
+
+The regression tests failed before their fixes. Additional clock tests cover
+subsequent deadlines, suspended timers, visibility/focus, and timer/listener
+cleanup. An independent review found no new issues in these scoped fixes.
+
+Browser verification used a temporary synthetic dashboard and a controlled clock:
+at 06:59:59Z its recommendation was visible; at 07:00:00Z it disappeared without
+a new response. In a separate check, timers were paused, time advanced, and a
+visibility event dispatched while the browser was offline. The stale state
+appeared immediately. Both checks made exactly one dashboard load. No browser
+errors or warnings were observed. The harness was removed afterward.
+
+Inspected `.playwright-mcp/expiry-detail.png` and `expiry-list-1440.png`,
+`expiry-list-1024.png`, `expiry-list-768.png`, `expiry-list-390.png`, and
+`expiry-list-320.png` at the five required viewport sizes. No page-wide overflow;
+stale copy wraps and evaluation time remains readable. Enter/Shift+Tab/Space
+selection, Back, and focus restoration passed. Layout, tokens, control sizes,
+contrast and motion code are unchanged; prior evidence above still applies.
+Native browser zoom and assistive-technology checks remain unverified.
 
 ## Integration limits
 

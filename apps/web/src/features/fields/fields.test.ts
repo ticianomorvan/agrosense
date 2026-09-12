@@ -2,10 +2,20 @@ import {
   dashboardResponseSchema,
   satelliteRequestSchema,
 } from "@agrosense/contracts";
-import { expect, it } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { subscribeToRiskClock } from "./clock";
 import { demoDashboard } from "./demo";
-import { formatInstant, plotStatus } from "./presentation";
+import { currentAlert, formatInstant, plotStatus } from "./presentation";
 import { createLiveSource, dashboardOptions } from "./queries";
+
+beforeEach(() => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date(demoDashboard.asOf));
+});
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+});
 
 it("keeps the demo honest about missing weather and risk", () => {
   const data = dashboardResponseSchema.parse(demoDashboard);
@@ -46,6 +56,24 @@ it("rejects reversed, excessive and unexpected satellite request values", () => 
 });
 
 it("does not present expired, stale or cancelled assessments as current risk", () => {
+  const data = createAlertDashboard();
+  const plot = data.plots[0];
+  if (!plot) throw new Error("Missing fixture plot");
+  expect(plotStatus(data, plot.id).label).toBe("High risk");
+  const card = data.events[0];
+  const alert = card?.alerts[0];
+  if (!card || !alert) throw new Error("Missing test assessment");
+  alert.isStale = true;
+  expect(plotStatus(data, plot.id).label).toBe("Risk unavailable");
+  alert.isStale = false;
+  card.status = "cancelled";
+  expect(plotStatus(data, plot.id).label).toBe("Risk unavailable");
+  card.status = "active";
+  data.asOf = alert.validUntil;
+  expect(plotStatus(data, plot.id).label).toBe("Risk unavailable");
+});
+
+function createAlertDashboard() {
   const data = structuredClone(demoDashboard);
   const plot = data.plots[0];
   if (!plot) throw new Error("Missing fixture plot");
@@ -112,16 +140,95 @@ it("does not present expired, stale or cancelled assessments as current risk", (
       ],
     },
   ];
-  expect(plotStatus(data, plot.id).label).toBe("High risk");
-  const card = data.events[0];
-  const alert = card?.alerts[0];
-  if (!card || !alert) throw new Error("Missing test assessment");
-  alert.isStale = true;
-  expect(plotStatus(data, plot.id).label).toBe("Risk unavailable");
-  alert.isStale = false;
-  card.status = "cancelled";
-  expect(plotStatus(data, plot.id).label).toBe("Risk unavailable");
-  card.status = "active";
-  data.asOf = alert.validUntil;
-  expect(plotStatus(data, plot.id).label).toBe("Risk unavailable");
+  return data;
+}
+
+it("expires risk and recommendations when wall time reaches validUntil without a new response", () => {
+  const data = createAlertDashboard();
+  const alert = data.events[0]?.alerts[0];
+  if (!alert) throw new Error("Missing test alert");
+  const originalAsOf = data.asOf;
+  vi.setSystemTime(Date.parse(alert.validUntil) - 1);
+  expect(currentAlert(data, alert.plotId)?.alert.recommendation).toBe(
+    "Synthetic test recommendation",
+  );
+  vi.advanceTimersByTime(1);
+  expect(currentAlert(data, alert.plotId)).toBeUndefined();
+  expect(plotStatus(data, alert.plotId)).toMatchObject({
+    label: "Risk unavailable",
+    reason:
+      "The previous evaluation is no longer current. A current risk assessment is unavailable.",
+    time: alert.generatedAt,
+  });
+  expect(data.asOf).toBe(originalAsOf);
+});
+
+it("stops current recommendations when the event ends before the assessment expires", () => {
+  const data = createAlertDashboard();
+  const event = data.events[0];
+  const alert = event?.alerts[0];
+  if (!event || !alert) throw new Error("Missing test event");
+  alert.validUntil = "2026-09-12T09:00:00Z";
+  vi.setSystemTime(Date.parse(event.endsAt) - 1);
+  expect(currentAlert(data, alert.plotId)).toBeDefined();
+  vi.advanceTimersByTime(1);
+  expect(currentAlert(data, alert.plotId)).toBeUndefined();
+});
+
+it("notifies at each deadline without a fetch and cancels timers on cleanup", () => {
+  const data = createAlertDashboard();
+  const event = data.events[0];
+  const alert = event?.alerts[0];
+  if (!event || !alert) throw new Error("Missing test event");
+  vi.stubGlobal("window", new EventTarget());
+  vi.stubGlobal("document", new EventTarget());
+  const onTimeChange = vi.fn(
+    (now: number) => plotStatus(data, alert.plotId, now).label,
+  );
+  const stop = subscribeToRiskClock(data, onTimeChange);
+  vi.advanceTimersByTime(Date.parse(alert.validUntil) - Date.now() - 1);
+  expect(onTimeChange).not.toHaveBeenCalled();
+  vi.advanceTimersByTime(1);
+  expect(onTimeChange).toHaveLastReturnedWith("Risk unavailable");
+  vi.advanceTimersByTime(Date.parse(event.endsAt) - Date.now());
+  expect(onTimeChange).toHaveBeenCalledTimes(2);
+  stop();
+  expect(vi.getTimerCount()).toBe(0);
+
+  vi.setSystemTime(new Date(data.asOf));
+  const cancelBeforeExpiry = subscribeToRiskClock(data, onTimeChange);
+  expect(vi.getTimerCount()).toBe(1);
+  cancelBeforeExpiry();
+  vi.advanceTimersByTime(3 * 3600000);
+  expect(onTimeChange).toHaveBeenCalledTimes(2);
+});
+
+it("rechecks immediately on visibility and focus after suspended timers, then removes listeners", () => {
+  const data = createAlertDashboard();
+  const alert = data.events[0]?.alerts[0];
+  if (!alert) throw new Error("Missing test alert");
+  const tab = new EventTarget();
+  const documentState = Object.assign(new EventTarget(), {
+    visibilityState: "hidden",
+  });
+  vi.stubGlobal("window", tab);
+  vi.stubGlobal("document", documentState);
+  const onTimeChange = vi.fn((now: number) =>
+    currentAlert(data, alert.plotId, now),
+  );
+  const stop = subscribeToRiskClock(data, onTimeChange);
+  // Move the clock without firing timers, as with a suspended page.
+  vi.setSystemTime(new Date(alert.validUntil));
+  documentState.dispatchEvent(new Event("visibilitychange"));
+  expect(onTimeChange).not.toHaveBeenCalled();
+  documentState.visibilityState = "visible";
+  documentState.dispatchEvent(new Event("visibilitychange"));
+  expect(onTimeChange).toHaveLastReturnedWith(undefined);
+  tab.dispatchEvent(new Event("focus"));
+  expect(onTimeChange).toHaveBeenCalledTimes(2);
+  stop();
+  documentState.dispatchEvent(new Event("visibilitychange"));
+  tab.dispatchEvent(new Event("focus"));
+  expect(onTimeChange).toHaveBeenCalledTimes(2);
+  expect(vi.getTimerCount()).toBe(0);
 });

@@ -8,16 +8,18 @@ import { currentAlert, formatInstant, plotStatus } from "./presentation";
 
 export function FieldDetails({
   data,
+  now,
   plot,
   onBack,
 }: {
   data: DashboardResponse;
+  now: number;
   plot: Plot;
   onBack: () => void;
 }) {
-  const status = plotStatus(data, plot.id);
+  const status = plotStatus(data, plot.id, now);
   const crop = plot.activeCropCycle;
-  const current = currentAlert(data, plot.id);
+  const current = currentAlert(data, plot.id, now);
   const forecast = data.forecast?.plots.find((p) => p.plotId === plot.id);
   return (
     <>

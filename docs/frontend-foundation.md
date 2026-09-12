@@ -43,6 +43,10 @@ same-origin API paths, validate JSON before caching, and normalize errors withou
 showing provider responses or credentials. Retry transient reads at most once;
 do not retry 4xx errors or writes automatically. Query staleTime controls network
 reuse, not the freshness of weather or imagery. Show source timestamps separately.
+Current risk is also gated by wall time: the overview's local clock updates at
+assessment/event deadlines and when a tab resumes, even offline. This does not
+refresh data or rewrite server timestamps; expired recommendations are removed
+while the previous evaluation time remains visible.
 
 ## Acceptance and verification
 

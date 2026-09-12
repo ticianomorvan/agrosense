@@ -8,12 +8,14 @@ import { formatInstant, plotStatus } from "./presentation";
 
 export function FieldList({
   data,
+  now,
   plots,
   selectedId,
   onSelect,
   onClear,
 }: {
   data: DashboardResponse;
+  now: number;
   plots: Plot[];
   selectedId: string | null;
   onSelect: (id: string) => void;
@@ -36,7 +38,7 @@ export function FieldList({
       ) : (
         <ul className="field-list">
           {plots.map((plot) => {
-            const status = plotStatus(data, plot.id);
+            const status = plotStatus(data, plot.id, now);
             return (
               <li
                 key={plot.id}
