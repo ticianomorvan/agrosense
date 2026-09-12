@@ -1,227 +1,307 @@
 import {
-  eventEvidenceSchema,
-  forecastSummarySchema,
+  type ForecastHour,
+  type PlotForecast,
   plotForecastSchema,
 } from "@agrosense/contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import app from "../index";
 import {
-  buildForecastSummary,
-  detectFrostEvents,
   detectThreatEvents,
   fetchOpenMeteoPlotForecast,
-  fetchSmnAlerts,
-  generateDemoPlotForecast,
-  getPlotForecastWithFallback,
 } from "./weather-provider";
+
+const params = {
+  plotId: "11111111-1111-4111-8111-111111111111",
+  samplePoint: {
+    type: "Point" as const,
+    coordinates: [-64.18, -31.42] as [number, number],
+  },
+};
+const retrievedAt = "2026-09-12T00:00:00.000Z";
+
+function forecast(
+  overrides: Partial<ForecastHour>[],
+  start = Date.parse(retrievedAt),
+): PlotForecast {
+  return {
+    ...params,
+    source: {
+      code: "open_meteo",
+      url: "https://open-meteo.com",
+      issuedAt: null,
+      retrievedAt,
+      isDemo: false,
+    },
+    temperatureHeightM: 2,
+    hours: overrides.map((hour, index) => ({
+      at: new Date(start + index * 3_600_000).toISOString(),
+      temperatureC: 10,
+      windGustKmh: null,
+      precipitationMm: null,
+      precipitationProbability: null,
+      weatherCode: 1,
+      ...hour,
+    })),
+  };
+}
+
+function providerHours(count = 3) {
+  return {
+    time: Array.from({ length: count }, (_, i) =>
+      new Date(Date.parse(retrievedAt) + i * 3_600_000)
+        .toISOString()
+        .slice(0, 16),
+    ),
+    temperature_2m: Array<number | null>(count).fill(22),
+    wind_gusts_10m: Array<number | null>(count).fill(15),
+    precipitation: Array<number | null>(count).fill(0),
+    weather_code: Array<number | null>(count).fill(1),
+    precipitation_probability: Array<number | null>(count).fill(10),
+  };
+}
 
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  vi.useRealTimers();
 });
 
-describe("weather-provider domain adapter", () => {
-  const samplePlotId = "11111111-1111-4111-8111-111111111111";
-  const samplePoint = {
-    type: "Point" as const,
-    coordinates: [-64.18, -31.42] as [number, number],
-  };
-
-  it("generates a valid 168-hour demo forecast with all required hourly fields", () => {
-    const demo = generateDemoPlotForecast({
-      plotId: samplePlotId,
-      samplePoint,
-      includeFrost: true,
-      includeHeatwave: true,
-      includeSevereStorm: true,
-      includeHail: true,
+describe("Open-Meteo adapter", () => {
+  it("requests 168 hourly samples in UTC and preserves measured values", async () => {
+    const hourly = providerHours(168);
+    hourly.temperature_2m[0] = 0.04;
+    hourly.wind_gusts_10m[0] = 59.99;
+    hourly.precipitation[0] = 24.99;
+    hourly.weather_code[0] = 99;
+    const fetch = vi.fn(async (_url: string | URL | Request) =>
+      Response.json({ hourly }),
+    );
+    vi.stubGlobal("fetch", fetch);
+    const result = await fetchOpenMeteoPlotForecast(params);
+    const query = new URL(String(fetch.mock.calls[0]?.[0])).searchParams;
+    expect(query.get("latitude")).toBe("-31.42");
+    expect(query.get("longitude")).toBe("-64.18");
+    expect(query.get("forecast_days")).toBe("7");
+    expect(query.get("timezone")).toBe("UTC");
+    expect(query.get("hourly")?.split(",").sort()).toEqual([
+      "precipitation",
+      "precipitation_probability",
+      "temperature_2m",
+      "weather_code",
+      "wind_gusts_10m",
+    ]);
+    expect(result.hours).toHaveLength(168);
+    expect(result.hours[0]).toEqual({
+      at: retrievedAt,
+      temperatureC: 0.04,
+      windGustKmh: 59.99,
+      precipitationMm: 24.99,
+      weatherCode: 99,
+      precipitationProbability: 10,
     });
-
-    expect(demo.hours.length).toBe(168);
-    expect(demo.source.code).toBe("demo");
-    expect(demo.source.isDemo).toBe(true);
-
-    const firstHour = demo.hours[0];
-    expect(firstHour).toBeDefined();
-    if (firstHour) {
-      expect(typeof firstHour.temperatureC).toBe("number");
-      expect(typeof firstHour.windGustKmh).toBe("number");
-      expect(typeof firstHour.precipitationMm).toBe("number");
-      expect(typeof firstHour.weatherCode).toBe("number");
-    }
-    expect(() => plotForecastSchema.parse(demo)).not.toThrow();
-
-    // Check multi-threat detection
-    const threats = detectThreatEvents(demo);
-    const kinds = threats.map((t) => t.kind);
-    expect(kinds).toContain("frost");
-    expect(kinds).toContain("extreme-heat");
-    expect(kinds).toContain("severe-storm");
-    expect(kinds).toContain("hail");
-
-    for (const threat of threats) {
-      expect(() => eventEvidenceSchema.parse(threat.evidence)).not.toThrow();
-    }
+    expect(result.source).toMatchObject({
+      code: "open_meteo",
+      isDemo: false,
+      issuedAt: null,
+    });
   });
 
-  it("fetches live Open-Meteo forecast and maps all requested hourly variables", async () => {
-    const times: string[] = [];
-    const temps: number[] = [];
-    const gusts: number[] = [];
-    const precips: number[] = [];
-    const codes: number[] = [];
-    const probs: number[] = [];
-
-    for (let i = 0; i < 168; i++) {
-      const d = new Date(Date.UTC(2026, 8, 12, i, 0, 0));
-      times.push(d.toISOString().slice(0, 16));
-      temps.push(i === 10 ? -1.5 : 22.0);
-      gusts.push(i === 15 ? 72.0 : 15.0);
-      precips.push(i === 20 ? 40.0 : 0.0);
-      codes.push(i === 25 ? 99 : 1);
-      probs.push(i === 25 ? 90 : 10);
-    }
-
+  it("accepts a shorter complete window and retains missing measurements as null", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn(async (url: string) => {
-        if (url.includes("open-meteo.com")) {
-          return new Response(
-            JSON.stringify({
-              hourly: {
-                time: times,
-                temperature_2m: temps,
-                wind_gusts_10m: gusts,
-                precipitation: precips,
-                weather_code: codes,
-                precipitation_probability: probs,
+      vi.fn(async () =>
+        Response.json({
+          hourly: {
+            time: ["2026-09-12T00:00", "2026-09-12T01:00"],
+            temperature_2m: [10, 11],
+            wind_gusts_10m: [null, null],
+          },
+        }),
+      ),
+    );
+    const result = await fetchOpenMeteoPlotForecast(params);
+    expect(result.hours).toHaveLength(2);
+    expect(result.hours[0]).toMatchObject({
+      windGustKmh: null,
+      precipitationMm: null,
+      weatherCode: null,
+      precipitationProbability: null,
+    });
+  });
+
+  it.each([
+    ["missing temperature", { temperature_2m: [null, 22, 22] }],
+    ["mismatched arrays", { wind_gusts_10m: [15, 15] }],
+    [
+      "gap",
+      { time: ["2026-09-12T00:00", "2026-09-12T02:00", "2026-09-12T03:00"] },
+    ],
+    [
+      "duplicate",
+      { time: ["2026-09-12T00:00", "2026-09-12T00:00", "2026-09-12T01:00"] },
+    ],
+    [
+      "unaligned hour",
+      { time: ["2026-09-12T00:30", "2026-09-12T01:30", "2026-09-12T02:30"] },
+    ],
+    [
+      "invalid date",
+      { time: ["2026-02-30T00:00", "2026-02-30T01:00", "2026-02-30T02:00"] },
+    ],
+    ["negative rain", { precipitation: [-1, 0, 0] }],
+    ["invalid probability", { precipitation_probability: [101, 10, 10] }],
+  ] satisfies [string, Partial<ReturnType<typeof providerHours>>][])(
+    "rejects %s without manufacturing replacement data",
+    async (_name, invalid) => {
+      const hourly = { ...providerHours(), ...invalid };
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () => Response.json({ hourly })),
+      );
+      await expect(fetchOpenMeteoPlotForecast(params)).rejects.toThrow();
+    },
+  );
+
+  it.each([0, 169])(
+    "rejects a %i-hour window without truncation",
+    async (count) => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () => Response.json({ hourly: providerHours(count) })),
+      );
+      await expect(fetchOpenMeteoPlotForecast(params)).rejects.toThrow();
+    },
+  );
+
+  it("validates sampling coordinates before contacting the provider", async () => {
+    const fetch = vi.fn(async () => Response.json({ hourly: providerHours() }));
+    vi.stubGlobal("fetch", fetch);
+    await expect(
+      fetchOpenMeteoPlotForecast({
+        ...params,
+        samplePoint: { type: "Point", coordinates: [181, 91] },
+      }),
+    ).rejects.toThrow();
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("propagates HTTP failures without retrying or generating demo data", async () => {
+    const fetch = vi.fn(async () => new Response(null, { status: 503 }));
+    vi.stubGlobal("fetch", fetch);
+    await expect(fetchOpenMeteoPlotForecast(params)).rejects.toThrow("503");
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("aborts a stalled body at the eight-second deadline", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async (_url, init) =>
+          new Response(
+            new ReadableStream({
+              start(controller) {
+                init.signal.addEventListener(
+                  "abort",
+                  () => controller.error(init.signal.reason),
+                  { once: true },
+                );
               },
             }),
-            { status: 200 },
-          );
-        }
-        return new Response("Not found", { status: 404 });
-      }),
+          ),
+      ),
     );
-
-    const forecast = await fetchOpenMeteoPlotForecast({
-      plotId: samplePlotId,
-      samplePoint,
-    });
-
-    expect(forecast.hours.length).toBe(168);
-    expect(forecast.source.code).toBe("open_meteo");
-    expect(forecast.source.isDemo).toBe(false);
-    expect(() => plotForecastSchema.parse(forecast)).not.toThrow();
-
-    const frostEvents = detectFrostEvents(forecast);
-    expect(frostEvents.length).toBe(1);
-    expect(frostEvents[0]?.sourceEventKey).toBe(
-      `open_meteo:frost:${samplePlotId}:2026-09-12`,
-    );
-
-    const allThreats = detectThreatEvents(forecast);
-    expect(allThreats.some((t) => t.kind === "frost")).toBe(true);
-    expect(allThreats.some((t) => t.kind === "severe-storm")).toBe(true);
-    expect(allThreats.some((t) => t.kind === "hail")).toBe(true);
-  });
-
-  it("fetches SMN alerts filtered by province", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => {
-        return new Response(
-          JSON.stringify([
-            {
-              date: "2026-09-12T10:00:00Z",
-              severity: "Amarilla",
-              description: "Vientos intensos con ráfagas",
-              zones: [{ state: "Córdoba" }],
-            },
-          ]),
-          { status: 200 },
-        );
-      }),
-    );
-
-    const alerts = await fetchSmnAlerts("Córdoba");
-    expect(alerts.length).toBe(1);
-    expect(alerts[0]?.severity).toBe("Amarilla");
-    expect(alerts[0]?.description).toContain("Vientos intensos");
-  });
-
-  it("builds a ForecastSummary covering all plots", () => {
-    const p1 = generateDemoPlotForecast({
-      plotId: samplePlotId,
-      samplePoint,
-    });
-    const summary = buildForecastSummary([p1]);
-
-    expect(summary.schemaVersion).toBe(1);
-    expect(summary.plots.length).toBe(1);
-    expect(() => forecastSummarySchema.parse(summary)).not.toThrow();
-  });
-
-  it("falls back to demo forecast if Open-Meteo request fails", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => {
-        throw new Error("Provider timeout");
-      }),
-    );
-
-    const result = await getPlotForecastWithFallback({
-      plotId: samplePlotId,
-      samplePoint,
-    });
-
-    expect(result.forecast.source.code).toBe("demo");
-    expect(result.forecast.hours.length).toBe(168);
+    const result = expect(fetchOpenMeteoPlotForecast(params)).rejects.toThrow();
+    await vi.advanceTimersByTimeAsync(8000);
+    await result;
   });
 });
 
-describe("Weather / Forecast API endpoint", () => {
-  it("responds with validated ForecastSummary and threats", async () => {
-    const res = await app.request("/weather/-31.42/-64.18");
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as {
-      summary: unknown;
-      hours: Array<{
-        temperatureC: number;
-        windGustKmh: number | null;
-        precipitationMm: number | null;
-        weatherCode?: number;
-        precipitationProbability?: number | null;
-      }>;
-      events: unknown[];
-    };
-    expect(() => forecastSummarySchema.parse(body.summary)).not.toThrow();
-    expect(Array.isArray(body.events)).toBe(true);
-    expect(Array.isArray(body.hours)).toBe(true);
-    expect(body.hours.length).toBe(168);
+describe("threat detection", () => {
+  it.each([
+    [{ temperatureC: 0 }, ["frost"]],
+    [{ temperatureC: 0.01 }, []],
+    [{ temperatureC: 35 }, ["extreme-heat"]],
+    [{ temperatureC: 34.99 }, []],
+    [{ windGustKmh: 60 }, ["severe-storm"]],
+    [{ windGustKmh: 59.99 }, []],
+    [{ precipitationMm: 25 }, ["severe-storm"]],
+    [{ precipitationMm: 24.99 }, []],
+    [{ weatherCode: 96 }, ["hail"]],
+    [{ weatherCode: 99 }, ["hail"]],
+    [{ weatherCode: 95 }, []],
+  ] satisfies [Partial<ForecastHour>, string[]][])(
+    "classifies %j at the exact threshold",
+    (hour, kinds) => {
+      expect(
+        detectThreatEvents(forecast([hour])).map((event) => event.kind),
+      ).toEqual(kinds);
+    },
+  );
 
-    const firstHour = body.hours[0];
-    expect(firstHour).toBeDefined();
-    if (firstHour) {
-      expect(typeof firstHour.temperatureC).toBe("number");
-      expect(
-        firstHour.windGustKmh === null ||
-          typeof firstHour.windGustKmh === "number",
-      ).toBe(true);
-      expect(
-        firstHour.precipitationMm === null ||
-          typeof firstHour.precipitationMm === "number",
-      ).toBe(true);
-      expect(typeof firstHour.weatherCode).toBe("number");
-    }
+  it("keeps day evidence, bounds nonconsecutive hazards, and preserves identity on revision", () => {
+    const plot = forecast([
+      { temperatureC: 0 },
+      {},
+      { temperatureC: -2 },
+      { temperatureC: 35 },
+      { windGustKmh: 60, weatherCode: 99 },
+    ]);
+    const events = detectThreatEvents(plot);
+    expect(events.map((event) => event.kind)).toEqual([
+      "frost",
+      "extreme-heat",
+      "severe-storm",
+      "hail",
+    ]);
+    expect(events[0]).toMatchObject({
+      sourceEventKey: `open_meteo:frost:${params.plotId}:2026-09-12`,
+      startsAt: retrievedAt,
+      endsAt: "2026-09-12T03:00:00.000Z",
+      evidence: {
+        hours: plot.hours,
+        plotIds: [params.plotId],
+        samplePoint: params.samplePoint,
+        detectionThresholdC: 0,
+      },
+    });
+    const revised = detectThreatEvents(
+      forecast([{}, { temperatureC: -1 }, {}]),
+    );
+    expect(revised[0]?.sourceEventKey).toBe(events[0]?.sourceEventKey);
+    expect(revised[0]?.startsAt).not.toBe(events[0]?.startsAt);
   });
 
-  it("rejects invalid coordinate inputs with 400 BAD_REQUEST", async () => {
-    const res = await app.request("/weather/invalid/coordinates");
-    expect(res.status).toBe(400);
-    const body = await res.json();
-    expect(body).toEqual({
-      error: { code: "BAD_REQUEST", message: "Invalid coordinates" },
-    });
+  it("splits at UTC midnight and retains the demo source scope", () => {
+    const plot = forecast(
+      [{ temperatureC: -1 }, { temperatureC: -1 }],
+      Date.parse("2026-09-12T23:00:00Z"),
+    );
+    plot.source = { ...plot.source, code: "demo", isDemo: true, url: null };
+    const events = detectThreatEvents(plot);
+    expect(events.map((event) => event.sourceEventKey)).toEqual([
+      "demo:frost:2026-09-12",
+      "demo:frost:2026-09-13",
+    ]);
+    expect(events[0]?.endsAt).toBe("2026-09-13T00:00:00.000Z");
+    expect(events[1]?.endsAt).toBe("2026-09-13T01:00:00.000Z");
+    for (const event of events)
+      expect(event.evidence).toMatchObject({
+        scope: "farm_demo",
+        samplePoint: null,
+        hours: [expect.any(Object)],
+      });
+  });
+
+  it("rejects inconsistent sources and unknown normalized fields", () => {
+    const plot = forecast([{}]);
+    expect(
+      plotForecastSchema.safeParse({
+        ...plot,
+        source: { ...plot.source, isDemo: true },
+      }).success,
+    ).toBe(false);
+    expect(plotForecastSchema.safeParse({ ...plot, extra: true }).success).toBe(
+      false,
+    );
   });
 });
