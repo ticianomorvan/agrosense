@@ -21,9 +21,10 @@ local runtime checks for API responses and SPA fallback.
 | Persistence | Supabase Postgres + Auth | Typed Data API client, JWT verification, and owner-scoped RLS |
 
 Use Node 24 and the pnpm version pinned in package.json. Exact dependency
-resolutions live in pnpm-lock.yaml. The frontend foundation uses TanStack Query for server state, Leaflet for maps,
-and shadcn/ui with the default neutral preset and Tailwind v4. The explicit user
-choice supersedes the earlier plain-CSS-only restriction; no custom theme is applied.
+resolutions live in pnpm-lock.yaml. The frontend uses TanStack Query for server
+state, Leaflet for maps, and shadcn/ui with the stock `base-nova` style, neutral
+palette and Tailwind v4. Components retain their default styling; custom themes
+and competing UI kits are prohibited. See the [style guide](style-guide.md).
 Routing is deferred while there is only one workspace screen.
 
 ## Layout and implementation order
