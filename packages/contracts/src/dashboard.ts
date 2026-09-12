@@ -1,10 +1,11 @@
 import { z } from "zod";
+import { eventKindSchema } from "./agronomic";
 import { pointSchema } from "./geometry";
 import { cropCycleSchema, farmSchema, plotSchema } from "./land";
 import { compareInstants, instantSchema } from "./time";
 
-const localDateSchema = z.iso.date();
-const sourceSchema = z
+export const localDateSchema = z.iso.date();
+export const sourceSchema = z
   .strictObject({
     code: z.enum(["demo", "open_meteo"]),
     url: z
@@ -26,13 +27,8 @@ const sourceSchema = z
     "Issuance cannot follow retrieval",
   );
 
-const eventKindSchema = z.enum([
-  "frost",
-  "severe-storm",
-  "hail",
-  "extreme-heat",
-]);
-export type EventKind = z.infer<typeof eventKindSchema>;
+export type { EventKind } from "./agronomic";
+export { eventKindSchema };
 
 export const forecastHourSchema = z.strictObject({
   at: instantSchema.refine(
@@ -47,7 +43,7 @@ export const forecastHourSchema = z.strictObject({
 });
 export type ForecastHour = z.infer<typeof forecastHourSchema>;
 
-const forecastHoursSchema = z
+export const forecastHoursSchema = z
   .array(forecastHourSchema)
   .min(1)
   .max(168)
@@ -72,7 +68,7 @@ export const plotForecastSchema = z.strictObject({
 });
 export type PlotForecast = z.infer<typeof plotForecastSchema>;
 
-const forecastSummarySchema = z.strictObject({
+export const forecastSummarySchema = z.strictObject({
   schemaVersion: z.literal(1),
   fetchedAt: instantSchema,
   windowStart: instantSchema,
@@ -116,14 +112,14 @@ export const eventEvidenceSchema = z
   );
 export type EventEvidence = z.infer<typeof eventEvidenceSchema>;
 
-const eventSnapshotSchema = z.strictObject({
+export const eventSnapshotSchema = z.strictObject({
   id: z.uuid(),
   status: z.enum(["active", "cancelled"]),
   startsAt: instantSchema,
   endsAt: instantSchema,
   evidence: eventEvidenceSchema,
 });
-const generationSchema = z
+export const generationSchema = z
   .strictObject({
     method: z.enum(["template", "llm"]),
     modelId: z.string().min(1).max(200).nullable(),
@@ -136,13 +132,19 @@ const generationSchema = z
         : generation.modelId !== null && generation.promptVersion !== null,
     "Inconsistent generation metadata",
   );
-const inputSnapshotSchema = z.strictObject({
+export const inputSnapshotSchema = z.strictObject({
   schemaVersion: z.literal(1),
   plotId: z.uuid(),
   cropCycle: cropCycleSchema.nullable(),
   event: eventSnapshotSchema,
   ruleSetVersion: z.string().min(1).max(100),
-  matchedRuleCodes: z.array(z.string().min(1).max(100)).max(20),
+  matchedRuleCodes: z
+    .array(z.string().min(1).max(100))
+    .max(20)
+    .refine(
+      (codes) => new Set(codes).size === codes.length,
+      "Matched rule codes must be unique",
+    ),
   generation: generationSchema,
 });
 export const plotAlertSchema = z
@@ -157,7 +159,7 @@ export const plotAlertSchema = z
     ]),
     riskLevel: z.enum(["low", "moderate", "high", "critical"]).nullable(),
     reason: z.string().min(1).max(1000),
-    recommendedActions: z.array(z.string().min(1).max(1000)).max(20),
+    recommendedActions: z.array(z.string().min(1).max(1000)).max(10),
     ruleVersion: z.string().min(1).max(100),
     generatedAt: instantSchema,
     validUntil: instantSchema,
@@ -168,15 +170,15 @@ export const plotAlertSchema = z
   .refine(
     (alert) =>
       alert.assessmentState === "evaluated"
-        ? alert.riskLevel !== null
+        ? alert.riskLevel !== null && alert.recommendedActions.length >= 1
         : alert.riskLevel === null && alert.recommendedActions.length === 0,
-    "Unevaluated alerts cannot claim risk or recommended actions",
+    "Evaluated alerts require risk and actions; unevaluated alerts cannot claim them",
   )
   .refine(
     (alert) => compareInstants(alert.validUntil, alert.generatedAt) > 0,
     "Invalid alert validity window",
   );
-const basemapSchema = z.discriminatedUnion("status", [
+export const basemapSchema = z.discriminatedUnion("status", [
   z
     .strictObject({
       status: z.literal("available"),
@@ -211,7 +213,7 @@ export const eventCardSchema = z.strictObject({
   evidence: eventEvidenceSchema,
   alerts: z.array(plotAlertSchema).max(10),
 });
-const monitoringSchema = z.strictObject({
+export const monitoringSchema = z.strictObject({
   status: z.enum(["never_refreshed", "fresh", "stale", "failed"]),
   lastAttemptAt: instantSchema.nullable(),
   lastSuccessAt: instantSchema.nullable(),
@@ -241,3 +243,17 @@ export type DashboardResponse = z.infer<typeof dashboardResponseSchema>;
 
 export type PlotAlert = z.infer<typeof plotAlertSchema>;
 export type EventCard = z.infer<typeof eventCardSchema>;
+
+export type Source = z.infer<typeof sourceSchema>;
+
+export type ForecastSummary = z.infer<typeof forecastSummarySchema>;
+
+export type EventSnapshot = z.infer<typeof eventSnapshotSchema>;
+
+export type Generation = z.infer<typeof generationSchema>;
+
+export type InputSnapshot = z.infer<typeof inputSnapshotSchema>;
+
+export type Basemap = z.infer<typeof basemapSchema>;
+
+export type Monitoring = z.infer<typeof monitoringSchema>;

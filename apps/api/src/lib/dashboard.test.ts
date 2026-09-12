@@ -634,10 +634,10 @@ it("projects critical risk and every ordered recommended action", () => {
     recommendedActions: actions,
   });
 });
-it("preserves stored action-array cardinality, including an evaluated result without actions", () => {
+it("preserves evaluated action arrays within the 1-10 item contract", () => {
   for (const actions of [
-    [],
-    Array.from({ length: 20 }, (_, i) => `Action ${i + 1}`),
+    ["Inspect the plot"],
+    Array.from({ length: 10 }, (_, i) => `Action ${i + 1}`),
   ]) {
     const response = projectDashboard(
       farm,
@@ -655,6 +655,27 @@ it("preserves stored action-array cardinality, including an evaluated result wit
     );
     expect(response.events[0]?.alerts[0]?.recommendedActions).toEqual(actions);
   }
+});
+it.each([0, 11, 20])("rejects an evaluated result with %i actions", (count) => {
+  expect(() =>
+    projectDashboard(
+      farm,
+      [plot],
+      [],
+      [event],
+      [
+        {
+          ...alert,
+          assessment_state: "evaluated",
+          risk_level: "high",
+          recommended_actions: Array.from(
+            { length: count },
+            (_, i) => `Action ${i + 1}`,
+          ),
+        },
+      ],
+    ),
+  ).toThrow();
 });
 it("accepts valid PostgreSQL assessment windows shorter than a millisecond", () => {
   const response = projectDashboard(

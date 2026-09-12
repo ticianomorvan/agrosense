@@ -17,3 +17,12 @@ export function deadlineMilliseconds(instant: string) {
   const submillisecond = /\.\d{3}(\d+)Z$/.exec(instant)?.[1] ?? "";
   return Date.parse(instant) + (/[1-9]/.test(submillisecond) ? 1 : 0);
 }
+
+/** Add whole minutes without discarding submillisecond source precision. */
+export function addMinutes(instant: string, minutes: number): string {
+  const shifted = new Date(
+    Date.parse(instant) + minutes * 60_000,
+  ).toISOString();
+  const submillisecond = /\.\d{3}(\d+)Z$/.exec(instant)?.[1] ?? "";
+  return `${shifted.slice(0, -1)}${submillisecond}Z`;
+}

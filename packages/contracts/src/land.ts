@@ -1,9 +1,11 @@
 import { z } from "zod";
+import { cropCodeSchema, riskRuleSchema } from "./agronomic";
 import { pointSchema, polygonSchema } from "./geometry";
 import { instantSchema } from "./time";
 
 const name = z.string().trim().min(1).max(100);
-export const cropCodeSchema = z.enum(["maize", "soybean"]);
+
+export { cropCodeSchema };
 export const cropStages = {
   maize: ["V3", "V6", "VT", "R1"],
   soybean: ["V2", "R1", "R4", "R6"],
@@ -54,6 +56,7 @@ export const farmSchema = z.strictObject({
   boundary: polygonSchema,
   declaredAreaHa: area,
   dataVersion: z.int().min(1).max(2147483647),
+  customRules: z.array(riskRuleSchema).max(10).default([]),
 });
 export const plotSchema = z
   .strictObject({
@@ -72,7 +75,7 @@ export const plotSchema = z
   );
 export type Farm = z.infer<typeof farmSchema>;
 export type Plot = z.infer<typeof plotSchema>;
-export type CropCode = z.infer<typeof cropCodeSchema>;
+export type { CropCode } from "./agronomic";
 
 export type CropCycle = z.infer<typeof cropCycleSchema>;
 
