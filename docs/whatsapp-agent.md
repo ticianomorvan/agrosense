@@ -70,7 +70,7 @@ account settings. Direct `OPENAI_*` settings are unused.
    an unavailable/clarification response; the agent does not invent a location.
 2. Configure production bindings with
    `pnpm --filter @agrosense/api exec wrangler secret put <NAME>`, then deploy
-   with `pnpm deploy`. Wrangler creates the SQLite Durable Object via migration
+   with `pnpm deploy:api`. Wrangler creates the SQLite Durable Object via migration
    `whatsapp-agent-v1`; no Supabase migration is added by this feature.
 3. Create a phone-number-scoped Kapso v2 webhook for the configured business
    `phone_number_id`, subscribing to `whatsapp.message.received` events at

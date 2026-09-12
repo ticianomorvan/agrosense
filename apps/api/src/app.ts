@@ -8,6 +8,7 @@ import {
   uuidSchema,
 } from "@agrosense/contracts";
 import { Hono } from "hono";
+import { cors } from "hono/cors";
 import { automationRoutes } from "./automation/routes";
 import type { ApiEnv } from "./env";
 import { requireAuth } from "./lib/auth";
@@ -27,6 +28,15 @@ import { satelliteRoutes } from "./satellite/routes";
 import { whatsapp } from "./whatsapp";
 
 const app = new Hono<ApiEnv>();
+app.use(
+  "/api/*",
+  cors({
+    origin: (origin, c) => (origin === c.env?.CORS_ORIGIN ? origin : undefined),
+    allowHeaders: ["Authorization", "Content-Type"],
+    allowMethods: ["GET", "HEAD", "POST", "PATCH", "OPTIONS"],
+    maxAge: 86400,
+  }),
+);
 app.route("/", automationRoutes);
 
 app.route("/api/whatsapp", whatsapp);

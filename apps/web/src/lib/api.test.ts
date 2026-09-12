@@ -1,8 +1,42 @@
 import { healthResponseSchema } from "@agrosense/contracts";
 import { afterEach, expect, it, vi } from "vitest";
-import { ApiError, getJson, shouldRetry } from "./api";
+import { ApiError, apiUrl, getJson, shouldRetry } from "./api";
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
+});
+
+it("uses the configured Worker origin for API requests", async () => {
+  vi.stubEnv("VITE_API_BASE_URL", "https://agrosense.example.workers.dev");
+  const fetcher = vi.fn(async () =>
+    Response.json({ status: "ok", service: "agrosense-api" }),
+  );
+  vi.stubGlobal("fetch", fetcher);
+
+  await getJson("/api/health", healthResponseSchema);
+
+  expect(fetcher).toHaveBeenCalledWith(
+    "https://agrosense.example.workers.dev/api/health",
+    expect.any(Object),
+  );
+});
+
+it("keeps local API requests relative when no Worker origin is configured", () => {
+  expect(apiUrl("/api/health", undefined)).toBe("/api/health");
+  expect(apiUrl("/api/health", "  ")).toBe("/api/health");
+});
+
+it.each([
+  "http://agrosense.example.workers.dev",
+  "https://user@example.com",
+  "https://api.example.com/v1",
+  "https://api.example.com?target=other",
+])("rejects an unsafe API base URL: %s", (baseUrl) => {
+  expect(() => apiUrl("/api/health", baseUrl)).toThrow(
+    "VITE_API_BASE_URL must be an HTTPS origin",
+  );
+});
 
 it("validates successful responses before returning data", async () => {
   vi.stubGlobal(

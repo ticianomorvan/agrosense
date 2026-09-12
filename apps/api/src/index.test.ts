@@ -27,6 +27,49 @@ describe("API contract", () => {
       });
     },
   );
+
+  it("allows browser requests only from the configured Pages origin", async () => {
+    const origin = "https://agrosense-web.pages.dev";
+    const preflight = await app.request(
+      "/api/farms",
+      {
+        method: "OPTIONS",
+        headers: {
+          Origin: origin,
+          "Access-Control-Request-Method": "POST",
+          "Access-Control-Request-Headers": "authorization,content-type",
+        },
+      },
+      { CORS_ORIGIN: origin },
+    );
+
+    expect(preflight.status).toBe(204);
+    expect(preflight.headers.get("access-control-allow-origin")).toBe(origin);
+    expect(preflight.headers.get("access-control-allow-methods")).toContain(
+      "POST",
+    );
+    expect(preflight.headers.get("access-control-allow-headers")).toBe(
+      "Authorization,Content-Type",
+    );
+
+    const response = await app.request(
+      "/api/health",
+      { headers: { Origin: origin } },
+      { CORS_ORIGIN: origin },
+    );
+    expect(response.headers.get("access-control-allow-origin")).toBe(origin);
+  });
+
+  it("does not grant CORS access to any other origin", async () => {
+    const response = await app.request(
+      "/api/health",
+      { headers: { Origin: "https://attacker.example" } },
+      { CORS_ORIGIN: "https://agrosense-web.pages.dev" },
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.has("access-control-allow-origin")).toBe(false);
+  });
 });
 
 describe("Session authentication", () => {

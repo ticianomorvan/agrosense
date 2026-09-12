@@ -16,7 +16,7 @@ API/frontend/database tests, production builds and browser checks.
 | Frontend | React + Vite | Client-rendered SPA with fast local development |
 | API | Hono + Wrangler | Web-standard handlers running on Cloudflare Workers |
 | Contracts | Shared Zod schemas | Runtime response validation and inferred TypeScript types |
-| Hosting | Workers Static Assets + API Worker | One deployment and origin; explicit `/api` routing |
+| Hosting | Pages on Workers Static Assets + API Worker | Independent SPA/API deploys with an exact-origin CORS boundary |
 | Quality | Biome + Vitest | Formatting, linting, and API/frontend tests |
 | Agent | Vercel AI SDK + official OpenRouter provider | Native Zod tools and bounded `ToolLoopAgent` execution |
 | Persistence | Supabase Postgres + Auth | Typed Data API client, JWT verification, and owner-scoped RLS |
@@ -36,11 +36,13 @@ client-side; unknown paths return to the landing page.
 
 1. `packages/contracts`: browser-safe request/response schemas.
 2. `apps/api`: Hono routes under `/api`; JSON errors for unknown API routes.
-3. `apps/web`: React SPA using same-origin `/api` requests. Vite proxies them to
-   Wrangler locally. Production assets are served by Workers Static Assets.
+3. `apps/web`: React SPA using relative `/api` requests behind Vite's local proxy
+   and `VITE_API_BASE_URL` in production. The production build uses the current
+   Pages platform on Workers Static Assets.
 
-The API entrypoint exports the Hono app and Durable Object class. Wrangler minifies
-the production Worker bundle.
+The API entrypoint exports the Hono app and Durable Object class. Wrangler
+minifies the production Worker bundle. The Worker allows CORS for the exact
+`CORS_ORIGIN` only; bearer authentication does not use cross-origin cookies.
 
 Both apps depend on contracts; contracts never imports application code.
 TypeScript uses ESM, named exports, and inferred schema types:
@@ -53,7 +55,9 @@ export type HealthResponse = z.infer<typeof healthResponseSchema>;
 
 From the repository root: `pnpm install`, `pnpm dev`, `pnpm typecheck`,
 `pnpm lint`, `pnpm test`, and `pnpm build`. `pnpm check` runs all quality checks.
-`pnpm preview` serves the built SPA and API together locally.
+`pnpm preview` runs the built SPA at port 4173 and proxies its API calls to the
+local Worker at port 8787. Deployment is split into `pnpm deploy:api` and
+`pnpm deploy:web`; the combined `pnpm deploy` requires `VITE_API_BASE_URL`.
 
 API tests live beside route source. Verify real Worker routing with Wrangler,
 including unknown `/api` paths and client-side navigation paths. Add behavior
@@ -88,7 +92,8 @@ the prospective dashboard, and commits through service-only RPCs with verified
 ownership and version/attempt checks. Withdrawn hazards are cancelled only when
 newer evidence covers their whole previous interval. Crop-cycle mutation uses its
 authenticated Supabase RPC. The browser signs in with Supabase email/password;
-tokens remain in memory and are attached only to same-origin API requests.
+tokens remain in memory and are attached only to requests resolved against the
+configured API origin.
 
 [Automatic monitoring](weather-automation.md) centralizes scheduling and operations
 in Supabase Cron, pg_net and Vault. Authenticated Worker job endpoints reuse the
@@ -104,7 +109,8 @@ reconciliation. All automation mutation RPCs are service-only.
 - [pnpm workspaces](https://pnpm.io/workspaces)
 - [Vite setup](https://vite.dev/guide/)
 - [Hono on Workers](https://hono.dev/docs/getting-started/cloudflare-workers)
-- [Workers SPA routing](https://developers.cloudflare.com/workers/static-assets/routing/single-page-application/)
+- [Cloudflare Workers Static Assets](https://developers.cloudflare.com/workers/static-assets/)
+- [Hono CORS middleware](https://hono.dev/docs/middleware/builtin/cors)
 - [Supabase Data API](https://supabase.com/docs/guides/api)
 
 ## Field workspace integration
@@ -119,8 +125,9 @@ signup or post-creation boundary editor.
 `FieldOverview` consumes a `FarmDataSource`; use
 `createLiveSource(userId, farmId, getAccessToken)` after session/farm selection is
 available. Remount the overview on identity/farm changes and clear the QueryClient
-on sign-out. Tokens stay in memory; requests are same-origin, cancellable and
-validated with shared Zod schemas. Failed requests never substitute sample data.
+on sign-out. Tokens stay in memory; requests target only the validated production
+API origin (or the local relative proxy), remain cancellable, and are validated
+with shared Zod schemas. Failed requests never substitute sample data.
 Risk and forecast freshness update at response deadlines and tab resume without a
 network fetch; sub-millisecond PostgreSQL deadlines are not rounded down.
 Shared controls use shadcn Button, Badge, NativeSelect and Input with AgroSense

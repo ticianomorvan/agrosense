@@ -115,7 +115,7 @@ secrets, an approved template and a provisioned owner contact.
    `node --env-file=apps/api/.env scripts/configure-notification-contact.mjs <contact.json>`.
    Set `enabled: false` and run it again to revoke future sends. A message already
    submitted to the provider cannot be recalled by changing the contact.
-6. Deploy the Worker using `pnpm deploy`. Add Vault secrets named
+6. Deploy the Worker using `pnpm deploy:api`. Add Vault secrets named
    `agrosense_worker_url` (HTTPS origin with no trailing slash) and
    `agrosense_cron_secret` (same secret as the Worker).
 7. Run [install-automation.sql](../supabase/operations/install-automation.sql)

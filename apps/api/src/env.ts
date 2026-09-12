@@ -5,6 +5,8 @@ import type { createUserClient } from "./lib/supabase";
 import type { SatelliteBindings } from "./satellite/provider";
 
 export type ApiEnv = {
-  Bindings: AgentBindings & SatelliteBindings & AutomationBindings;
+  Bindings: AgentBindings &
+    SatelliteBindings &
+    AutomationBindings & { CORS_ORIGIN?: string };
   Variables: { userId: string; supabase: ReturnType<typeof createUserClient> };
 };
