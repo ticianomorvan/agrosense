@@ -141,6 +141,7 @@ test("signed webhook → isolated durable conversation → tool-backed reply, re
             assert.deepEqual(body.provider, {
               require_parameters: true,
               allow_fallbacks: false,
+              sort: "throughput",
             });
             assert.equal(body.max_tokens, 4096);
             assert.equal(body.reasoning.effort, "medium");

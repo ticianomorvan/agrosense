@@ -115,6 +115,7 @@ describe("AI SDK agent through OpenRouter", () => {
       expect(request.provider).toEqual({
         require_parameters: true,
         allow_fallbacks: false,
+        sort: "throughput",
       });
       expect(request.reasoning).toEqual({ effort: "medium" });
       expect(request).not.toHaveProperty("parallel_tool_calls");

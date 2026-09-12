@@ -61,9 +61,11 @@ schemas. The provider uses `https://openrouter.ai/api/v1/chat/completions`.
 AI SDK manages tool selection, argument validation, execution and continuation;
 the application enforces run limits, serializes data reads and retains safe traces.
 Routing requires support for supplied parameters and disables provider fallbacks.
-Model requests are not retried. A replacement model must support reasoning and
-tools. OpenRouter and downstream provider retention follows their policies and
-account settings. Direct `OPENAI_*` settings are unused.
+Providers are sorted by throughput so a price-prioritized slow endpoint does not
+consume the bounded agent deadline. Model requests are not retried. A replacement
+model must support reasoning and tools. OpenRouter and downstream provider
+retention follows their policies and account settings. Direct `OPENAI_*` settings
+are unused.
 
 ## Enablement
 

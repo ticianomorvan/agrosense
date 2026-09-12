@@ -55,6 +55,10 @@ export function createOpenRouterModel(
   });
   return openrouter.chat(config.OPENROUTER_MODEL, {
     reasoning: { effort: config.OPENROUTER_REASONING_EFFORT },
-    provider: { require_parameters: true, allow_fallbacks: false },
+    provider: {
+      require_parameters: true,
+      allow_fallbacks: false,
+      sort: "throughput",
+    },
   });
 }
