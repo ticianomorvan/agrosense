@@ -27,7 +27,10 @@ state, Leaflet for maps, and shadcn/ui (`base-nova`) with Tailwind v4. The share
 AgroSense theme defines colors, system typography, radii and status variants.
 Use its tokens consistently; competing UI kits and one-off themes are prohibited.
 See the [style guide](style-guide.md).
-Routing is deferred while there is only one workspace screen.
+The SPA exposes three browser routes: `/` for the requested minimal landing
+page, `/sign-in` for Supabase email/password authentication, and protected
+`/app` for onboarding and the field workspace. History navigation stays
+client-side; unknown paths return to the landing page.
 
 ## Layout and implementation order
 
@@ -62,8 +65,9 @@ Supabase is provisioned with the five-table schema in `supabase/migrations`.
 See [Supabase setup](supabase.md) for credentials, migrations, types, and commands.
 The Worker uses `supabase-js` over the HTTP Data API. `requireAuth` verifies user
 JWTs against Supabase JWKS and provides a request-scoped client that preserves
-row-level security. Secret-key writes are limited to validated seed imports and the narrow refresh
-RPCs, which verify the bearer owner passed by the Worker.
+row-level security. Secret-key writes are limited to validated seed imports and
+narrow onboarding, refresh, and crop-cycle RPCs. Each RPC verifies the bearer
+owner passed by the Worker; direct authenticated table writes remain revoked.
 The [WhatsApp agent](whatsapp-agent.md) additionally uses a dedicated read-only
 adapter with server-selected identity and mandatory owner filters after verifying
 the linked sender's signed webhook. Its conversation state uses Cloudflare SQLite
@@ -71,9 +75,11 @@ Durable Objects, separately from the five agricultural tables.
 Never put a secret/service-role key in Vite variables or a browser bundle.
 
 Shared contracts stay browser-safe. Database row types live in the API; product
-response projections belong in shared Zod contracts. The session endpoint proves
-the authentication boundary. The authenticated dashboard route reads stored farm
-snapshots. The [weather adapter](domain-model.md#implemented-weather-adapter)
+response projections belong in shared Zod contracts. The public auth-config
+endpoint exposes only the Supabase URL and publishable key; the session endpoint
+proves the authentication boundary. Authenticated farm-list, farm-create,
+plot-create, and dashboard routes read or mutate owner-scoped data. The
+[weather adapter](domain-model.md#implemented-weather-adapter)
 fetches and normalizes Open-Meteo data and detects hazards using the same forecast
 and evidence contracts as the dashboard. It does not publish forecasts.
 The refresh endpoint publishes synthetic forecasts for demo farms and complete
@@ -81,7 +87,8 @@ Open-Meteo forecasts for live farms. It uses the shared agronomic engine, valida
 the prospective dashboard, and commits through service-only RPCs with verified
 ownership and version/attempt checks. Withdrawn hazards are cancelled only when
 newer evidence covers their whole previous interval. Crop-cycle mutation uses its
-authenticated Supabase RPC; sign-in UI remains a subsequent feature slice.
+authenticated Supabase RPC. The browser signs in with Supabase email/password;
+tokens remain in memory and are attached only to same-origin API requests.
 
 [Automatic monitoring](weather-automation.md) centralizes scheduling and operations
 in Supabase Cron, pg_net and Vault. Authenticated Worker job endpoints reuse the
@@ -102,6 +109,13 @@ reconciliation. All automation mutation RPCs are service-only.
 
 ## Field workspace integration
 
+`WorkspacePage` first loads the authenticated owner's farms. An empty account
+receives a farm form followed by a plot/crop-cycle form; established accounts can
+switch farms or add another farm/plot. The web form creates bounded rectangular
+GeoJSON from explicit decimal-degree inputs and the Worker revalidates every
+geometry and relationship before its owner-safe RPC commits. There is no browser
+signup or post-creation boundary editor.
+
 `FieldOverview` consumes a `FarmDataSource`; use
 `createLiveSource(userId, farmId, getAccessToken)` after session/farm selection is
 available. Remount the overview on identity/farm changes and clear the QueryClient
@@ -112,8 +126,14 @@ network fetch; sub-millisecond PostgreSQL deadlines are not rounded down.
 Shared controls use shadcn Button, Badge, NativeSelect and Input with AgroSense
 semantic tokens and status variants. Application layouts use Tailwind utilities;
 custom CSS is limited to tokens, global defaults and Leaflet-generated markup.
-Map rendering loads lazily. Add primitives with `pnpm dlx shadcn@latest add` from
-`apps/web`; the CLI and unused animation styles are not application dependencies.
+On desktop, the selected plot's land/crop facts, the largest Sentinel-2 map, and
+its newest-first weather-event timeline form three columns. At narrow widths the
+facts and event record lead and the map becomes an explicit alternate view. The
+web timeline does not render `PlotAlert` risk or recommendations; notification
+alerts are a WhatsApp surface. Map rendering loads lazily and the initial imagery
+request uses the previous 30-day UTC window. Add primitives with
+`pnpm dlx shadcn@latest add` from `apps/web`; the CLI and unused animation styles
+are not application dependencies.
 
 The dashboard API, weather adapter and UI share one dashboard schema, with land
 and geometry definitions reused by satellite previews. Four hazard kinds, critical
