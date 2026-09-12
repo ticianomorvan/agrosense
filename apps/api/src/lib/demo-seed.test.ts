@@ -100,6 +100,55 @@ describe("demo seed importer", () => {
         ]),
       ),
     ).not.toThrow();
+    const diagonal: Polygon[] = [
+      {
+        type: "Polygon",
+        coordinates: [
+          [
+            [0.1, 0.2],
+            [3.3, 2.1],
+            [0.2, 3.2],
+            [0.1, 0.2],
+          ],
+        ],
+      },
+      {
+        type: "Polygon",
+        coordinates: [
+          [
+            [3.3, 2.1],
+            [0.1, 0.2],
+            [3.2, 0.1],
+            [3.3, 2.1],
+          ],
+        ],
+      },
+    ];
+    expect(() => validateDemoSeed(seedWithPlots(diagonal))).not.toThrow();
+    for (const angle of [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8]) {
+      const corners = [
+        [-1, -1],
+        [1, -1],
+        [1, 1],
+        [-1, 1],
+      ].map(
+        ([x = 0, y = 0]) =>
+          [
+            5 + x * Math.cos(angle) - y * Math.sin(angle),
+            5 + x * Math.sin(angle) + y * Math.cos(angle),
+          ] as [number, number],
+      );
+      const [a, b, c, d] = corners;
+      if (!a || !b || !c || !d) throw new Error("Missing corner");
+      expect(() =>
+        validateDemoSeed(
+          seedWithPlots([
+            { type: "Polygon", coordinates: [[a, b, c, a]] },
+            { type: "Polygon", coordinates: [[a, c, d, a]] },
+          ]),
+        ),
+      ).not.toThrow();
+    }
   });
 
   it("rejects positive-area overlap, including coincident and nested plots", () => {

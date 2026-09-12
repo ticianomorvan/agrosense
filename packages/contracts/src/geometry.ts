@@ -19,6 +19,18 @@ function cross(a: Position, b: Position, c: Position): number {
   return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
 }
 
+// Interpolated edge samples can be a few floating-point units off their line.
+// Scale the roundoff bound to coordinate precision, not a geographic distance.
+function sideOfLine(a: Position, b: Position, point: Position): number {
+  const precision =
+    8 *
+    Number.EPSILON *
+    Math.max(1, ...a.map(Math.abs), ...b.map(Math.abs), ...point.map(Math.abs));
+  const error = precision * (Math.abs(b[0] - a[0]) + Math.abs(b[1] - a[1]));
+  const value = cross(a, b, point);
+  return Math.abs(value) <= error ? 0 : Math.sign(value);
+}
+
 function intersects(
   a: Position,
   b: Position,
@@ -88,7 +100,7 @@ export function pointInPolygon(
       b = ring[j];
     if (!a || !b) continue;
     const onEdge =
-      cross(a, b, point) === 0 &&
+      sideOfLine(a, b, point) === 0 &&
       point[0] >= Math.min(a[0], b[0]) &&
       point[0] <= Math.max(a[0], b[0]) &&
       point[1] >= Math.min(a[1], b[1]) &&
@@ -145,8 +157,8 @@ function properIntersection(
   d: Position,
 ) {
   return (
-    Math.sign(cross(a, b, c)) * Math.sign(cross(a, b, d)) < 0 &&
-    Math.sign(cross(c, d, a)) * Math.sign(cross(c, d, b)) < 0
+    sideOfLine(a, b, c) * sideOfLine(a, b, d) < 0 &&
+    sideOfLine(c, d, a) * sideOfLine(c, d, b) < 0
   );
 }
 
@@ -165,7 +177,7 @@ function edgeMidpoints(a: Position, b: Position, ring: Position[]): Position[] {
     0,
     1,
     ...ring
-      .filter((p) => cross(a, b, p) === 0)
+      .filter((p) => sideOfLine(a, b, p) === 0)
       .map((p) => parameter(a, b, p))
       .filter((t) => t > 0 && t < 1),
   ].sort((x, y) => x - y);
@@ -188,7 +200,7 @@ export function polygonsOverlap(a: Position[][], b: Position[][]): boolean {
   for (const [x, y] of edgesA) {
     for (const [u, v] of edgesB) {
       if (properIntersection(x, y, u, v)) return true;
-      if (cross(x, y, u) === 0 && cross(x, y, v) === 0) {
+      if (sideOfLine(x, y, u) === 0 && sideOfLine(x, y, v) === 0) {
         const from = parameter(x, y, u),
           to = parameter(x, y, v);
         // Coincident edges enclose common area only when their interiors lie

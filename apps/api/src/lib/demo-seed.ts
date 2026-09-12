@@ -1,5 +1,6 @@
 import {
-  type EventEvidence,
+  cropCycleSchema,
+  type PlotForecast,
   pointInPolygon,
   pointSchema,
   polygonContainsPolygon,
@@ -9,7 +10,8 @@ import {
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import type { Database } from "./database.types";
-import { demoRuleSet, evaluateRisk } from "./risk";
+import { buildPublication } from "./publication";
+import { detectThreatEvents } from "./weather-provider";
 
 const cycleSchema = z.strictObject({
   cropCode: z.enum(["maize", "soybean"]),
@@ -106,9 +108,6 @@ export async function importDemoSeed(
     precipitationProbability: null,
     weatherCode: null,
   }));
-  const firstHour = hours[0];
-  const secondHour = hours[1];
-  if (!firstHour || !secondHour) throw new Error("Demo forecast has no hours");
   const source = {
     code: "demo" as const,
     url: null,
@@ -116,60 +115,30 @@ export async function importDemoSeed(
     retrievedAt: nowIso,
     isDemo: true,
   };
-  const evidence: EventEvidence = {
-    schemaVersion: 1,
-    scope: "farm_demo",
-    plotIds,
-    forecastDate,
-    samplePoint: null,
+  const forecasts: PlotForecast[] = seed.plots.map((plot, index) => ({
+    plotId: z.uuid().parse(plotIds[index]),
+    samplePoint: plot.samplePoint,
     source,
     temperatureHeightM: 2,
-    detectionThresholdC: 0,
     hours,
-  };
-  const eventId = crypto.randomUUID();
-  const alerts = seed.plots.map((plot, index) => {
-    const plotId = plotIds[index];
-    if (!plotId) throw new Error("Missing plot id");
-    const evaluation = evaluateRisk(
-      demoRuleSet,
-      evidence,
-      {
-        id: crypto.randomUUID(),
-        plotId,
-        ...plot.cropCycle,
-        endedOn: null,
-        updatedAt: nowIso,
-      },
-      "frost",
-    );
-    return {
-      plotId,
-      assessmentState: evaluation.assessmentState,
-      riskLevel: evaluation.riskLevel,
-      reason: evaluation.reason,
-      recommendedActions: evaluation.recommendedActions,
-      inputSnapshot: {
-        schemaVersion: 1,
-        plotId,
-        cropCycle: null,
-        event: {
-          id: eventId,
-          status: "active",
-          startsAt: firstHour.at,
-          endsAt: secondHour.at,
-          evidence,
-        },
-        ruleSetVersion: demoRuleSet.version,
-        matchedRuleCodes: evaluation.matchedRuleCodes,
-        generation: { method: "template", modelId: null, promptVersion: null },
-      },
-      ruleVersion: demoRuleSet.version,
-      generatedAt: nowIso,
-      validUntil: new Date(now.getTime() + 3600000).toISOString(),
-      generationMethod: "template",
-    };
+  }));
+  const cycles = seed.plots.map((plot, index) =>
+    cropCycleSchema.parse({
+      ...plot.cropCycle,
+      id: crypto.randomUUID(),
+      plotId: plotIds[index],
+      endedOn: null,
+      updatedAt: nowIso,
+    }),
+  );
+  const [event] = buildPublication({
+    forecasts,
+    cycles,
+    now: nowIso,
+    detect: detectThreatEvents,
   });
+  if (!event) throw new Error("Demo forecast has no event");
+  const { alerts, ...eventPayload } = event;
   const payload = {
     farm: {
       name: seed.farm.name,
@@ -179,23 +148,17 @@ export async function importDemoSeed(
       declaredAreaHa: seed.farm.declaredAreaHa,
     },
     plots: seed.plots.map((plot, index) => ({ ...plot, id: plotIds[index] })),
-    event: {
-      id: eventId,
-      sourceEventKey: `demo:frost:${forecastDate}`,
-      kind: "frost",
-      title: `Alerta de Helada (${forecastDate})`,
-      startsAt: firstHour.at,
-      endsAt: secondHour.at,
-      retrievedAt: nowIso,
-      evidence,
-    },
+    event: eventPayload,
     alerts,
   };
   const { data, error } = await serviceClient.rpc("import_demo_seed", {
-    p_owner_id: ownerId,
+    p_owner_id: z.uuid().parse(ownerId),
     p_payload:
       payload as unknown as Database["public"]["Functions"]["import_demo_seed"]["Args"]["p_payload"],
   });
   if (error) throw error;
-  return { ...(data as { farmId: string; eventId: string }), plotIds };
+  return {
+    ...z.strictObject({ farmId: z.uuid(), eventId: z.uuid() }).parse(data),
+    plotIds,
+  };
 }

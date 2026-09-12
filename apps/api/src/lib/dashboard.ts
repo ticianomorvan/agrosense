@@ -258,22 +258,29 @@ export function projectDashboard(
   return dashboardResponseSchema.parse(response);
 }
 
-export async function loadDashboard(
+export async function loadDashboardSnapshot(
   client: DashboardClient,
   farmId: string,
-  asOf = new Date().toISOString(),
 ) {
   const snapshotResult = await client.rpc("get_farm_dashboard_snapshot", {
     p_farm_id: farmId,
   });
   if (snapshotResult.error) throw snapshotResult.error;
-  const snapshot = json<{
+  return json<{
     farm: FarmRow | null;
     plots: PlotRow[];
     crop_cycles: CycleRow[];
     events: EventRow[];
     plot_alerts: AlertRow[];
   }>(snapshotResult.data);
+}
+
+export async function loadDashboard(
+  client: DashboardClient,
+  farmId: string,
+  asOf = new Date().toISOString(),
+) {
+  const snapshot = await loadDashboardSnapshot(client, farmId);
   if (!snapshot.farm) return null;
 
   return projectDashboard(
@@ -285,3 +292,7 @@ export async function loadDashboard(
     asOf,
   );
 }
+
+export type DashboardSnapshot = Awaited<
+  ReturnType<typeof loadDashboardSnapshot>
+>;

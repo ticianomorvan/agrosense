@@ -1,13 +1,28 @@
 import {
+  addMinutes,
+  compareInstants,
+  DEMO_V1_RULESET,
+  ExpiredForecastEvidenceError,
+  eventEvidenceSchema,
+  type ForecastSummary,
   forecastSummarySchema,
   type PlotForecast,
   type RefreshResponse,
   refreshResponseSchema,
+  resolveRules,
+  riskRuleSchema,
 } from "@agrosense/contracts";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { z } from "zod";
+import { DashboardPayloadLimitError, loadDashboardSnapshot } from "./dashboard";
 import type { Database, Json } from "./database.types";
-import { json } from "./database-utils";
-import { buildPublication } from "./publication";
+import { iso, json } from "./database-utils";
+import {
+  buildPublication,
+  type PreviousEvent,
+  projectPublicationCycle,
+} from "./publication";
+import { validatePublicationDashboard } from "./publication-validation";
 import type { createServiceClient } from "./supabase";
 import {
   detectThreatEvents,
@@ -16,17 +31,21 @@ import {
 
 type UserClient = SupabaseClient<Database>;
 type ServiceClient = ReturnType<typeof createServiceClient>;
+type PlotRow = Database["public"]["Tables"]["plots"]["Row"];
 
 export type RefreshFailure =
   | { kind: "not_found" }
   | { kind: "rate_limited"; retryAfter: number }
   | { kind: "conflict" }
+  | { kind: "stale_provider" }
+  | { kind: "payload_limit" }
   | {
       kind: "unavailable";
       code:
         | "PROVIDER_TIMEOUT"
         | "PROVIDER_UNAVAILABLE"
-        | "INVALID_PROVIDER_DATA";
+        | "INVALID_PROVIDER_DATA"
+        | "PUBLISH_FAILED";
     };
 
 export class RefreshError extends Error {
@@ -35,14 +54,75 @@ export class RefreshError extends Error {
   }
 }
 
-function classifyProviderFailure(error: unknown): RefreshFailure {
-  if (error instanceof DOMException && error.name === "AbortError")
-    return { kind: "unavailable", code: "PROVIDER_TIMEOUT" };
-  if (error instanceof Error && error.name === "ZodError")
-    return { kind: "unavailable", code: "INVALID_PROVIDER_DATA" };
-  if (error instanceof Error)
-    return { kind: "unavailable", code: "PROVIDER_UNAVAILABLE" };
-  throw error;
+function rpcFailure(message: string): RefreshError {
+  if (message === "NOT_FOUND") return new RefreshError({ kind: "not_found" });
+  if (message === "VERSION_CONFLICT")
+    return new RefreshError({ kind: "conflict" });
+  if (message === "STALE_PROVIDER_DATA")
+    return new RefreshError({ kind: "stale_provider" });
+  if (message === "PAYLOAD_LIMIT_EXCEEDED")
+    return new RefreshError({ kind: "payload_limit" });
+  if (message.startsWith("RATE_LIMITED:"))
+    return new RefreshError({
+      kind: "rate_limited",
+      retryAfter: Number(message.slice("RATE_LIMITED:".length)),
+    });
+  return new RefreshError({
+    kind: "unavailable",
+    code:
+      message === "INVALID_PROVIDER_DATA"
+        ? "INVALID_PROVIDER_DATA"
+        : "PUBLISH_FAILED",
+  });
+}
+
+function invalidForecast(): never {
+  throw new RefreshError({
+    kind: "unavailable",
+    code: "INVALID_PROVIDER_DATA",
+  });
+}
+
+function validateFarmForecast(
+  candidate: unknown,
+  plots: PlotRow[],
+  mode: "demo" | "live",
+  now: string,
+): ForecastSummary {
+  const forecast = forecastSummarySchema.parse(candidate);
+  if (
+    forecast.plots.length !== plots.length ||
+    new Set(forecast.plots.map((p) => p.plotId)).size !== plots.length
+  )
+    invalidForecast();
+  const first = forecast.plots[0];
+  for (const item of forecast.plots) {
+    const plot = plots.find((p) => p.id === item.plotId);
+    const firstHour = item.hours[0],
+      lastHour = item.hours.at(-1);
+    if (
+      !plot ||
+      !firstHour ||
+      !lastHour ||
+      JSON.stringify(item.samplePoint.coordinates) !==
+        JSON.stringify(
+          json<PlotForecast["samplePoint"]>(plot.sample_point_geojson)
+            .coordinates,
+        ) ||
+      item.source.code !== (mode === "demo" ? "demo" : "open_meteo") ||
+      compareInstants(firstHour.at, forecast.windowStart) !== 0 ||
+      compareInstants(addMinutes(lastHour.at, 60), forecast.windowEnd) !== 0 ||
+      compareInstants(item.source.retrievedAt, now) > 0 ||
+      compareInstants(addMinutes(item.source.retrievedAt, 60), now) <= 0 ||
+      (item.source.issuedAt &&
+        compareInstants(addMinutes(item.source.issuedAt, 360), now) <= 0) ||
+      (mode === "demo" &&
+        (JSON.stringify(item.hours) !== JSON.stringify(first?.hours) ||
+          JSON.stringify(item.source) !== JSON.stringify(first?.source)))
+    )
+      invalidForecast();
+  }
+  return forecast;
 }
 
 function syntheticForecast(
@@ -85,152 +165,169 @@ function syntheticForecast(
   };
 }
 
+// ownerId comes from verified bearer identity, never a request body.
 export async function refreshFarm(
   userClient: UserClient,
-  _serviceClient: ServiceClient,
+  serviceClient: ServiceClient,
   farmId: string,
+  ownerId: string,
   now = new Date(),
 ): Promise<RefreshResponse> {
-  const refreshedAt = now.toISOString();
-  const admission = await userClient.rpc("admit_farm_refresh", {
+  const attemptAt = now.toISOString();
+  const admission = await serviceClient.rpc("admit_farm_refresh", {
+    p_owner_id: ownerId,
     p_farm_id: farmId,
-    p_attempt_at: refreshedAt,
+    p_attempt_at: attemptAt,
   });
-  if (admission.error) {
-    if (admission.error.message === "NOT_FOUND")
-      throw new RefreshError({ kind: "not_found" });
-    if (admission.error.message.startsWith("RATE_LIMITED:"))
-      throw new RefreshError({
-        kind: "rate_limited",
-        retryAfter: Number(
-          admission.error.message.slice("RATE_LIMITED:".length),
-        ),
-      });
-    throw admission.error;
-  }
-  const admitted = json<{ dataVersion: number; dataMode: "demo" | "live" }>(
-    admission.data,
-  );
-  const { data: plots, error: plotsError } = await userClient
-    .from("plots")
-    .select("*")
-    .eq("farm_id", farmId);
-  if (plotsError) throw plotsError;
-  const { data: cycles, error: cyclesError } = await userClient
-    .from("crop_cycles")
-    .select("*")
-    .in(
-      "plot_id",
-      (plots ?? []).map((plot) => plot.id),
-    )
-    .is("ended_on", null);
-  if (cyclesError) throw cyclesError;
-  let forecast:
-    | ReturnType<typeof syntheticForecast>
-    | {
-        schemaVersion: 1;
-        fetchedAt: string;
-        windowStart: string;
-        windowEnd: string;
-        plots: PlotForecast[];
-      };
+  if (admission.error) throw rpcFailure(admission.error.message);
+  const admitted = z
+    .strictObject({
+      dataVersion: z.int().positive(),
+      dataMode: z.enum(["demo", "live"]),
+      customRules: z.array(riskRuleSchema).max(10),
+    })
+    .parse(admission.data);
   try {
-    const fetched =
-      admitted.dataMode === "live"
-        ? await Promise.all(
-            (plots ?? []).map((plot) =>
-              fetchOpenMeteoPlotForecast({
-                plotId: plot.id,
-                samplePoint: json<PlotForecast["samplePoint"]>(
-                  plot.sample_point_geojson,
-                ),
-              }),
-            ),
-          )
-        : null;
-    if (fetched) {
-      const firstPlot = fetched[0];
-      const firstHour = firstPlot?.hours[0];
-      const lastHour = firstPlot?.hours.at(-1);
-      if (!firstHour || !lastHour)
-        throw new Error("Provider returned no hours");
-      const start = fetched.reduce((min, plot) => {
-        const hour = plot.hours[0];
-        return hour && hour.at < min ? hour.at : min;
-      }, firstHour.at);
-      const end = fetched.reduce((max, plot) => {
-        const hour = plot.hours.at(-1);
-        return hour && hour.at > max ? hour.at : max;
-      }, lastHour.at);
-      const candidate = {
-        schemaVersion: 1 as const,
-        fetchedAt: refreshedAt,
-        windowStart: start,
-        windowEnd: new Date(Date.parse(end) + 3_600_000).toISOString(),
+    const snapshot = await loadDashboardSnapshot(userClient, farmId);
+    if (!snapshot.farm || snapshot.farm.owner_id !== ownerId)
+      throw new RefreshError({ kind: "not_found" });
+    if (snapshot.farm.data_version !== admitted.dataVersion)
+      throw new RefreshError({ kind: "conflict" });
+    let candidate: ForecastSummary;
+    if (admitted.dataMode === "demo") {
+      candidate = syntheticForecast(snapshot.plots, attemptAt);
+    } else {
+      const fetched: PlotForecast[] = [];
+      try {
+        // At most two provider requests in flight for the bounded farm dataset.
+        for (let i = 0; i < snapshot.plots.length; i += 2) {
+          fetched.push(
+            ...(await Promise.all(
+              snapshot.plots.slice(i, i + 2).map((plot) =>
+                fetchOpenMeteoPlotForecast({
+                  plotId: plot.id,
+                  samplePoint: json<PlotForecast["samplePoint"]>(
+                    plot.sample_point_geojson,
+                  ),
+                }),
+              ),
+            )),
+          );
+        }
+      } catch (error) {
+        throw new RefreshError({
+          kind: "unavailable",
+          code:
+            error instanceof DOMException && error.name === "AbortError"
+              ? "PROVIDER_TIMEOUT"
+              : error instanceof z.ZodError
+                ? "INVALID_PROVIDER_DATA"
+                : "PROVIDER_UNAVAILABLE",
+        });
+      }
+      const firstHour = fetched[0]?.hours[0],
+        lastHour = fetched[0]?.hours.at(-1);
+      if (!firstHour || !lastHour) invalidForecast();
+      candidate = {
+        schemaVersion: 1,
+        fetchedAt: new Date().toISOString(),
+        windowStart: firstHour.at,
+        windowEnd: addMinutes(lastHour.at, 60),
         plots: fetched,
       };
-      forecastSummarySchema.parse(candidate);
-      forecast = candidate;
-    } else forecast = syntheticForecast(plots ?? [], refreshedAt);
-  } catch (error) {
-    const failure = classifyProviderFailure(error);
-    await userClient.rpc("fail_farm_refresh", {
+    }
+    const publishedAt = new Date().toISOString();
+    const forecast = validateFarmForecast(
+      candidate,
+      snapshot.plots,
+      admitted.dataMode,
+      publishedAt,
+    );
+    const previousEvents: PreviousEvent[] = snapshot.events.map((event) => ({
+      sourceCode: event.source_code as PreviousEvent["sourceCode"],
+      sourceEventKey: event.source_event_key,
+      kind: event.kind as PreviousEvent["kind"],
+      title: event.title,
+      startsAt: iso(event.starts_at),
+      endsAt: iso(event.ends_at),
+      issuedAt: event.issued_at ? iso(event.issued_at) : null,
+      retrievedAt: iso(event.retrieved_at),
+      sourceUrl: event.source_url,
+      isDemo: event.is_demo,
+      status: event.status as PreviousEvent["status"],
+      evidence: eventEvidenceSchema.parse(event.evidence),
+    }));
+    const publications = buildPublication({
+      forecasts: forecast.plots,
+      cycles: snapshot.crop_cycles
+        .filter((c) => c.ended_on === null)
+        .map(projectPublicationCycle),
+      previousEvents,
+      now: publishedAt,
+      detect: detectThreatEvents,
+      ruleSet: {
+        version: DEMO_V1_RULESET.version,
+        rules: resolveRules(DEMO_V1_RULESET.rules, admitted.customRules),
+      },
+    });
+    validatePublicationDashboard(snapshot, forecast, publications, publishedAt);
+    const published = await serviceClient.rpc("publish_farm_refresh", {
+      p_owner_id: ownerId,
       p_farm_id: farmId,
       p_expected_data_version: admitted.dataVersion,
-      p_attempt_at: refreshedAt,
-      p_completed_at: now.toISOString(),
-      p_error_code:
-        failure.kind === "unavailable" ? failure.code : "PROVIDER_UNAVAILABLE",
+      p_attempt_at: attemptAt,
+      p_published_at: publishedAt,
+      p_forecast: forecast as unknown as Json,
+      p_events: publications as unknown as Json,
     });
-    throw new RefreshError(failure);
-  }
-  const publications = buildPublication({
-    forecasts: forecast.plots,
-    cycles: (cycles ?? []).map((cycle) => ({
-      id: cycle.id,
-      plotId: cycle.plot_id,
-      cropCode: cycle.crop_code as "maize" | "soybean",
-      stageCode: cycle.stage_code,
-      stageAsOf: cycle.stage_as_of,
-      sownOn: cycle.sown_on,
-      endedOn: cycle.ended_on,
-      updatedAt: cycle.updated_at,
-    })),
-    now: refreshedAt,
-    detect: detectThreatEvents,
-  });
-  const published = await userClient.rpc("publish_farm_refresh", {
-    p_farm_id: farmId,
-    p_expected_data_version: admitted.dataVersion,
-    p_attempt_at: refreshedAt,
-    p_published_at: refreshedAt,
-    p_forecast: forecast as unknown as Json,
-    p_events: publications as unknown as Json,
-    p_alerts: [],
-  });
-  if (published.error) {
-    if (published.error.message === "VERSION_CONFLICT")
-      throw new RefreshError({ kind: "conflict" });
-    throw published.error;
-  }
-  const publicationResult = json<{ dataVersion?: number; errorCode?: string }>(
-    published.data,
-  );
-  if (publicationResult.errorCode === "PUBLISH_FAILED")
-    throw new RefreshError({
-      kind: "unavailable",
-      code: "PROVIDER_UNAVAILABLE",
+    if (published.error) throw rpcFailure(published.error.message);
+    const result = z
+      .union([
+        z.strictObject({ dataVersion: z.int().positive() }),
+        z.strictObject({ errorCode: z.string() }),
+      ])
+      .parse(published.data);
+    if ("errorCode" in result) throw rpcFailure(result.errorCode);
+    return refreshResponseSchema.parse({
+      farmId,
+      dataVersion: result.dataVersion,
+      refreshedAt: publishedAt,
+      dataMode: admitted.dataMode,
+      eventCount: publications.length,
+      alertCount: publications.reduce(
+        (count, event) => count + event.alerts.length,
+        0,
+      ),
     });
-
-  return refreshResponseSchema.parse({
-    farmId,
-    dataVersion: publicationResult.dataVersion ?? admitted.dataVersion + 1,
-    refreshedAt,
-    dataMode: admitted.dataMode,
-    eventCount: publications.length,
-    alertCount: publications.reduce(
-      (count, event) => count + event.alerts.length,
-      0,
-    ),
-  });
+  } catch (error) {
+    const failure =
+      error instanceof RefreshError
+        ? error
+        : error instanceof DashboardPayloadLimitError
+          ? new RefreshError({ kind: "payload_limit" })
+          : error instanceof z.ZodError ||
+              error instanceof ExpiredForecastEvidenceError
+            ? new RefreshError({
+                kind: "unavailable",
+                code: "INVALID_PROVIDER_DATA",
+              })
+            : new RefreshError({ kind: "unavailable", code: "PUBLISH_FAILED" });
+    if (
+      failure.failure.kind === "unavailable" ||
+      failure.failure.kind === "payload_limit"
+    ) {
+      await serviceClient.rpc("fail_farm_refresh", {
+        p_owner_id: ownerId,
+        p_farm_id: farmId,
+        p_expected_data_version: admitted.dataVersion,
+        p_attempt_at: attemptAt,
+        p_completed_at: new Date().toISOString(),
+        p_error_code:
+          failure.failure.kind === "payload_limit"
+            ? "PAYLOAD_LIMIT_EXCEEDED"
+            : failure.failure.code,
+      });
+    }
+    throw failure;
+  }
 }
