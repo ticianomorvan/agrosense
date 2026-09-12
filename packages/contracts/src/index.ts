@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { eventKindSchema, riskRuleSchema } from "./agronomic";
 import { pointSchema, polygonSchema } from "./geometry";
+import { compareInstants } from "./instants";
 
 export const healthResponseSchema = z.object({
   status: z.literal("ok"),
@@ -202,7 +203,7 @@ export const plotAlertSchema = z
     isStale: z.boolean(),
   })
   .refine(
-    (alert) => Date.parse(alert.validUntil) > Date.parse(alert.generatedAt),
+    (alert) => compareInstants(alert.validUntil, alert.generatedAt) > 0,
     "validUntil must be after generatedAt",
   )
   .refine((alert) => {

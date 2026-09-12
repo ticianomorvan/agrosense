@@ -3,22 +3,27 @@ import {
   type CropCycle,
   type EventKind,
   type EventSnapshot,
+  eventKindSchema,
   type ForecastHour,
+  instantSchema,
   type PlotAlert,
   plotAlertSchema,
   type RiskLevel,
   type RiskRule,
+  sourceSchema,
 } from "./index";
+import { addMinutes, compareInstants } from "./instants";
 
 export interface EvaluatePlotAlertInput {
   plot: {
     id: string;
     activeCropCycle: CropCycle | null;
   };
-  event: EventSnapshot & { kind?: EventKind };
+  event: EventSnapshot & { kind: EventKind };
   rules?: RiskRule[];
   ruleSetVersion?: string;
   now?: string;
+  /** Optional earlier deadline; never extends source freshness. */
   validUntil?: string;
   alertId?: string;
   generationMethod?: "template" | "llm";
@@ -32,6 +37,24 @@ const RISK_ORDER: Record<RiskLevel, number> = {
   high: 3,
   critical: 4,
 };
+
+const eventDateFormatter = new Intl.DateTimeFormat("en", {
+  timeZone: "America/Argentina/Cordoba",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
+export class ExpiredForecastEvidenceError extends Error {
+  readonly code = "INVALID_PROVIDER_DATA";
+
+  constructor() {
+    super(
+      "INVALID_PROVIDER_DATA: Forecast evidence freshness deadline has expired.",
+    );
+    this.name = "ExpiredForecastEvidenceError";
+  }
+}
 
 /**
  * Resolves effective rule set by merging system defaults with user-defined custom rules (RuleProvider Pattern).
@@ -127,23 +150,21 @@ export function evaluatePlotAlert(input: EvaluatePlotAlertInput): PlotAlert {
     generationMethod === "llm" ? (input.modelId ?? "default-model") : null;
   const promptVersion =
     generationMethod === "llm" ? (input.promptVersion ?? "v1") : null;
-  const now = input.now ?? new Date().toISOString();
+  const now = instantSchema.parse(input.now ?? new Date().toISOString());
   const alertId = input.alertId ?? crypto.randomUUID();
-
-  const calculateDefaultValidUntil = (): string => {
-    const source = event.evidence.source;
-    const retrievedDeadline = Date.parse(source.retrievedAt) + 60 * 60 * 1000;
-    const issuedDeadline = source.issuedAt
-      ? Date.parse(source.issuedAt) + 6 * 60 * 60 * 1000
-      : retrievedDeadline;
-    const earliest = Math.min(retrievedDeadline, issuedDeadline);
-    const deadlineIso = new Date(earliest).toISOString();
-    return Date.parse(deadlineIso) > Date.parse(now)
-      ? deadlineIso
-      : new Date(Date.parse(now) + 3_600_000).toISOString();
-  };
-
-  const validUntil = input.validUntil ?? calculateDefaultValidUntil();
+  const hazardKind = eventKindSchema.parse(event.kind);
+  const source = sourceSchema.parse(event.evidence.source);
+  const deadlines = [addMinutes(source.retrievedAt, 60)];
+  if (source.issuedAt !== null)
+    deadlines.push(addMinutes(source.issuedAt, 360));
+  if (input.validUntil !== undefined)
+    deadlines.push(instantSchema.parse(input.validUntil));
+  const validUntil = deadlines.reduce((earliest, deadline) =>
+    compareInstants(deadline, earliest) < 0 ? deadline : earliest,
+  );
+  if (compareInstants(validUntil, now) <= 0) {
+    throw new ExpiredForecastEvidenceError();
+  }
 
   const eventSnapshot: EventSnapshot = {
     id: event.id,
@@ -199,19 +220,6 @@ export function evaluatePlotAlert(input: EvaluatePlotAlertInput): PlotAlert {
       [],
     );
   }
-
-  // Determine hazard kind
-  const hazardKind: EventKind =
-    event.kind ??
-    (event.evidence.detectionThresholdC === 0
-      ? "frost"
-      : event.evidence.detectionThresholdC === 35
-        ? "extreme-heat"
-        : event.evidence.hours.some(
-              (h) => h.weatherCode === 96 || h.weatherCode === 99,
-            )
-          ? "hail"
-          : "severe-storm");
 
   const isDemo = event.evidence.source.isDemo;
   const effectiveRules = resolveRules(rules ?? DEMO_V1_RULES);
@@ -283,22 +291,29 @@ export function evaluatePlotAlert(input: EvaluatePlotAlertInput): PlotAlert {
     );
   }
 
-  // State precedence 3: Stage date cannot follow event forecast date
-  const forecastDateMs = Date.parse(`${event.evidence.forecastDate}T00:00:00Z`);
+  // Stage observations are local dates; evidence.forecastDate is a UTC bucket.
+  const localParts = Object.fromEntries(
+    eventDateFormatter
+      .formatToParts(new Date(event.startsAt))
+      .map(({ type, value }) => [type, value]),
+  );
+  const eventLocalDateMs = Date.parse(
+    `${localParts.year}-${localParts.month}-${localParts.day}T00:00:00Z`,
+  );
   const stageAsOfMs = Date.parse(`${cropCycle.stageAsOf}T00:00:00Z`);
 
-  if (stageAsOfMs > forecastDateMs) {
+  if (stageAsOfMs > eventLocalDateMs) {
     return createAlert(
       "insufficient_data",
       null,
-      "Declared stage date cannot follow event forecast date.",
+      "Declared stage date cannot follow event local start date.",
       [],
       [],
     );
   }
 
   const ageDays = Math.floor(
-    (forecastDateMs - stageAsOfMs) / (24 * 60 * 60 * 1000),
+    (eventLocalDateMs - stageAsOfMs) / (24 * 60 * 60 * 1000),
   );
 
   // Filter rules whose individual stageMaxAgeDays is not exceeded (lines 311-313)
@@ -342,7 +357,7 @@ export function evaluatePlotAlert(input: EvaluatePlotAlertInput): PlotAlert {
     if (riskDiff !== 0) {
       return riskDiff;
     }
-    return a.code.localeCompare(b.code);
+    return a.code < b.code ? -1 : a.code > b.code ? 1 : 0;
   });
 
   const winningRule = firingRules[0];
@@ -356,9 +371,7 @@ export function evaluatePlotAlert(input: EvaluatePlotAlertInput): PlotAlert {
     );
   }
 
-  const matchedRuleCodes = firingRules
-    .map((r) => r.code)
-    .sort((a, b) => a.localeCompare(b));
+  const matchedRuleCodes = firingRules.map((r) => r.code).sort();
 
   const reason = winningRule.reasonTemplate.replace(
     /\{code\}/g,

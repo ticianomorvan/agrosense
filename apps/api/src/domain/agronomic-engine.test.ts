@@ -10,7 +10,14 @@ import {
   resolveRules,
   riskRuleSchema,
 } from "@agrosense/contracts";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+beforeEach(() => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-09-12T00:30:00Z"));
+});
+
+afterEach(() => vi.useRealTimers());
 
 function createHour(
   timestamp: string,
@@ -208,7 +215,7 @@ describe("Agronomic Rules Engine - Evaluation & State Precedence", () => {
     expect(alertNoStage.assessmentState).toBe("insufficient_data");
   });
 
-  it("yields insufficient_data when stageAsOf is in the future relative to forecast date", () => {
+  it("yields insufficient_data when stageAsOf follows the event local start date", () => {
     const hours = [createHour("2026-09-12T04:00:00Z", { temperatureC: -2 })];
     const event = createEvent("frost", "2026-09-12", hours);
 
@@ -221,7 +228,7 @@ describe("Agronomic Rules Engine - Evaluation & State Precedence", () => {
     });
 
     expect(alert.assessmentState).toBe("insufficient_data");
-    expect(alert.reason).toContain("cannot follow event forecast date");
+    expect(alert.reason).toContain("cannot follow event local start date");
   });
 
   it("yields insufficient_data when stage observation exceeds stageMaxAgeDays", () => {
