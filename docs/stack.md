@@ -71,8 +71,8 @@ the authentication boundary. The authenticated dashboard route reads stored farm
 snapshots. The [weather adapter](domain-model.md#implemented-weather-adapter)
 fetches and normalizes Open-Meteo data and detects hazards using the same forecast
 and evidence contracts as the dashboard. It does not publish forecasts.
-Demo imports, cultivation mutation RPCs, refresh/publication, and sign-in UI remain
-subsequent feature slices.
+Demo imports, refresh/publication, and sign-in UI remain subsequent feature
+slices; crop-cycle mutation is implemented by the API route and Supabase RPC.
 
 ## References
 

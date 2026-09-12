@@ -311,6 +311,15 @@ export type Database = {
         Args: { p_farm_id: string };
         Returns: Json;
       };
+      update_crop_cycle: {
+        Args: {
+          p_farm_id: string;
+          p_plot_id: string;
+          p_expected_data_version: number;
+          p_patch: Json;
+        };
+        Returns: Json;
+      };
     };
     Enums: { [_ in never]: never };
     CompositeTypes: { [_ in never]: never };
