@@ -1,0 +1,2093 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "AgroSense MVP API and JSON reference",
+    "version": "1.0.0",
+    "description": "Five-table hackathon reference; routes are not implemented by this document. Schema components also define all stored JSONB shapes. Cross-field and transactional invariants are normative in domain-model.md."
+  },
+  "jsonSchemaDialect": "https://json-schema.org/draft/2020-12/schema",
+  "servers": [
+    {
+      "url": "/"
+    }
+  ],
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "paths": {
+    "/api/farms/{farmId}/dashboard": {
+      "parameters": [
+        {
+          "name": "farmId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "$ref": "#/components/schemas/Id"
+          }
+        }
+      ],
+      "get": {
+        "operationId": "getFarmDashboard",
+        "summary": "Read the complete bounded dashboard",
+        "responses": {
+          "200": {
+            "description": "One consistent data snapshot; stale data may still return 200.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed JSON/path, unsupported body/query, or unknown property.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer identity.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Farm, plot, or active cycle not found or not accessible.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request, normalized dataset, or dashboard exceeds an MVP limit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/farms/{farmId}/refresh": {
+      "parameters": [
+        {
+          "name": "farmId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "$ref": "#/components/schemas/Id"
+          }
+        }
+      ],
+      "post": {
+        "operationId": "refreshFarm",
+        "summary": "Refresh the farm using its configured data mode",
+        "description": "No request body or query parameters. Does not switch demo/live mode. Synchronous, bounded work; no 202/job ID. Success means the entire result committed. All responses use Cache-Control: private, no-store.",
+        "responses": {
+          "200": {
+            "description": "Snapshot published atomically.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RefreshResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed JSON/path, unsupported body/query, or unknown property.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer identity.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Farm, plot, or active cycle not found or not accessible.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Farm version changed, or provider data is older than the stored forecast.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request, normalized dataset, or dashboard exceeds an MVP limit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Manual refresh rate limit; Retry-After seconds returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until next allowed manual attempt.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 60
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Refresh failed; previous successful data remains available.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/farms/{farmId}/plots/{plotId}/crop-cycle": {
+      "parameters": [
+        {
+          "name": "farmId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "$ref": "#/components/schemas/Id"
+          }
+        },
+        {
+          "name": "plotId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "$ref": "#/components/schemas/Id"
+          }
+        }
+      ],
+      "patch": {
+        "operationId": "updateCurrentCropCycle",
+        "summary": "Edit the seeded active crop cycle",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateCropCycleRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Cultivation saved and farm version incremented.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpdateCropCycleResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed JSON/path, unsupported body/query, or unknown property.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer identity.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Farm, plot, or active cycle not found or not accessible.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Farm version changed, or provider data is older than the stored forecast.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request, normalized dataset, or dashboard exceeds an MVP limit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid field or merged cultivation state.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "Supabase access token"
+      }
+    },
+    "schemas": {
+      "Id": {
+        "type": "string",
+        "format": "uuid"
+      },
+      "Instant": {
+        "type": "string",
+        "format": "date-time",
+        "pattern": "Z$",
+        "description": "UTC RFC3339 instant, always serialized with Z."
+      },
+      "LocalDate": {
+        "type": "string",
+        "format": "date"
+      },
+      "DataMode": {
+        "type": "string",
+        "enum": ["demo", "live"]
+      },
+      "CropCode": {
+        "type": "string",
+        "enum": ["maize", "soybean"]
+      },
+      "StageCode": {
+        "type": "string",
+        "enum": ["V3", "V6", "VT", "R1", "V2", "R4", "R6"]
+      },
+      "RiskLevel": {
+        "type": "string",
+        "enum": ["low", "moderate", "high"]
+      },
+      "SourceCode": {
+        "type": "string",
+        "enum": ["demo", "open_meteo"]
+      },
+      "AssessmentState": {
+        "type": "string",
+        "enum": ["evaluated", "insufficient_data", "no_applicable_rule"]
+      },
+      "EventStatus": {
+        "type": "string",
+        "enum": ["active", "cancelled"]
+      },
+      "RefreshErrorCode": {
+        "type": "string",
+        "enum": [
+          "PROVIDER_TIMEOUT",
+          "PROVIDER_UNAVAILABLE",
+          "INVALID_PROVIDER_DATA",
+          "PAYLOAD_LIMIT_EXCEEDED",
+          "PUBLISH_FAILED"
+        ]
+      },
+      "Position": {
+        "type": "array",
+        "prefixItems": [
+          {
+            "type": "number",
+            "minimum": -180,
+            "maximum": 180
+          },
+          {
+            "type": "number",
+            "minimum": -90,
+            "maximum": 90
+          }
+        ],
+        "items": false,
+        "minItems": 2,
+        "maxItems": 2,
+        "description": "[longitude, latitude], decimal degrees; no altitude."
+      },
+      "Point": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "type": {
+            "const": "Point"
+          },
+          "coordinates": {
+            "$ref": "#/components/schemas/Position"
+          }
+        },
+        "required": ["type", "coordinates"]
+      },
+      "Polygon": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "type": {
+            "const": "Polygon"
+          },
+          "coordinates": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/Position"
+              },
+              "minItems": 4,
+              "maxItems": 5000
+            },
+            "minItems": 1,
+            "maxItems": 1
+          }
+        },
+        "required": ["type", "coordinates"],
+        "description": "MVP: one exterior ring, no holes. First and last coordinate must match; topology is checked at seed import."
+      },
+      "Source": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "$ref": "#/components/schemas/SourceCode"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uri",
+                "pattern": "^https://",
+                "maxLength": 2048
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "issuedAt": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Instant"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "retrievedAt": {
+            "$ref": "#/components/schemas/Instant"
+          },
+          "isDemo": {
+            "type": "boolean"
+          }
+        },
+        "required": ["code", "url", "issuedAt", "retrievedAt", "isDemo"],
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "code": {
+                  "const": "demo"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "isDemo": {
+                  "const": true
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "isDemo": {
+                  "const": false
+                }
+              }
+            }
+          }
+        ],
+        "description": "issuedAt is actual provider issuance, null when unknown; never synthesize it from retrieval time."
+      },
+      "ForecastHour": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "at": {
+            "$ref": "#/components/schemas/Instant"
+          },
+          "temperatureC": {
+            "type": "number",
+            "minimum": -100,
+            "maximum": 70
+          }
+        },
+        "required": ["at", "temperatureC"],
+        "description": "Hour interval [at, at+1h); air temperature at 2 m. Missing provider temperatures invalidate a complete refresh."
+      },
+      "PlotForecast": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "plotId": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "samplePoint": {
+            "$ref": "#/components/schemas/Point"
+          },
+          "source": {
+            "$ref": "#/components/schemas/Source"
+          },
+          "temperatureHeightM": {
+            "const": 2
+          },
+          "hours": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ForecastHour"
+            },
+            "minItems": 1,
+            "maxItems": 168
+          }
+        },
+        "required": [
+          "plotId",
+          "samplePoint",
+          "source",
+          "temperatureHeightM",
+          "hours"
+        ]
+      },
+      "ForecastSummary": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "schemaVersion": {
+            "const": 1
+          },
+          "fetchedAt": {
+            "$ref": "#/components/schemas/Instant"
+          },
+          "windowStart": {
+            "$ref": "#/components/schemas/Instant"
+          },
+          "windowEnd": {
+            "$ref": "#/components/schemas/Instant"
+          },
+          "plots": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlotForecast"
+            },
+            "minItems": 1,
+            "maxItems": 10
+          }
+        },
+        "required": [
+          "schemaVersion",
+          "fetchedAt",
+          "windowStart",
+          "windowEnd",
+          "plots"
+        ],
+        "description": "Exact farms.forecast_summary JSON. Unique plot IDs; equal complete hourly windows for all plots; fetchedAt=max(source.retrievedAt). Cross-field checks are defined in domain-model.md."
+      },
+      "CropCycle": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "plotId": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "cropCode": {
+            "$ref": "#/components/schemas/CropCode"
+          },
+          "seasonLabel": {
+            "type": "string",
+            "pattern": "^[0-9]{4}/[0-9]{2}$"
+          },
+          "sownOn": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LocalDate"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "stageCode": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StageCode"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "stageAsOf": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LocalDate"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "endedOn": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LocalDate"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "updatedAt": {
+            "$ref": "#/components/schemas/Instant"
+          }
+        },
+        "required": [
+          "id",
+          "plotId",
+          "cropCode",
+          "seasonLabel",
+          "sownOn",
+          "stageCode",
+          "stageAsOf",
+          "endedOn",
+          "updatedAt"
+        ],
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "cropCode": {
+                  "const": "maize"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "stageCode": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": ["V3", "V6", "VT", "R1"]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "stageCode": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": ["V2", "R1", "R4", "R6"]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "stageCode": {
+                  "type": "null"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "stageAsOf": {
+                  "type": "null"
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "stageAsOf": {
+                  "$ref": "#/components/schemas/LocalDate"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "EventEvidence": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "schemaVersion": {
+            "const": 1
+          },
+          "scope": {
+            "type": "string",
+            "enum": ["farm_demo", "plot_forecast"]
+          },
+          "plotIds": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Id"
+            },
+            "minItems": 1,
+            "maxItems": 10,
+            "uniqueItems": true
+          },
+          "forecastDate": {
+            "$ref": "#/components/schemas/LocalDate"
+          },
+          "samplePoint": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Point"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source": {
+            "$ref": "#/components/schemas/Source"
+          },
+          "temperatureHeightM": {
+            "const": 2
+          },
+          "detectionThresholdC": {
+            "const": 0
+          },
+          "hours": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ForecastHour"
+            },
+            "minItems": 1,
+            "maxItems": 24
+          }
+        },
+        "required": [
+          "schemaVersion",
+          "scope",
+          "plotIds",
+          "forecastDate",
+          "samplePoint",
+          "source",
+          "temperatureHeightM",
+          "detectionThresholdC",
+          "hours"
+        ],
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "scope": {
+                  "const": "farm_demo"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "source": {
+                  "properties": {
+                    "code": {
+                      "const": "demo"
+                    }
+                  }
+                },
+                "samplePoint": {
+                  "type": "null"
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "plotIds": {
+                  "maxItems": 1
+                },
+                "samplePoint": {
+                  "$ref": "#/components/schemas/Point"
+                },
+                "source": {
+                  "properties": {
+                    "code": {
+                      "const": "open_meteo"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ],
+        "description": "Exact events.evidence JSON. One UTC calendar date. Include all available forecast hours for that date, including above-zero values."
+      },
+      "EventSnapshot": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "status": {
+            "$ref": "#/components/schemas/EventStatus"
+          },
+          "startsAt": {
+            "$ref": "#/components/schemas/Instant"
+          },
+          "endsAt": {
+            "$ref": "#/components/schemas/Instant"
+          },
+          "evidence": {
+            "$ref": "#/components/schemas/EventEvidence"
+          }
+        },
+        "required": ["id", "status", "startsAt", "endsAt", "evidence"]
+      },
+      "Generation": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "method": {
+            "type": "string",
+            "enum": ["template", "llm"]
+          },
+          "modelId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "promptVersion": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": ["method", "modelId", "promptVersion"],
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "method": {
+                  "const": "template"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "modelId": {
+                  "type": "null"
+                },
+                "promptVersion": {
+                  "type": "null"
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "modelId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                },
+                "promptVersion": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 100
+                }
+              }
+            }
+          }
+        ]
+      },
+      "InputSnapshot": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "schemaVersion": {
+            "const": 1
+          },
+          "plotId": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "cropCycle": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CropCycle"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "event": {
+            "$ref": "#/components/schemas/EventSnapshot"
+          },
+          "ruleSetVersion": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "matchedRuleCodes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "minItems": 0,
+            "maxItems": 20,
+            "uniqueItems": true
+          },
+          "generation": {
+            "$ref": "#/components/schemas/Generation"
+          }
+        },
+        "required": [
+          "schemaVersion",
+          "plotId",
+          "cropCycle",
+          "event",
+          "ruleSetVersion",
+          "matchedRuleCodes",
+          "generation"
+        ],
+        "description": "Exact plot_alerts.input_snapshot JSON. cropCycle/event/plot IDs must match referenced rows at publication; immutable evidence within a replaceable current result."
+      },
+      "PlotAlert": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "plotId": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "eventId": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "assessmentState": {
+            "$ref": "#/components/schemas/AssessmentState"
+          },
+          "riskLevel": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RiskLevel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1000
+          },
+          "recommendation": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1000
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "ruleVersion": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "generatedAt": {
+            "$ref": "#/components/schemas/Instant"
+          },
+          "validUntil": {
+            "$ref": "#/components/schemas/Instant"
+          },
+          "generationMethod": {
+            "type": "string",
+            "enum": ["template", "llm"]
+          },
+          "inputSnapshot": {
+            "$ref": "#/components/schemas/InputSnapshot"
+          },
+          "isStale": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "plotId",
+          "eventId",
+          "assessmentState",
+          "riskLevel",
+          "reason",
+          "recommendation",
+          "ruleVersion",
+          "generatedAt",
+          "validUntil",
+          "generationMethod",
+          "inputSnapshot",
+          "isStale"
+        ],
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "assessmentState": {
+                  "const": "evaluated"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "riskLevel": {
+                  "$ref": "#/components/schemas/RiskLevel"
+                },
+                "recommendation": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1000
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "riskLevel": {
+                  "type": "null"
+                },
+                "recommendation": {
+                  "type": "null"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "Farm": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "province": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "locality": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "timezone": {
+            "const": "America/Argentina/Cordoba"
+          },
+          "dataMode": {
+            "$ref": "#/components/schemas/DataMode"
+          },
+          "boundary": {
+            "$ref": "#/components/schemas/Polygon"
+          },
+          "declaredAreaHa": {
+            "type": "number",
+            "minimum": 0.01,
+            "maximum": 1000000
+          },
+          "dataVersion": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "province",
+          "locality",
+          "timezone",
+          "dataMode",
+          "boundary",
+          "declaredAreaHa",
+          "dataVersion"
+        ]
+      },
+      "Plot": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "boundary": {
+            "$ref": "#/components/schemas/Polygon"
+          },
+          "samplePoint": {
+            "$ref": "#/components/schemas/Point"
+          },
+          "declaredAreaHa": {
+            "type": "number",
+            "minimum": 0.01,
+            "maximum": 1000000
+          },
+          "activeCropCycle": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CropCycle"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "boundary",
+          "samplePoint",
+          "declaredAreaHa",
+          "activeCropCycle"
+        ]
+      },
+      "Basemap": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "status": {
+                "const": "available"
+              },
+              "tileUrlTemplate": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048,
+                "pattern": "^https://",
+                "description": "Configured browser-safe HTTPS template with literal {z}, {x}, {y}; no server secret."
+              },
+              "attribution": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              "minZoom": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 24
+              },
+              "maxZoom": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 24
+              },
+              "acquiredAt": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/Instant"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "status",
+              "tileUrlTemplate",
+              "attribution",
+              "minZoom",
+              "maxZoom",
+              "acquiredAt"
+            ]
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "status": {
+                "const": "unavailable"
+              },
+              "reason": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 300
+              }
+            },
+            "required": ["status", "reason"]
+          }
+        ]
+      },
+      "EventCard": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "kind": {
+            "const": "frost"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160
+          },
+          "startsAt": {
+            "$ref": "#/components/schemas/Instant"
+          },
+          "endsAt": {
+            "$ref": "#/components/schemas/Instant"
+          },
+          "status": {
+            "$ref": "#/components/schemas/EventStatus"
+          },
+          "temporalState": {
+            "type": "string",
+            "enum": ["upcoming", "ongoing", "recent"]
+          },
+          "source": {
+            "$ref": "#/components/schemas/Source"
+          },
+          "evidence": {
+            "$ref": "#/components/schemas/EventEvidence"
+          },
+          "alerts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlotAlert"
+            },
+            "minItems": 1,
+            "maxItems": 10
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "title",
+          "startsAt",
+          "endsAt",
+          "status",
+          "temporalState",
+          "source",
+          "evidence",
+          "alerts"
+        ]
+      },
+      "Monitoring": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": ["never_refreshed", "fresh", "stale", "failed"]
+          },
+          "lastAttemptAt": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Instant"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "lastSuccessAt": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Instant"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "lastErrorCode": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RefreshErrorCode"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "forecastValidUntil": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Instant"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "status",
+          "lastAttemptAt",
+          "lastSuccessAt",
+          "lastErrorCode",
+          "forecastValidUntil"
+        ]
+      },
+      "DashboardResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "schemaVersion": {
+            "const": 1
+          },
+          "asOf": {
+            "$ref": "#/components/schemas/Instant"
+          },
+          "farm": {
+            "$ref": "#/components/schemas/Farm"
+          },
+          "plots": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Plot"
+            },
+            "minItems": 1,
+            "maxItems": 10
+          },
+          "basemap": {
+            "$ref": "#/components/schemas/Basemap"
+          },
+          "forecast": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ForecastSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EventCard"
+            },
+            "minItems": 0,
+            "maxItems": 50
+          },
+          "monitoring": {
+            "$ref": "#/components/schemas/Monitoring"
+          }
+        },
+        "required": [
+          "schemaVersion",
+          "asOf",
+          "farm",
+          "plots",
+          "basemap",
+          "forecast",
+          "events",
+          "monitoring"
+        ],
+        "description": "Full dashboard. Every property is present; missing values use null. Selection/filtering and map bounds are computed client-side from this bounded response.",
+        "examples": [
+          {
+            "schemaVersion": 1,
+            "asOf": "2026-09-12T04:00:00Z",
+            "farm": {
+              "id": "00000000-0000-4000-8000-000000000001",
+              "name": "Campo demo",
+              "province": "Córdoba",
+              "locality": null,
+              "timezone": "America/Argentina/Cordoba",
+              "dataMode": "demo",
+              "boundary": {
+                "type": "Polygon",
+                "coordinates": [
+                  [
+                    [-64.1, -31.4],
+                    [-64.09, -31.4],
+                    [-64.09, -31.39],
+                    [-64.1, -31.39],
+                    [-64.1, -31.4]
+                  ]
+                ]
+              },
+              "declaredAreaHa": 100,
+              "dataVersion": 2
+            },
+            "plots": [
+              {
+                "id": "00000000-0000-4000-8000-000000000002",
+                "name": "Lote 1",
+                "boundary": {
+                  "type": "Polygon",
+                  "coordinates": [
+                    [
+                      [-64.1, -31.4],
+                      [-64.09, -31.4],
+                      [-64.09, -31.39],
+                      [-64.1, -31.39],
+                      [-64.1, -31.4]
+                    ]
+                  ]
+                },
+                "samplePoint": {
+                  "type": "Point",
+                  "coordinates": [-64.095, -31.395]
+                },
+                "declaredAreaHa": 100,
+                "activeCropCycle": {
+                  "id": "00000000-0000-4000-8000-000000000003",
+                  "plotId": "00000000-0000-4000-8000-000000000002",
+                  "cropCode": "maize",
+                  "seasonLabel": "2026/27",
+                  "sownOn": "2026-08-01",
+                  "stageCode": "V6",
+                  "stageAsOf": "2026-09-11",
+                  "endedOn": null,
+                  "updatedAt": "2026-09-12T03:00:00Z"
+                }
+              }
+            ],
+            "basemap": {
+              "status": "unavailable",
+              "reason": "Proveedor satelital pendiente de configuración."
+            },
+            "forecast": {
+              "schemaVersion": 1,
+              "fetchedAt": "2026-09-12T04:00:00Z",
+              "windowStart": "2026-09-12T06:00:00Z",
+              "windowEnd": "2026-09-12T08:00:00Z",
+              "plots": [
+                {
+                  "plotId": "00000000-0000-4000-8000-000000000002",
+                  "samplePoint": {
+                    "type": "Point",
+                    "coordinates": [-64.095, -31.395]
+                  },
+                  "source": {
+                    "code": "demo",
+                    "url": null,
+                    "issuedAt": "2026-09-12T03:00:00Z",
+                    "retrievedAt": "2026-09-12T04:00:00Z",
+                    "isDemo": true
+                  },
+                  "temperatureHeightM": 2,
+                  "hours": [
+                    {
+                      "at": "2026-09-12T06:00:00Z",
+                      "temperatureC": -2
+                    },
+                    {
+                      "at": "2026-09-12T07:00:00Z",
+                      "temperatureC": -2
+                    }
+                  ]
+                }
+              ]
+            },
+            "events": [
+              {
+                "id": "00000000-0000-4000-8000-000000000004",
+                "kind": "frost",
+                "title": "Riesgo de helada — simulación",
+                "startsAt": "2026-09-12T06:00:00Z",
+                "endsAt": "2026-09-12T08:00:00Z",
+                "status": "active",
+                "temporalState": "upcoming",
+                "source": {
+                  "code": "demo",
+                  "url": null,
+                  "issuedAt": "2026-09-12T03:00:00Z",
+                  "retrievedAt": "2026-09-12T04:00:00Z",
+                  "isDemo": true
+                },
+                "evidence": {
+                  "schemaVersion": 1,
+                  "scope": "farm_demo",
+                  "plotIds": ["00000000-0000-4000-8000-000000000002"],
+                  "forecastDate": "2026-09-12",
+                  "samplePoint": null,
+                  "source": {
+                    "code": "demo",
+                    "url": null,
+                    "issuedAt": "2026-09-12T03:00:00Z",
+                    "retrievedAt": "2026-09-12T04:00:00Z",
+                    "isDemo": true
+                  },
+                  "temperatureHeightM": 2,
+                  "detectionThresholdC": 0,
+                  "hours": [
+                    {
+                      "at": "2026-09-12T06:00:00Z",
+                      "temperatureC": -2
+                    },
+                    {
+                      "at": "2026-09-12T07:00:00Z",
+                      "temperatureC": -2
+                    }
+                  ]
+                },
+                "alerts": [
+                  {
+                    "id": "00000000-0000-4000-8000-000000000005",
+                    "plotId": "00000000-0000-4000-8000-000000000002",
+                    "eventId": "00000000-0000-4000-8000-000000000004",
+                    "assessmentState": "evaluated",
+                    "riskLevel": "high",
+                    "reason": "Escenario sintético: la regla demo-maize-v6 coincide.",
+                    "recommendation": "Demostración: revisar el lote; no es asesoramiento agronómico.",
+                    "ruleVersion": "demo-v1",
+                    "generatedAt": "2026-09-12T04:00:00Z",
+                    "validUntil": "2026-09-12T05:00:00Z",
+                    "generationMethod": "template",
+                    "inputSnapshot": {
+                      "schemaVersion": 1,
+                      "plotId": "00000000-0000-4000-8000-000000000002",
+                      "cropCycle": {
+                        "id": "00000000-0000-4000-8000-000000000003",
+                        "plotId": "00000000-0000-4000-8000-000000000002",
+                        "cropCode": "maize",
+                        "seasonLabel": "2026/27",
+                        "sownOn": "2026-08-01",
+                        "stageCode": "V6",
+                        "stageAsOf": "2026-09-11",
+                        "endedOn": null,
+                        "updatedAt": "2026-09-12T03:00:00Z"
+                      },
+                      "event": {
+                        "id": "00000000-0000-4000-8000-000000000004",
+                        "status": "active",
+                        "startsAt": "2026-09-12T06:00:00Z",
+                        "endsAt": "2026-09-12T08:00:00Z",
+                        "evidence": {
+                          "schemaVersion": 1,
+                          "scope": "farm_demo",
+                          "plotIds": ["00000000-0000-4000-8000-000000000002"],
+                          "forecastDate": "2026-09-12",
+                          "samplePoint": null,
+                          "source": {
+                            "code": "demo",
+                            "url": null,
+                            "issuedAt": "2026-09-12T03:00:00Z",
+                            "retrievedAt": "2026-09-12T04:00:00Z",
+                            "isDemo": true
+                          },
+                          "temperatureHeightM": 2,
+                          "detectionThresholdC": 0,
+                          "hours": [
+                            {
+                              "at": "2026-09-12T06:00:00Z",
+                              "temperatureC": -2
+                            },
+                            {
+                              "at": "2026-09-12T07:00:00Z",
+                              "temperatureC": -2
+                            }
+                          ]
+                        }
+                      },
+                      "ruleSetVersion": "demo-v1",
+                      "matchedRuleCodes": ["demo-maize-v6"],
+                      "generation": {
+                        "method": "template",
+                        "modelId": null,
+                        "promptVersion": null
+                      }
+                    },
+                    "isStale": false
+                  }
+                ]
+              }
+            ],
+            "monitoring": {
+              "status": "fresh",
+              "lastAttemptAt": "2026-09-12T04:00:00Z",
+              "lastSuccessAt": "2026-09-12T04:00:00Z",
+              "lastErrorCode": null,
+              "forecastValidUntil": "2026-09-12T05:00:00Z"
+            }
+          }
+        ]
+      },
+      "RefreshResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "farmId": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "dataVersion": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "refreshedAt": {
+            "$ref": "#/components/schemas/Instant"
+          },
+          "dataMode": {
+            "$ref": "#/components/schemas/DataMode"
+          },
+          "eventCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 50
+          },
+          "alertCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 500
+          }
+        },
+        "required": [
+          "farmId",
+          "dataVersion",
+          "refreshedAt",
+          "dataMode",
+          "eventCount",
+          "alertCount"
+        ],
+        "examples": [
+          {
+            "farmId": "00000000-0000-4000-8000-000000000001",
+            "dataVersion": 2,
+            "refreshedAt": "2026-09-12T04:00:00Z",
+            "dataMode": "demo",
+            "eventCount": 1,
+            "alertCount": 1
+          }
+        ]
+      },
+      "UpdateCropCycleRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "expectedDataVersion": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "cropCode": {
+            "$ref": "#/components/schemas/CropCode"
+          },
+          "sownOn": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LocalDate"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "stageCode": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StageCode"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "stageAsOf": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LocalDate"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": ["expectedDataVersion"],
+        "anyOf": [
+          {
+            "required": ["cropCode"]
+          },
+          {
+            "required": ["sownOn"]
+          },
+          {
+            "required": ["stageCode"]
+          },
+          {
+            "required": ["stageAsOf"]
+          }
+        ],
+        "dependentRequired": {
+          "stageCode": ["stageAsOf"],
+          "stageAsOf": ["stageCode"]
+        },
+        "description": "PATCH only the seeded open cycle. Omitted fields remain unchanged; null clears nullable fields. Validate the merged cycle. Sending either stage field requires both. Changing crop requires both stage fields explicitly, with compatible values or null.",
+        "examples": [
+          {
+            "expectedDataVersion": 2,
+            "stageCode": "V3",
+            "stageAsOf": "2026-09-12"
+          },
+          {
+            "expectedDataVersion": 2,
+            "cropCode": "soybean",
+            "stageCode": null,
+            "stageAsOf": null
+          }
+        ]
+      },
+      "UpdateCropCycleResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "farmId": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "dataVersion": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "cropCycle": {
+            "$ref": "#/components/schemas/CropCycle"
+          }
+        },
+        "required": ["farmId", "dataVersion", "cropCycle"],
+        "examples": [
+          {
+            "farmId": "00000000-0000-4000-8000-000000000001",
+            "dataVersion": 3,
+            "cropCycle": {
+              "id": "00000000-0000-4000-8000-000000000003",
+              "plotId": "00000000-0000-4000-8000-000000000002",
+              "cropCode": "maize",
+              "seasonLabel": "2026/27",
+              "sownOn": "2026-08-01",
+              "stageCode": "V3",
+              "stageAsOf": "2026-09-12",
+              "endedOn": null,
+              "updatedAt": "2026-09-12T04:05:00Z"
+            }
+          }
+        ]
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "BAD_REQUEST",
+                  "UNAUTHENTICATED",
+                  "NOT_FOUND",
+                  "VERSION_CONFLICT",
+                  "STALE_PROVIDER_DATA",
+                  "PAYLOAD_LIMIT_EXCEEDED",
+                  "VALIDATION_ERROR",
+                  "RATE_LIMITED",
+                  "REFRESH_UNAVAILABLE",
+                  "INTERNAL_ERROR"
+                ]
+              },
+              "message": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 300
+              },
+              "details": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "path": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200
+                    },
+                    "message": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 300
+                    }
+                  },
+                  "required": ["path", "message"]
+                },
+                "minItems": 0,
+                "maxItems": 20
+              }
+            },
+            "required": ["code", "message"]
+          }
+        },
+        "required": ["error"],
+        "examples": [
+          {
+            "error": {
+              "code": "VERSION_CONFLICT",
+              "message": "Farm data changed. Reload and retry."
+            }
+          }
+        ]
+      },
+      "RiskRule": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "cropCode": {
+            "$ref": "#/components/schemas/CropCode"
+          },
+          "stageCodes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StageCode"
+            },
+            "minItems": 1,
+            "maxItems": 8,
+            "uniqueItems": true
+          },
+          "temperatureHeightM": {
+            "const": 2
+          },
+          "thresholdC": {
+            "type": "number",
+            "minimum": -100,
+            "maximum": 0
+          },
+          "minimumConsecutiveHours": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 24
+          },
+          "stageMaxAgeDays": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 30
+          },
+          "riskLevel": {
+            "$ref": "#/components/schemas/RiskLevel"
+          },
+          "reviewState": {
+            "type": "string",
+            "enum": ["synthetic", "approved"]
+          },
+          "evidenceUrl": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uri",
+                "pattern": "^https://",
+                "maxLength": 2048
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reasonTemplate": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1000
+          },
+          "recommendationTemplate": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1000
+          }
+        },
+        "required": [
+          "code",
+          "cropCode",
+          "stageCodes",
+          "temperatureHeightM",
+          "thresholdC",
+          "minimumConsecutiveHours",
+          "stageMaxAgeDays",
+          "riskLevel",
+          "reviewState",
+          "evidenceUrl",
+          "reasonTemplate",
+          "recommendationTemplate"
+        ],
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "reviewState": {
+                  "const": "approved"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "evidenceUrl": {
+                  "type": "string",
+                  "format": "uri",
+                  "pattern": "^https://",
+                  "maxLength": 2048
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "cropCode": {
+                  "const": "maize"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "stageCodes": {
+                  "items": {
+                    "enum": ["V3", "V6", "VT", "R1"]
+                  }
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "stageCodes": {
+                  "items": {
+                    "enum": ["V2", "R1", "R4", "R6"]
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "RuleSet": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "version": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "rules": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RiskRule"
+            },
+            "minItems": 0,
+            "maxItems": 20
+          }
+        },
+        "required": ["version", "rules"],
+        "examples": [
+          {
+            "version": "demo-v1",
+            "rules": [
+              {
+                "code": "demo-maize-v3",
+                "cropCode": "maize",
+                "stageCodes": ["V3"],
+                "temperatureHeightM": 2,
+                "thresholdC": -1,
+                "minimumConsecutiveHours": 1,
+                "stageMaxAgeDays": 14,
+                "riskLevel": "moderate",
+                "reviewState": "synthetic",
+                "evidenceUrl": null,
+                "reasonTemplate": "Escenario sintético: la regla {code} coincide.",
+                "recommendationTemplate": "Demostración: revisar el lote; no es asesoramiento agronómico."
+              },
+              {
+                "code": "demo-maize-v6",
+                "cropCode": "maize",
+                "stageCodes": ["V6"],
+                "temperatureHeightM": 2,
+                "thresholdC": -1,
+                "minimumConsecutiveHours": 1,
+                "stageMaxAgeDays": 14,
+                "riskLevel": "high",
+                "reviewState": "synthetic",
+                "evidenceUrl": null,
+                "reasonTemplate": "Escenario sintético: la regla {code} coincide.",
+                "recommendationTemplate": "Demostración: revisar el lote; no es asesoramiento agronómico."
+              },
+              {
+                "code": "demo-soybean-r4",
+                "cropCode": "soybean",
+                "stageCodes": ["R4"],
+                "temperatureHeightM": 2,
+                "thresholdC": -1,
+                "minimumConsecutiveHours": 1,
+                "stageMaxAgeDays": 14,
+                "riskLevel": "high",
+                "reviewState": "synthetic",
+                "evidenceUrl": null,
+                "reasonTemplate": "Escenario sintético: la regla {code} coincide.",
+                "recommendationTemplate": "Demostración: revisar el lote; no es asesoramiento agronómico."
+              }
+            ]
+          }
+        ]
+      }
+    }
+  }
+}
