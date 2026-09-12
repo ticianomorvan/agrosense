@@ -21,7 +21,7 @@ DECLARE
   next_version integer;
   key_name text;
 BEGIN
-  IF jsonb_typeof(p_patch) <> 'object' THEN
+  IF jsonb_typeof(p_patch) IS DISTINCT FROM 'object' THEN
     RAISE EXCEPTION 'INVALID:Request body must be an object';
   END IF;
   FOR key_name IN SELECT jsonb_object_keys(p_patch) LOOP
@@ -35,13 +35,27 @@ BEGIN
   IF (p_patch ? 'stageCode') <> (p_patch ? 'stageAsOf') THEN
     RAISE EXCEPTION 'INVALID:stageCode and stageAsOf must be supplied together';
   END IF;
+  -- Authenticated clients can invoke this RPC without passing through the API.
+  FOREACH key_name IN ARRAY ARRAY['sownOn', 'stageAsOf'] LOOP
+    IF p_patch ? key_name AND p_patch->key_name <> 'null'::jsonb THEN
+      IF jsonb_typeof(p_patch->key_name) <> 'string'
+         OR p_patch->>key_name !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' THEN
+        RAISE EXCEPTION 'INVALID:Dates must be YYYY-MM-DD strings or null';
+      END IF;
+      BEGIN
+        PERFORM (p_patch->>key_name)::date;
+      EXCEPTION WHEN invalid_datetime_format OR datetime_field_overflow THEN
+        RAISE EXCEPTION 'INVALID:Date is not a valid calendar date';
+      END;
+    END IF;
+  END LOOP;
 
   SELECT f.* INTO farm_row
   FROM public.farms AS f
   WHERE f.id = p_farm_id AND f.owner_id = auth.uid()
   FOR UPDATE;
   IF NOT FOUND THEN RAISE EXCEPTION 'NOT_FOUND'; END IF;
-  IF farm_row.data_version <> p_expected_data_version THEN
+  IF farm_row.data_version IS DISTINCT FROM p_expected_data_version THEN
     RAISE EXCEPTION 'VERSION_CONFLICT';
   END IF;
 
@@ -60,11 +74,11 @@ BEGIN
   next_crop_code := CASE WHEN p_patch ? 'cropCode'
     THEN p_patch->>'cropCode' ELSE cycle_row.crop_code END;
   next_sown_on := CASE WHEN p_patch ? 'sownOn'
-    THEN NULLIF(p_patch->>'sownOn', '')::date ELSE cycle_row.sown_on END;
+    THEN (p_patch->>'sownOn')::date ELSE cycle_row.sown_on END;
   next_stage_code := CASE WHEN p_patch ? 'stageCode'
     THEN p_patch->>'stageCode' ELSE cycle_row.stage_code END;
   next_stage_as_of := CASE WHEN p_patch ? 'stageAsOf'
-    THEN NULLIF(p_patch->>'stageAsOf', '')::date ELSE cycle_row.stage_as_of END;
+    THEN (p_patch->>'stageAsOf')::date ELSE cycle_row.stage_as_of END;
 
   IF next_crop_code NOT IN ('maize', 'soybean') THEN
     RAISE EXCEPTION 'INVALID:cropCode is invalid';

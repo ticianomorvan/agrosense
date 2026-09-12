@@ -9,6 +9,7 @@ import { type ApiEnv, requireAuth } from "./lib/auth";
 import { CropCycleError, updateCropCycle } from "./lib/crop-cycle";
 import { DashboardPayloadLimitError, loadDashboard } from "./lib/dashboard";
 import { RefreshError, refreshFarm } from "./lib/refresh";
+import { readLimitedRequestBody } from "./lib/request-body";
 import { createServiceClient } from "./lib/supabase";
 
 const app = new Hono<ApiEnv>();
@@ -158,8 +159,8 @@ app.patch(
         },
         400,
       );
-    const rawBody = await c.req.text();
-    if (new TextEncoder().encode(rawBody).length > 16 * 1024)
+    const rawBody = await readLimitedRequestBody(c.req.raw, 16 * 1024);
+    if (rawBody === null)
       return c.json(
         {
           error: {

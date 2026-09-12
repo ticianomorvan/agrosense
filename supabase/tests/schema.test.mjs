@@ -98,6 +98,82 @@ before(async () => {
 });
 after(() => db.close());
 
+async function withCropCycleTransaction(fn) {
+  await asRole("authenticated", a, async () => {
+    await db.exec("BEGIN");
+    try {
+      const before = {
+        farm: (await db.query("SELECT * FROM farms WHERE id=$1", [farms[0]]))
+          .rows[0],
+      };
+      const update = (version, patch) =>
+        db.query("SELECT public.update_crop_cycle($1,$2,$3,$4) AS response", [
+          farms[0],
+          plots[0],
+          version,
+          JSON.stringify(patch),
+        ]);
+      await fn({ before, update });
+    } finally {
+      await db.exec("ROLLBACK");
+    }
+  });
+}
+
+test("rejects a null version without changing the crop cycle or farm", async () => {
+  await withCropCycleTransaction(async ({ update }) => {
+    await assert.rejects(update(null, { sownOn: null }), /VERSION_CONFLICT/);
+  });
+});
+
+for (const field of ["sownOn", "stageAsOf"]) {
+  for (const value of [
+    "-infinity",
+    "infinity",
+    "",
+    "2026-9-1",
+    "2026-02-30",
+    "0000-01-01",
+    20260901,
+    true,
+    {},
+    [],
+  ]) {
+    test(`rejects invalid RPC date ${field}=${JSON.stringify(value)}`, async () => {
+      await withCropCycleTransaction(async ({ before, update }) => {
+        const patch =
+          field === "sownOn"
+            ? { sownOn: value }
+            : { stageCode: "V3", stageAsOf: value };
+        await assert.rejects(
+          update(before.farm.data_version, patch),
+          /INVALID:/,
+        );
+      });
+    });
+  }
+}
+
+test("accepts ISO dates and null clearing through the authenticated RPC", async () => {
+  await withCropCycleTransaction(async ({ before, update }) => {
+    const version = before.farm.data_version;
+    const result = await update(version, {
+      sownOn: "2024-02-29",
+      stageCode: "V3",
+      stageAsOf: "2024-03-01",
+    });
+    assert.equal(result.rows[0].response.cropCycle.sownOn, "2024-02-29");
+    const cleared = await update(version + 1, {
+      sownOn: null,
+      stageCode: null,
+      stageAsOf: null,
+    });
+    assert.equal(cleared.rows[0].response.cropCycle.sownOn, null);
+    assert.equal(cleared.rows[0].response.cropCycle.stageAsOf, null);
+    assert.equal(cleared.rows[0].response.dataVersion, version + 2);
+  });
+});
+
 async function asRole(role, owner, fn) {
   await db.exec(`SET ROLE ${role}`);
   await db.query(`SELECT set_config('request.jwt.claim.sub',$1,false)`, [
