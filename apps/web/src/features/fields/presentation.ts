@@ -5,6 +5,15 @@ import type {
 } from "@agrosense/contracts";
 import type { Tone } from "../../components/ui";
 
+const riskPresentation = {
+  high: { label: "High risk", tone: "critical" },
+  moderate: { label: "Moderate risk", tone: "warning" },
+  low: { label: "Low risk", tone: "ok" },
+} satisfies Record<
+  NonNullable<PlotAlert["riskLevel"]>,
+  { label: string; tone: Tone }
+>;
+
 export function formatInstant(value: string | null) {
   if (!value) return "Unavailable";
   return new Intl.DateTimeFormat("en-GB", {
@@ -44,11 +53,8 @@ export function plotStatus(
 ): { label: string; tone: Tone; reason: string; time: string | null } {
   const current = currentAlert(data, plotId);
   if (current) {
-    const level = current.alert.riskLevel;
     return {
-      label: `${level === "high" ? "High" : level === "moderate" ? "Moderate" : "Low"} risk`,
-      tone:
-        level === "high" ? "critical" : level === "moderate" ? "warning" : "ok",
+      ...riskPresentation[current.alert.riskLevel ?? "low"],
       reason: current.alert.reason,
       time: current.alert.generatedAt,
     };
