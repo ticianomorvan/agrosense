@@ -32,6 +32,9 @@ component library when the first product screen needs them.
 3. `apps/web`: React SPA using same-origin `/api` requests. Vite proxies them to
    Wrangler locally. Production assets are served by Workers Static Assets.
 
+The API entrypoint exports the Hono app and Durable Object class. Wrangler minifies
+the production Worker bundle.
+
 Both apps depend on contracts; contracts never imports application code.
 TypeScript uses ESM, named exports, and inferred schema types:
 
