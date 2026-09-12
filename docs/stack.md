@@ -21,8 +21,10 @@ local runtime checks for API responses and SPA fallback.
 | Persistence | Supabase Postgres + Auth | Typed Data API client, JWT verification, and owner-scoped RLS |
 
 Use Node 24 and the pnpm version pinned in package.json. Exact dependency
-resolutions live in pnpm-lock.yaml. Add routing, server-state caching, and a UI
-component library when the first product screen needs them.
+resolutions live in pnpm-lock.yaml. The frontend foundation uses TanStack Query for server state, Leaflet for maps,
+and a small local component library styled with the fixed plain CSS tokens.
+See [frontend patterns](frontend-foundation.md) and [Sentinel-2](sentinel-2.md).
+Routing is deferred while there is only one workspace screen.
 
 ## Layout and implementation order
 

@@ -17,8 +17,8 @@ pnpm install
 pnpm dev
 ```
 
-Open http://localhost:5173. The SPA calls `/api/health` through Vite's proxy to
-Wrangler at http://127.0.0.1:8787. The starter health screen needs no cloud credentials. Authenticated API routes
+Open http://localhost:5173. Vite forwards `/api` requests to
+Wrangler at http://127.0.0.1:8787; `/api/health` remains available for diagnostics. The starter health screen needs no cloud credentials. Authenticated API routes
 use the Supabase settings in `apps/api/.env`. The initial web build supplies Wrangler's static asset directory;
 Vite provides live frontend changes at port 5173.
 
@@ -52,3 +52,15 @@ Supabase is provisioned with the five-table domain schema and owner-scoped RLS.
 See [Supabase setup](docs/supabase.md) for the ignored API `.env`, authentication
 boundary, migration commands, and the remaining product slices. Keep credentials
 out of Git and client bundles.
+
+## Frontend workspace
+
+Run `pnpm dev`, open the SPA and choose **Explore demo farm**. The demonstration
+contains synthetic plot boundaries and crop context; weather and imagery remain
+explicitly unavailable. The map supports plot selection, crop filtering and a
+phone-friendly alternate view. No real farm data or provider credentials are
+required for the demo.
+
+See [frontend patterns](docs/frontend-foundation.md) for the local UI library and
+TanStack Query adapter, and [Sentinel-2 integration](docs/sentinel-2.md) for the
+authenticated imagery route, configuration and remaining integration work.
