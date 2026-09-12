@@ -16,6 +16,7 @@
     "@openrouter/ai-sdk-provider": "3.0.0",
     "@supabase/supabase-js": "^2.116.0",
     "ai": "7.0.99",
+    "fast-png": "^8.0.0",
     "hono": "4.13.7",
     "jose": "^6.2.12",
     "zod": "4.6.2"

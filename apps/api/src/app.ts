@@ -13,11 +13,13 @@ import { jsonError } from "./lib/http";
 import { RefreshError, refreshFarm } from "./lib/refresh";
 import { readLimitedRequestBody } from "./lib/request-body";
 import { createServiceClient } from "./lib/supabase";
+import { satelliteRoutes } from "./satellite/routes";
 import { whatsapp } from "./whatsapp";
 
 const app = new Hono<ApiEnv>();
 
 app.route("/api/whatsapp", whatsapp);
+app.route("/", satelliteRoutes);
 
 app.get("/api/health", (c) =>
   c.json({ status: "ok", service: "agrosense-api" } satisfies HealthResponse),
