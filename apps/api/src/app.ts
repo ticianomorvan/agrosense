@@ -101,14 +101,11 @@ app.patch(
   async (c) => {
     c.header("Cache-Control", "private, no-store");
     if (Object.keys(c.req.query()).length > 0)
-      return c.json(
-        {
-          error: {
-            code: "BAD_REQUEST",
-            message: "Query parameters are unsupported",
-          },
-        },
+      return jsonError(
+        c,
         400,
+        "BAD_REQUEST",
+        "Query parameters are unsupported",
       );
     const farmId = c.req.param("farmId");
     const plotId = c.req.param("plotId");
@@ -116,45 +113,29 @@ app.patch(
       !uuidSchema.safeParse(farmId).success ||
       !uuidSchema.safeParse(plotId).success
     )
-      return c.json(
-        {
-          error: {
-            code: "BAD_REQUEST",
-            message: "farmId and plotId must be UUIDs",
-          },
-        },
+      return jsonError(
+        c,
         400,
+        "BAD_REQUEST",
+        "farmId and plotId must be UUIDs",
       );
     const rawBody = await readLimitedRequestBody(c.req.raw, 16 * 1024);
     if (rawBody === null)
-      return c.json(
-        {
-          error: {
-            code: "PAYLOAD_TOO_LARGE",
-            message: "Request body is too large",
-          },
-        },
+      return jsonError(
+        c,
         413,
+        "PAYLOAD_TOO_LARGE",
+        "Request body is too large",
       );
     let body: unknown;
     try {
       body = JSON.parse(rawBody);
     } catch {
-      return c.json(
-        {
-          error: { code: "BAD_REQUEST", message: "Request body must be JSON" },
-        },
-        400,
-      );
+      return jsonError(c, 400, "BAD_REQUEST", "Request body must be JSON");
     }
     const parsed = updateCropCycleRequestSchema.safeParse(body);
     if (!parsed.success)
-      return c.json(
-        {
-          error: { code: "BAD_REQUEST", message: "Invalid crop-cycle request" },
-        },
-        400,
-      );
+      return jsonError(c, 400, "BAD_REQUEST", "Invalid crop-cycle request");
     try {
       return c.json(
         await updateCropCycle(c.get("supabase"), farmId, plotId, parsed.data),
@@ -162,29 +143,15 @@ app.patch(
     } catch (error) {
       if (!(error instanceof CropCycleError)) throw error;
       if (error.failure.kind === "not_found")
-        return c.json(
-          {
-            error: {
-              code: "NOT_FOUND",
-              message: "Farm, plot, or crop cycle not found",
-            },
-          },
+        return jsonError(
+          c,
           404,
+          "NOT_FOUND",
+          "Farm, plot, or crop cycle not found",
         );
       if (error.failure.kind === "conflict")
-        return c.json(
-          {
-            error: {
-              code: "VERSION_CONFLICT",
-              message: "Farm data has changed",
-            },
-          },
-          409,
-        );
-      return c.json(
-        { error: { code: "BAD_REQUEST", message: error.failure.message } },
-        400,
-      );
+        return jsonError(c, 409, "VERSION_CONFLICT", "Farm data has changed");
+      return jsonError(c, 400, "BAD_REQUEST", error.failure.message);
     }
   },
 );

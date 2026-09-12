@@ -1,9 +1,8 @@
-import { createClient } from "@supabase/supabase-js";
+import { pointSchema } from "@agrosense/contracts";
 import { tool } from "ai";
 import { z } from "zod";
-import type { Database } from "../lib/database.types";
 import { boundedFetch } from "../lib/http";
-import { readSupabaseConfig, type SupabaseBindings } from "../lib/supabase";
+import { createServiceClient, type SupabaseBindings } from "../lib/supabase";
 import {
   FARM_TIMEZONE,
   getPlotForecast,
@@ -29,13 +28,7 @@ const plotSchema = z.object({
   farms: z.object({ owner_id: z.uuid() }),
 });
 const locatedPlotSchema = plotSchema.extend({
-  sample_point_geojson: z.object({
-    type: z.literal("Point"),
-    coordinates: z.tuple([
-      z.number().min(-180).max(180),
-      z.number().min(-90).max(90),
-    ]),
-  }),
+  sample_point_geojson: pointSchema.strip(),
   farms: z.object({
     owner_id: z.uuid(),
     data_mode: z.enum(["demo", "live"]),
@@ -58,26 +51,16 @@ export function createAgentTools(options: {
   // Server-selected identity is captured here and is absent from all tool schemas.
   const ownerId = z.uuid().parse(options.ownerId);
   function client(signal: AbortSignal) {
-    const config = readSupabaseConfig(options.env);
-    const secret = options.env.SUPABASE_SECRET_KEY;
-    if (!secret) throw new Error("Agent data access not configured");
-    return createClient<Database>(config.url, secret, {
-      auth: {
-        persistSession: false,
-        autoRefreshToken: false,
-        detectSessionInUrl: false,
-      },
-      global: {
-        fetch: (input, init) =>
-          boundedFetch(input, init ?? {}, {
-            fetcher,
-            signal,
-            timeoutMs: 8000,
-            maxBytes: 128 * 1024,
-          }),
-      },
-    });
+    return createServiceClient(options.env, (input, init) =>
+      boundedFetch(input, init ?? {}, {
+        fetcher,
+        signal,
+        timeoutMs: 8000,
+        maxBytes: 128 * 1024,
+      }),
+    );
   }
+
   async function read(
     abortSignal: AbortSignal | undefined,
     action: (

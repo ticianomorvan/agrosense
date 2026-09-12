@@ -1,3 +1,4 @@
+import type { Point } from "@agrosense/contracts";
 import { z } from "zod";
 import { boundedFetch } from "../lib/http";
 
@@ -36,7 +37,7 @@ export function localDate(now: Date): string {
 export async function getPlotForecast(options: {
   plotId: string;
   plotName: string;
-  coordinates: [number, number];
+  coordinates: Point["coordinates"];
   days: number;
   signal: AbortSignal;
   fetcher: typeof fetch;
