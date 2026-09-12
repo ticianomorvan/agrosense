@@ -164,7 +164,9 @@ whose time has passed is still a forecast; it is not evidence that damage occurr
 
 Validate `metrics` by category with explicit units and measurement context.
 For example, a frost prediction can carry `minTemperatureC`,
-`belowThresholdDurationHours`, and `measurementHeightM`, each nullable if absent.
+`belowThresholdDurationHours`, `thresholdTemperatureC`, and `measurementHeightM`,
+each nullable if absent. Duration requires its threshold and a defined time
+interval; otherwise the rule cannot compare duration measurements consistently.
 Do not treat a provider's two-meter air temperature as a crop-apex measurement.
 No missing metric should become zero.
 
@@ -524,8 +526,9 @@ Acceptance cases for later implementation:
   without duplicate terminal results. Technical failure cannot poison the result key.
 - Provider revisions arriving out of order cannot rewind the current event;
   old assessment details still show the original title, interval, and evidence.
-- A cancelled or downgraded warning removes active risk and produces a correction
-  for prior recipients when messaging is enabled, including below-threshold updates.
+- A cancellation removes active risk; a downgrade updates it. Both produce a
+  correction for prior recipients when messaging is enabled, including
+  below-threshold updates.
 - Missing/stale weather and cloudy/old/missing imagery are labelled honestly.
   A failed provider is distinguishable from a successful empty result.
 - A user outside a farm cannot read or mutate its private records, even by
