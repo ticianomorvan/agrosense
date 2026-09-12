@@ -35,6 +35,11 @@ verified user JWT to the Data API, preserving RLS. The secret key is reserved fo
 explicit administrative/seed operations; there is no privileged request client or
 generic SQL endpoint.
 
+The [WhatsApp agent](whatsapp-agent.md) is an explicit exception: its isolated
+read-only adapter uses the secret key with mandatory owner filters for the
+configured operator after signed sender authentication. It does not create a
+privileged browser client or permit arbitrary queries or agricultural writes.
+
 ## Migrations and types
 
 Authenticate the CLI once and link this checkout before future remote operations:

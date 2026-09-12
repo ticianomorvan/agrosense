@@ -1,7 +1,7 @@
 # AgroSense
 
 TypeScript monorepo: React + Vite SPA, Hono API on Cloudflare Workers, and shared
-Zod contracts. See [stack decisions](docs/stack.md) for boundaries, [Supabase setup](docs/supabase.md), and [Kapso outbound WhatsApp](docs/kapso.md).
+Zod contracts. See [stack decisions](docs/stack.md) for boundaries, [Supabase setup](docs/supabase.md), [Kapso outbound WhatsApp](docs/kapso.md), and the [WhatsApp reasoning agent](docs/whatsapp-agent.md).
 
 See [product context](PRODUCT.md) for the intended audience and core job, and the
 [frontend implementation contract](docs/style-guide.md) for required visual
@@ -23,7 +23,7 @@ use the Supabase settings in `apps/api/.env`. The initial web build supplies Wra
 Vite provides live frontend changes at port 5173.
 
 ```sh
-pnpm check    # type checking, Biome, API tests, and production builds
+pnpm check    # types, lint, API/DB tests, builds, and mocked Worker integration
 pnpm preview  # built SPA + real local Worker at http://127.0.0.1:8787
 ```
 

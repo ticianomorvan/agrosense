@@ -55,6 +55,10 @@ See [Supabase setup](supabase.md) for credentials, migrations, types, and comman
 The Worker uses `supabase-js` over the HTTP Data API. `requireAuth` verifies user
 JWTs against Supabase JWKS and provides a request-scoped client that preserves
 row-level security. Secret-key operations are reserved for explicit administration.
+The [WhatsApp agent](whatsapp-agent.md) additionally uses a dedicated read-only
+adapter with server-selected identity and mandatory owner filters after verifying
+the linked sender's signed webhook. Its conversation state uses Cloudflare SQLite
+Durable Objects, separately from the five agricultural tables.
 Never put a secret/service-role key in Vite variables or a browser bundle.
 
 Shared contracts stay browser-safe. Database row types live in the API; product

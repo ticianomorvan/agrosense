@@ -11,7 +11,9 @@ user whose ID matches the configured operator. Validate requests, keep Kapso
 credentials server-side, bound provider requests to eight seconds, and return
 provider acceptance with a message ID. Missing settings must fail closed. Test
 authentication, operator authorization, invalid inputs, provider failures and
-ambiguous outcomes. No database writes, automated alerts or inbound webhooks.
+ambiguous outcomes. This manual endpoint makes no database writes or automated
+alerts. The subsequent [WhatsApp agent foundation](whatsapp-agent.md) adds signed
+inbound webhooks, read-only tools and durable conversational replies.
 
 ## Configuration
 
@@ -63,8 +65,8 @@ A successful provider response returns HTTP 200:
 {"messageId":"wamid.…","status":"accepted"}
 ```
 
-Acceptance does not establish delivery or reading. This slice has no delivery
-webhook or local message history. The caller chooses the recipient and wording;
+Acceptance does not establish delivery or reading. The manual endpoint has no
+delivery webhook or local message history. The caller chooses the recipient and wording;
 no farm data is automatically fetched or sent. The adapter does not log phone
 numbers, message bodies, credentials or raw provider errors.
 
