@@ -364,3 +364,162 @@ describe("dashboard payload limits", () => {
     },
   );
 });
+
+describe("dashboard polygon contract", () => {
+  const dashboard = projectDashboard(farm, [plot], [], [], []);
+  const acceptsRing = (ring: number[][]) =>
+    dashboardResponseSchema.safeParse({
+      ...dashboard,
+      farm: {
+        ...dashboard.farm,
+        boundary: { type: "Polygon", coordinates: [ring] },
+      },
+    }).success;
+
+  it.each([
+    { name: "empty ring", ring: [] },
+    {
+      name: "too few positions",
+      ring: [
+        [0, 0],
+        [1, 0],
+        [0, 0],
+      ],
+    },
+    {
+      name: "open ring",
+      ring: [
+        [0, 0],
+        [1, 0],
+        [1, 1],
+        [0, 1],
+      ],
+    },
+    {
+      name: "collinear vertices",
+      ring: [
+        [0, 0],
+        [1, 0],
+        [2, 0],
+        [0, 0],
+      ],
+    },
+    {
+      name: "crossing edges",
+      ring: [
+        [0, 0],
+        [2, 2],
+        [0, 2],
+        [2, 0],
+        [0, 0],
+      ],
+    },
+    {
+      name: "repeated interior vertex",
+      ring: [
+        [0, 0],
+        [2, 0],
+        [1, 1],
+        [2, 0],
+        [0, 2],
+        [0, 0],
+      ],
+    },
+    {
+      name: "vertex touching another edge",
+      ring: [
+        [0, 0],
+        [2, 0],
+        [2, 2],
+        [1, 0],
+        [0, 2],
+        [0, 0],
+      ],
+    },
+    {
+      name: "adjacent overlapping edges",
+      ring: [
+        [0, 0],
+        [2, 0],
+        [1, 0],
+        [2, 2],
+        [0, 0],
+      ],
+    },
+    {
+      name: "overlap across closing vertex",
+      ring: [
+        [1, 0],
+        [2, 0],
+        [2, 2],
+        [3, 0],
+        [1, 0],
+      ],
+    },
+  ])("rejects $name", ({ ring }) => {
+    expect(acceptsRing(ring)).toBe(false);
+  });
+
+  it.each([
+    {
+      name: "clockwise triangle",
+      ring: [
+        [0, 0],
+        [0, 1],
+        [1, 0],
+        [0, 0],
+      ],
+    },
+    {
+      name: "counterclockwise triangle",
+      ring: [
+        [0, 0],
+        [1, 0],
+        [0, 1],
+        [0, 0],
+      ],
+    },
+    {
+      name: "concave field",
+      ring: [
+        [0, 0],
+        [2, 0],
+        [2, 1],
+        [1, 1],
+        [1, 2],
+        [0, 2],
+        [0, 0],
+      ],
+    },
+    {
+      name: "straight intermediate vertex",
+      ring: [
+        [0, 0],
+        [1, 0],
+        [2, 0],
+        [2, 2],
+        [0, 0],
+      ],
+    },
+    {
+      name: "small field away from the origin",
+      ring: [
+        [-64, -31],
+        [-63.99999999, -31],
+        [-64, -30.99999999],
+        [-64, -31],
+      ],
+    },
+  ])("accepts $name", ({ ring }) => {
+    expect(acceptsRing(ring)).toBe(true);
+  });
+
+  it("rejects rings over the position limit", () => {
+    const ring = Array.from({ length: 5000 }, (_, index) => [
+      Math.cos((index / 5000) * Math.PI * 2),
+      Math.sin((index / 5000) * Math.PI * 2),
+    ]);
+    ring.push([1, 0]);
+    expect(acceptsRing(ring)).toBe(false);
+  });
+});

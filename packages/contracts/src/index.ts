@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { pointSchema, polygonSchema } from "./geometry";
 
 export const healthResponseSchema = z.object({
   status: z.literal("ok"),
@@ -14,17 +15,6 @@ export const uuidSchema = z.uuid();
 
 const instantSchema = z.iso.datetime({ offset: false });
 const localDateSchema = z.iso.date();
-const positionSchema = z
-  .tuple([z.number().min(-180).max(180), z.number().min(-90).max(90)])
-  .readonly();
-const pointSchema = z.object({
-  type: z.literal("Point"),
-  coordinates: positionSchema,
-});
-const polygonSchema = z.object({
-  type: z.literal("Polygon"),
-  coordinates: z.array(z.array(positionSchema)).length(1),
-});
 const sourceSchema = z.object({
   code: z.enum(["demo", "open_meteo"]),
   url: z.url().nullable(),
