@@ -3,6 +3,8 @@ import { readdir, readFile } from "node:fs/promises";
 import { DEMO_V1_RULESET, riskRuleSchema } from "@agrosense/contracts";
 import { PGlite } from "@electric-sql/pglite";
 import { afterAll, afterEach, beforeAll, expect, it, vi } from "vitest";
+import { dispatchNotifications, processWeather } from "../automation/jobs";
+import { readNotificationConfig } from "../automation/notification";
 import { loadDashboard } from "./dashboard";
 import { importDemoSeed } from "./demo-seed";
 import { refreshFarm } from "./refresh";
@@ -354,4 +356,110 @@ it("rejects null compare-and-swap tokens and a mismatched owner", async () => {
   const dashboard = await loadDashboard(userClient, farmId, now);
   expect(dashboard?.farm.dataVersion).toBe(1);
   expect(dashboard?.forecast).toBeNull();
+});
+
+it("runs scheduled weather → rules → outbox → Kapso → delivery with duplicate wakeups", async () => {
+  await db.exec("BEGIN");
+  try {
+    const { farmId } = await liveFarm();
+    // Isolate due work from other fixtures; the production claims have no farm input.
+    await db.query(
+      "UPDATE weather_schedules SET next_run_at=CASE WHEN farm_id=$1 THEN $2::timestamptz ELSE '9999-01-01'::timestamptz END",
+      [farmId, now],
+    );
+    await db.query("UPDATE notification_outbox SET status='cancelled'");
+    const contact = await serviceClient.rpc("configure_notification_contact", {
+      p_owner_id: owner,
+      p_phone_number: "5493515551234",
+      p_consented_at: now,
+      p_enabled: true,
+    });
+    expect(contact.error).toBeNull();
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(now));
+    const weatherFetcher = vi.fn(async () => weather(-2));
+    vi.stubGlobal("fetch", weatherFetcher);
+    const first = await processWeather(serviceClient);
+    expect(first).toMatchObject({
+      farmId,
+      claimed: 1,
+      published: 1,
+      eventCount: 1,
+      alertCount: 1,
+    });
+    expect(await processWeather(serviceClient)).toEqual({
+      claimed: 0,
+      published: 0,
+    });
+    expect(weatherFetcher).toHaveBeenCalledTimes(1);
+    const dashboard = await loadDashboard(userClient, farmId, now);
+    expect(dashboard?.events[0]?.alerts[0]?.riskLevel).toBe("high");
+    const sends: Record<string, unknown>[] = [];
+    const fetcher: typeof fetch = async (_input, init) => {
+      const body = JSON.parse(String(init?.body));
+      expect(body.to).toBe("5493515551234");
+      expect(body.type).toBe("template");
+      sends.push(body);
+      return Response.json({
+        messaging_product: "whatsapp",
+        messages: [{ id: "wamid.integration" }],
+      });
+    };
+    const notificationConfig = readNotificationConfig({
+      KAPSO_API_KEY: "test",
+      KAPSO_PHONE_NUMBER_ID: "123456",
+      KAPSO_NOTIFICATION_TEMPLATE_NAME: "agrosense_weather_alert",
+      KAPSO_NOTIFICATION_TEMPLATE_LANGUAGE: "es_AR",
+    });
+    const sent = await dispatchNotifications(
+      serviceClient,
+      notificationConfig,
+      { fetcher },
+    );
+    expect(sent).toMatchObject({ claimed: 1, accepted: 1 });
+    expect(
+      await dispatchNotifications(serviceClient, notificationConfig, {
+        fetcher,
+      }),
+    ).toMatchObject({ claimed: 0 });
+    vi.setSystemTime(new Date("2026-09-12T00:31:00Z"));
+    expect(await processWeather(serviceClient)).toMatchObject({
+      claimed: 1,
+      published: 1,
+    });
+    expect(
+      await dispatchNotifications(serviceClient, notificationConfig, {
+        fetcher,
+      }),
+    ).toMatchObject({ claimed: 0 });
+    expect(sends).toHaveLength(1);
+    const [, notificationId, token] = String(
+      sends[0]?.biz_opaque_callback_data,
+    ).split(":");
+    const args = {
+      p_phone_number_id: "123456",
+      p_message_id: "wamid.integration",
+      p_status: "delivered",
+      p_occurred_at: now,
+      p_recipient: "5493515551234",
+      p_notification_id: notificationId ?? null,
+      p_token: token ?? null,
+    };
+    expect(
+      (await serviceClient.rpc("record_notification_receipt", args)).error,
+    ).toBeNull();
+    expect(
+      (await serviceClient.rpc("record_notification_receipt", args)).error,
+    ).toBeNull();
+    const status = await userClient.rpc("get_farm_notification_status", {
+      p_farm_id: farmId,
+    });
+    expect(status.error).toBeNull();
+    expect(status.data).toMatchObject({
+      notifications: [{ status: "delivered", attempts: 1 }],
+    });
+    expect(JSON.stringify(status.data)).not.toContain("5493515551234");
+  } finally {
+    await db.exec("ROLLBACK");
+  }
 });

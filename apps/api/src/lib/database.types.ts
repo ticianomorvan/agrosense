@@ -1,5 +1,6 @@
 // Initial types generated from the migration in PostgreSQL (PGlite).
 // Regenerate from Supabase after applying migrations: pnpm db:types
+import type { AutomationFunctions } from "../automation/database.types";
 export type Json =
   | string
   | number
@@ -309,7 +310,7 @@ export type Database = {
       };
     };
     Views: { [_ in never]: never };
-    Functions: {
+    Functions: AutomationFunctions & {
       get_farm_dashboard_snapshot: {
         Args: { p_farm_id: string };
         Returns: Json;

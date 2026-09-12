@@ -33,6 +33,12 @@ The explicit 2026-09-12 WhatsApp requests add two scoped exceptions:
 The agent's bounded reasoning loop and separate Durable Object transport state
 do not change these five tables, dashboard refresh budgets or agronomic rules.
 
+The subsequent [automatic weather and notification feature](weather-automation.md)
+extends this scope with Supabase-managed scheduling, owner notification contacts,
+a transactional outbox, delivery receipts and execution history. The five
+agricultural tables and their forecast/risk contracts remain the publication
+model. Automatic monitoring targets live farms; synthetic rules remain demo-only.
+
 ```mermaid
 erDiagram
     AUTH_USERS ||--o{ FARMS : owns
@@ -68,7 +74,7 @@ erDiagram
   farm/plot boundaries including repeated closing points; 1 MiB UTF-8 dashboard
   JSON. Per plot: 168 hourly forecast samples. PATCH body limit: 16 KiB.
   Exceeding a limit rejects the whole operation; never truncate land or forecasts.
-- Manual refresh cooldown: 60 seconds per farm. Optional scheduled interval:
+- Manual refresh cooldown: 60 seconds per farm. Automatic live-farm interval:
   30 minutes. Provider deadline: 8 seconds per request, at most two concurrent
   requests; total refresh deadline: 55 seconds. Optional one LLM call: 5 seconds,
   at most 500 output tokens, validated output with template fallback.

@@ -61,7 +61,9 @@ another message. Conversation deduplication belongs to the agent.
 
 The recipient must message the connected business number first to open the
 24-hour customer service window. Templates for initiating conversations, bulk
-sending and delivery receipts are outside this foundation.
+sending are outside this manual endpoint. Proactive templates, durable dispatch
+and signed delivery receipts are implemented by the separate
+[automatic monitoring feature](weather-automation.md).
 
 Run `pnpm check` for authentication, validation, provider failures and local Worker
 coverage. Tests use fake credentials; they do not establish live delivery.
