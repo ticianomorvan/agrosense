@@ -3,6 +3,7 @@ import { z } from "zod";
 import { boundedFetch } from "../lib/http";
 
 export const FARM_TIMEZONE = "America/Argentina/Cordoba";
+export type ForecastBindings = { OPEN_METEO_API_KEY?: string };
 const temperature = z.number().min(-100).max(70);
 const providerSchema = z.object({
   timezone: z.literal(FARM_TIMEZONE),
@@ -39,11 +40,14 @@ export async function getPlotForecast(options: {
   plotName: string;
   coordinates: Point["coordinates"];
   days: number;
+  apiKey?: string;
   signal: AbortSignal;
   fetcher: typeof fetch;
   now: () => Date;
 }) {
-  const url = new URL("https://api.open-meteo.com/v1/forecast");
+  const url = new URL(
+    `https://${options.apiKey ? "customer-api" : "api"}.open-meteo.com/v1/forecast`,
+  );
   url.search = new URLSearchParams({
     latitude: String(options.coordinates[1]),
     longitude: String(options.coordinates[0]),
@@ -52,6 +56,7 @@ export async function getPlotForecast(options: {
     precipitation_unit: "mm",
     timezone: FARM_TIMEZONE,
     forecast_days: String(options.days),
+    ...(options.apiKey ? { apikey: options.apiKey } : {}),
   }).toString();
   const requestedAt = options.now();
   const response = await boundedFetch(

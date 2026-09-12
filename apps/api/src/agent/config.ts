@@ -1,12 +1,14 @@
 import { z } from "zod";
 import { type KapsoBindings, readKapsoConfig } from "../lib/kapso";
 import { readSupabaseConfig, type SupabaseBindings } from "../lib/supabase";
+import type { ForecastBindings } from "./forecast";
 import { hashIdentity } from "./identity";
 import { type ModelBindings, readModelConfig } from "./model";
 import type { WhatsAppConversation } from "./worker";
 
 export type AgentBindings = KapsoBindings &
   SupabaseBindings &
+  ForecastBindings &
   ModelBindings & {
     WHATSAPP_AGENT_ENABLED?: string;
     KAPSO_WEBHOOK_SECRET?: string;

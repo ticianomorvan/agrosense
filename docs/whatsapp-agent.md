@@ -49,12 +49,16 @@ Use the ignored `apps/api/.env` locally, based on
 | `OPENROUTER_API_KEY` | OpenRouter inference key |
 | `OPENROUTER_MODEL` | Default `deepseek/deepseek-v4.1-flash` |
 | `OPENROUTER_REASONING_EFFORT` | `low`, `medium` (default), or `high` |
+| `OPEN_METEO_API_KEY` | Optional customer key; uses the Open-Meteo customer forecast endpoint when set, otherwise the free endpoint |
 | `WHATSAPP_AGENT_ENABLED` | Literal `true` to enable; disabled by default |
 
 `KAPSO_ALLOWED_USER_ID` selects the single Supabase owner whose data every demo
 sender can query and authorizes run inspection. The business number is selected by
 `KAPSO_PHONE_NUMBER_ID`. Contact identities come from the signed inbound event;
 country-specific mobile prefixes are not inferred.
+
+The optional weather key stays inside the server-side forecast request. Tool
+results and error messages do not expose it or keyed provider URLs.
 
 The agent uses `ai` and `@openrouter/ai-sdk-provider`, with native Zod tool
 schemas. The provider uses `https://openrouter.ai/api/v1/chat/completions`.

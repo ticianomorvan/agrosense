@@ -106,7 +106,10 @@ export async function runAgent(options: {
               input,
               execution,
             )) as ToolResult;
-            if (JSON.stringify(result).length > 32768)
+            if (
+              new TextEncoder().encode(JSON.stringify(result)).byteLength >
+              32768
+            )
               result = {
                 ok: false,
                 error: {
