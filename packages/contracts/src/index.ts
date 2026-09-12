@@ -294,3 +294,5 @@ export type DashboardResponse = z.infer<typeof dashboardResponseSchema>;
 
 export { pointSchema };
 export type Point = z.infer<typeof pointSchema>;
+
+export * from "./satellite";

@@ -6,18 +6,23 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "vite build",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
     "@agrosense/contracts": "workspace:*",
+    "@tanstack/react-query": "^5.102.8",
+    "leaflet": "1.9.4",
     "react": "19.3.0",
     "react-dom": "19.3.0"
   },
   "devDependencies": {
+    "@types/leaflet": "^1.9.22",
     "@types/node": "^24.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "6.1.1",
-    "vite": "8.3.0"
+    "vite": "8.3.0",
+    "vitest": "5.0.0"
   }
 }
