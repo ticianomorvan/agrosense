@@ -1,5 +1,6 @@
 import { createMiddleware } from "hono/factory";
 import { errors } from "jose";
+import type { KapsoBindings } from "./kapso";
 import {
   createTokenVerifier,
   createUserClient,
@@ -8,7 +9,7 @@ import {
 } from "./supabase";
 
 export type ApiEnv = {
-  Bindings: SupabaseBindings;
+  Bindings: SupabaseBindings & KapsoBindings;
   Variables: { userId: string; supabase: ReturnType<typeof createUserClient> };
 };
 

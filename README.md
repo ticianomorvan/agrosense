@@ -1,7 +1,7 @@
 # AgroSense
 
 TypeScript monorepo: React + Vite SPA, Hono API on Cloudflare Workers, and shared
-Zod contracts. See [stack decisions](docs/stack.md) for boundaries and [Supabase setup](docs/supabase.md).
+Zod contracts. See [stack decisions](docs/stack.md) for boundaries, [Supabase setup](docs/supabase.md), and [Kapso outbound WhatsApp](docs/kapso.md).
 
 See [product context](PRODUCT.md) for the intended audience and core job, and the
 [frontend implementation contract](docs/style-guide.md) for required visual

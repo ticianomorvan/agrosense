@@ -1,8 +1,11 @@
 import type { HealthResponse, SessionResponse } from "@agrosense/contracts";
 import { Hono } from "hono";
 import { type ApiEnv, requireAuth } from "./lib/auth";
+import { whatsapp } from "./whatsapp";
 
 const app = new Hono<ApiEnv>();
+
+app.route("/api/whatsapp", whatsapp);
 
 app.get("/api/health", (c) =>
   c.json({ status: "ok", service: "agrosense-api" } satisfies HealthResponse),

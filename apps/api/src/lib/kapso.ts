@@ -1,0 +1,118 @@
+import type {
+  WhatsappMessageRequest,
+  WhatsappMessageResponse,
+} from "@agrosense/contracts";
+import { z } from "zod";
+
+export type KapsoBindings = {
+  KAPSO_API_KEY?: string;
+  KAPSO_PHONE_NUMBER_ID?: string;
+  KAPSO_ALLOWED_USER_ID?: string;
+};
+
+const configSchema = z.object({
+  KAPSO_API_KEY: z
+    .string()
+    .min(1)
+    .max(4096)
+    .regex(/^[\x21-\x7e]+$/),
+  KAPSO_PHONE_NUMBER_ID: z.string().regex(/^[1-9]\d{0,29}$/),
+  KAPSO_ALLOWED_USER_ID: z.uuid(),
+});
+
+type KapsoConfig = z.infer<typeof configSchema>;
+
+export class KapsoError extends Error {
+  constructor(
+    readonly code:
+      | "KAPSO_UNAVAILABLE"
+      | "KAPSO_REJECTED"
+      | "KAPSO_RATE_LIMITED"
+      | "SEND_OUTCOME_UNKNOWN",
+    readonly status: 502 | 503 | 504,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
+export function readKapsoConfig(env: KapsoBindings): KapsoConfig {
+  const config = configSchema.safeParse(env);
+  if (!config.success) {
+    throw new KapsoError(
+      "KAPSO_UNAVAILABLE",
+      503,
+      "WhatsApp sending is not configured",
+    );
+  }
+  return config.data;
+}
+
+// Only consume the documented fields needed by our public response.
+const sendResponseSchema = z.object({
+  messaging_product: z.literal("whatsapp"),
+  messages: z.tuple([z.object({ id: z.string().trim().min(1).max(1024) })]),
+});
+
+/** One attempt only: a lost response may still represent an accepted message. */
+export async function sendWhatsappText(
+  config: KapsoConfig,
+  message: WhatsappMessageRequest,
+  fetcher: typeof fetch = fetch,
+): Promise<WhatsappMessageResponse> {
+  const controller = new AbortController();
+  const deadline = setTimeout(() => controller.abort(), 8000);
+  try {
+    const response = await fetcher(
+      `https://api.kapso.ai/meta/whatsapp/v24.0/${config.KAPSO_PHONE_NUMBER_ID}/messages`,
+      {
+        method: "POST",
+        redirect: "error",
+        signal: controller.signal,
+        headers: {
+          "X-API-Key": config.KAPSO_API_KEY,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          messaging_product: "whatsapp",
+          recipient_type: "individual",
+          to: message.to,
+          type: "text",
+          text: { body: message.text, preview_url: false },
+        }),
+      },
+    );
+    if (!response.ok) {
+      // Do not expose or log upstream bodies; they can contain sensitive data.
+      await response.body?.cancel();
+      if (response.status === 429)
+        throw new KapsoError(
+          "KAPSO_RATE_LIMITED",
+          503,
+          "WhatsApp provider rate limit reached",
+        );
+      if (
+        response.status >= 400 &&
+        response.status < 500 &&
+        response.status !== 408
+      )
+        throw new KapsoError(
+          "KAPSO_REJECTED",
+          502,
+          "WhatsApp provider rejected the message",
+        );
+      throw new Error("Uncertain provider response");
+    }
+    const result = sendResponseSchema.parse(await response.json());
+    return { messageId: result.messages[0].id, status: "accepted" };
+  } catch (error) {
+    if (error instanceof KapsoError) throw error;
+    throw new KapsoError(
+      "SEND_OUTCOME_UNKNOWN",
+      controller.signal.aborted ? 504 : 502,
+      "Message outcome is unknown; check Kapso before retrying",
+    );
+  } finally {
+    clearTimeout(deadline);
+  }
+}
