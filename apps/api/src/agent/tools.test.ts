@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import { createAgentTools } from "./tools";
+import { createOpenRouterModel } from "./model";
+import { runAgent } from "./runner";
+import { call, chatResponse } from "./test-helpers";
+import { type AgentTools, createAgentTools, type ToolResult } from "./tools";
 
 const ownerId = "11111111-1111-4111-8111-111111111111";
 const farmId = "22222222-2222-4222-8222-222222222222";
@@ -51,7 +54,33 @@ function setup(data: unknown = [plot], weather: unknown = forecast) {
     expect(url.pathname).toBe("/v1/forecast");
     return Response.json(weather);
   });
-  return { fetcher, tools: createAgentTools({ env, ownerId, fetcher, now }) };
+  const registry = createAgentTools({ env, ownerId, fetcher, now });
+  return { fetcher, tools: directTools(registry), registry };
+}
+function directTools(registry: AgentTools) {
+  return {
+    execute: (
+      name: keyof typeof registry,
+      args: string,
+      abortSignal: AbortSignal,
+    ) => {
+      const execute = registry[name].execute as unknown as (
+        input: unknown,
+        options: {
+          toolCallId: string;
+          messages: [];
+          context: Record<string, never>;
+          abortSignal: AbortSignal;
+        },
+      ) => Promise<ToolResult>;
+      return execute(JSON.parse(args), {
+        toolCallId: "test",
+        messages: [],
+        context: {},
+        abortSignal,
+      });
+    },
+  };
 }
 const signal = () => new AbortController().signal;
 
@@ -209,23 +238,35 @@ describe("agent tools", () => {
   });
 
   it.each([
-    ["arbitrary_sql", "{}", "UNKNOWN_TOOL"],
-    ["get_forecast", "not-json", "INVALID_ARGUMENTS"],
-    ["get_forecast", JSON.stringify({ plotId, days: 8 }), "INVALID_ARGUMENTS"],
-    ["get_forecast", JSON.stringify({ plotId, days: 0 }), "INVALID_ARGUMENTS"],
-    [
-      "get_forecast",
-      JSON.stringify({ plotId, days: 3, ownerId: farmId }),
-      "INVALID_ARGUMENTS",
-    ],
-    ["list_farms", JSON.stringify({ ownerId: farmId }), "INVALID_ARGUMENTS"],
+    ["arbitrary_sql", "{}"],
+    ["get_forecast", "not-json"],
+    ["get_forecast", JSON.stringify({ plotId, days: 8 })],
+    ["get_forecast", JSON.stringify({ plotId, days: 0 })],
+    ["get_forecast", JSON.stringify({ plotId, days: 3, ownerId: farmId })],
+    ["list_farms", JSON.stringify({ ownerId: farmId })],
   ])(
     "rejects unauthorized tool or arguments (%s, case %#)",
-    async (name, args, code) => {
-      const { tools, fetcher } = setup();
-      expect(await tools.execute(name, args, signal())).toMatchObject({
+    async (name, args) => {
+      const { registry, fetcher } = setup();
+      const modelFetch = vi
+        .fn<typeof fetch>()
+        .mockResolvedValueOnce(chatResponse(null, [call(name, args)]))
+        .mockResolvedValueOnce(
+          chatResponse("Please choose an available plot."),
+        );
+      const result = await runAgent({
+        text: "Check",
+        history: [],
+        tools: registry,
+        model: createOpenRouterModel(
+          { OPENROUTER_API_KEY: "test" },
+          modelFetch,
+        ),
+        now,
+      });
+      expect(result.trace[0]).toMatchObject({
         ok: false,
-        error: { code },
+        errorCode: "INVALID_ARGUMENTS",
       });
       expect(fetcher).not.toHaveBeenCalled();
     },
@@ -270,7 +311,7 @@ describe("agent tools", () => {
     const fetcher = vi.fn<typeof fetch>(async () =>
       Response.json({ message: "private database details" }, { status: 500 }),
     );
-    const tools = createAgentTools({ env, ownerId, fetcher, now });
+    const tools = directTools(createAgentTools({ env, ownerId, fetcher, now }));
     const result = await tools.execute("list_farms", "{}", signal());
     expect(result).toMatchObject({
       ok: false,

@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { tool } from "ai";
 import { z } from "zod";
 import type { Database } from "../lib/database.types";
 import { boundedFetch } from "../lib/http";
@@ -93,36 +94,35 @@ export function createAgentTools(options: {
       },
     });
   }
-  return {
-    definitions: Object.entries(schemas).map(([name, schema]) => ({
-      type: "function" as const,
-      name,
-      description: descriptions[name as keyof typeof schemas],
-      parameters: z.toJSONSchema(schema),
-      strict: true,
-    })),
-    async execute(
-      name: string,
-      argumentsJson: string,
+  async function read(
+    abortSignal: AbortSignal | undefined,
+    action: (
+      db: ReturnType<typeof client>,
       signal: AbortSignal,
-    ): Promise<ToolResult> {
-      if (!Object.hasOwn(schemas, name))
-        return failure("UNKNOWN_TOOL", "This tool is not available");
-      let args: unknown;
-      try {
-        args = JSON.parse(argumentsJson);
-      } catch {
-        return failure("INVALID_ARGUMENTS", "Tool arguments must be JSON");
-      }
-      if (!schemas[name as keyof typeof schemas].safeParse(args).success)
+    ) => Promise<ToolResult>,
+  ): Promise<ToolResult> {
+    const signal = abortSignal ?? new AbortController().signal;
+    try {
+      signal.throwIfAborted();
+      return await action(client(signal), signal);
+    } catch (error) {
+      if (error instanceof InvalidForecastError)
         return failure(
-          "INVALID_ARGUMENTS",
-          "Arguments do not match the tool schema",
+          "INVALID_PROVIDER_DATA",
+          "The forecast was incomplete or invalid; no forecast values are available",
         );
-      try {
-        signal.throwIfAborted();
-        const db = client(signal);
-        if (name === "list_farms") {
+      return failure(
+        "TOOL_UNAVAILABLE",
+        "The data could not be retrieved. Do not infer missing values.",
+      );
+    }
+  }
+  return {
+    list_farms: tool({
+      description: descriptions.list_farms,
+      inputSchema: schemas.list_farms,
+      execute: (_, { abortSignal }) =>
+        read(abortSignal, async (db) => {
           const { data, error } = await db
             .from("farms")
             .select("id,name,province,locality,timezone,data_mode")
@@ -139,9 +139,13 @@ export function createAgentTools(options: {
               dataMode: data_mode,
             }));
           return { ok: true, data: { farms } };
-        }
-        if (name === "list_plots") {
-          const { farmId } = schemas.list_plots.parse(args);
+        }),
+    }),
+    list_plots: tool({
+      description: descriptions.list_plots,
+      inputSchema: schemas.list_plots,
+      execute: ({ farmId }, { abortSignal }) =>
+        read(abortSignal, async (db) => {
           const { data, error } = await db
             .from("plots")
             .select("id,name,farm_id,farms!inner(owner_id)")
@@ -168,53 +172,48 @@ export function createAgentTools(options: {
               })),
             },
           };
-        }
-        const { plotId, days } = schemas.get_forecast.parse(args);
-        const { data, error } = await db
-          .from("plots")
-          .select(
-            "id,name,farm_id,sample_point_geojson,farms!inner(owner_id,data_mode,timezone)",
-          )
-          .eq("id", plotId)
-          .eq("farms.owner_id", ownerId)
-          .limit(1);
-        if (error) throw error;
-        const plot = z.array(locatedPlotSchema).max(1).parse(data)[0];
-        if (!plot)
-          return failure(
-            "NOT_FOUND",
-            "This plot is not available to the current producer",
-          );
-        if (plot.farms.owner_id !== ownerId || plot.id !== plotId)
-          throw new Error("Unexpected ownership");
-        if (plot.farms.data_mode === "demo")
-          return failure(
-            "LIVE_FORECAST_UNAVAILABLE",
-            "This farm uses demo data. A live forecast is unavailable; do not invent one.",
-          );
-        return {
-          ok: true,
-          data: await getPlotForecast({
-            plotId,
-            plotName: plot.name,
-            coordinates: plot.sample_point_geojson.coordinates,
-            days,
-            signal,
-            fetcher,
-            now,
-          }),
-        };
-      } catch (error) {
-        if (error instanceof InvalidForecastError)
-          return failure(
-            "INVALID_PROVIDER_DATA",
-            "The forecast was incomplete or invalid; no forecast values are available",
-          );
-        return failure(
-          "TOOL_UNAVAILABLE",
-          "The data could not be retrieved. Do not infer missing values.",
-        );
-      }
-    },
+        }),
+    }),
+    get_forecast: tool({
+      description: descriptions.get_forecast,
+      inputSchema: schemas.get_forecast,
+      execute: ({ plotId, days }, { abortSignal }) =>
+        read(abortSignal, async (db, signal) => {
+          const { data, error } = await db
+            .from("plots")
+            .select(
+              "id,name,farm_id,sample_point_geojson,farms!inner(owner_id,data_mode,timezone)",
+            )
+            .eq("id", plotId)
+            .eq("farms.owner_id", ownerId)
+            .limit(1);
+          if (error) throw error;
+          const plot = z.array(locatedPlotSchema).max(1).parse(data)[0];
+          if (!plot)
+            return failure(
+              "NOT_FOUND",
+              "This plot is not available to the current producer",
+            );
+          if (plot.farms.owner_id !== ownerId || plot.id !== plotId)
+            throw new Error("Unexpected ownership");
+          if (plot.farms.data_mode === "demo")
+            return failure(
+              "LIVE_FORECAST_UNAVAILABLE",
+              "This farm uses demo data. A live forecast is unavailable; do not invent one.",
+            );
+          return {
+            ok: true,
+            data: await getPlotForecast({
+              plotId,
+              plotName: plot.name,
+              coordinates: plot.sample_point_geojson.coordinates,
+              days,
+              signal,
+              fetcher,
+              now,
+            }),
+          };
+        }),
+    }),
   };
 }

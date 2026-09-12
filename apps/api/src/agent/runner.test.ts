@@ -1,114 +1,91 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createOpenRouterModel } from "./model";
 import { runAgent } from "./runner";
-import type { AgentTools } from "./tools";
+import { call, chatResponse, testTools } from "./test-helpers";
 
 const now = () => new Date("2026-09-12T12:00:00Z");
 const modelEnv = {
   OPENROUTER_API_KEY: "test_model_key",
   OPENROUTER_MODEL: "deepseek/deepseek-v4.1-flash",
 };
-const call = (name: string, args = "{}", id = "call_1") => ({
-  type: "function_call",
-  call_id: id,
-  name,
-  arguments: args,
-});
-const answer = (text: string) => ({
-  type: "message",
-  role: "assistant",
-  phase: "final_answer",
-  content: [{ type: "output_text", text }],
-});
-const response = (output: unknown[], status = "completed") =>
-  Response.json({ status, output });
-const tools = (): AgentTools => ({
-  definitions: [],
-  execute: vi.fn(async () => ({
-    ok: true as const,
-    data: { result: "available" },
-  })),
-});
-
+const body = (fetcher: ReturnType<typeof vi.fn<typeof fetch>>, index: number) =>
+  JSON.parse(String(fetcher.mock.calls[index]?.[1]?.body));
+const run = (fetcher: typeof fetch, tools = testTools().tools) =>
+  runAgent({
+    text: "Check my farm",
+    history: [],
+    tools,
+    model: createOpenRouterModel(modelEnv, fetcher),
+    now,
+  });
 afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
-describe("reasoning and tool loop", () => {
-  it("executes multiple returned tool calls in order and returns every result before answering", async () => {
+describe("AI SDK agent through OpenRouter", () => {
+  it("executes a returned batch sequentially and sends every result before answering", async () => {
     const fetcher = vi
       .fn<typeof fetch>()
       .mockResolvedValueOnce(
-        response([call("list_farms"), call("list_plots", "{}", "call_2")]),
+        chatResponse("Checking now", [
+          call("list_farms"),
+          call("list_plots", '{"farmId":"farm"}', "call_2"),
+        ]),
       )
-      .mockResolvedValueOnce(response([answer("Which plot?")]));
-    let completedFirst = false;
-    const registry = tools();
-    registry.execute = vi.fn<AgentTools["execute"]>(async (name) => {
-      if (name === "list_farms") {
-        await Promise.resolve();
-        completedFirst = true;
-      } else expect(completedFirst).toBe(true);
-      return { ok: true, data: {} };
+      .mockResolvedValueOnce(chatResponse("Which plot?"));
+    const { tools } = testTools();
+    let firstFinished = false;
+    tools.list_farms.execute = vi.fn(async () => {
+      await Promise.resolve();
+      firstFinished = true;
+      return { ok: true as const, data: { result: "available" } };
     });
-    const result = await runAgent({
-      text: "Check my farm",
-      history: [],
-      tools: registry,
-      model: createOpenRouterModel(modelEnv, fetcher),
-      now,
+    tools.list_plots.execute = vi.fn(async () => {
+      expect(firstFinished).toBe(true);
+      return { ok: true as const, data: { result: "available" } };
     });
+    const result = await run(fetcher, tools);
+    expect(result.reply).toBe("Which plot?");
     expect(result.trace.map((item) => item.tool)).toEqual([
       "list_farms",
       "list_plots",
     ]);
-    const input = JSON.parse(String(fetcher.mock.calls[1]?.[1]?.body)).input;
     expect(
-      input
-        .filter(
-          (item: { type: string }) => item.type === "function_call_output",
-        )
-        .map((item: { call_id: string }) => item.call_id),
+      body(fetcher, 1)
+        .messages.filter((item: { role: string }) => item.role === "tool")
+        .map((item: { tool_call_id: string }) => item.tool_call_id),
     ).toEqual(["call_1", "call_2"]);
   });
 
-  it("discovers farms and plots, gets three-day weather, then answers using returned evidence", async () => {
-    const reasoning = {
-      type: "reasoning",
-      id: "rs_1",
-      summary: [],
-      encrypted_content: "opaque_reasoning",
-    };
-    const requests: Record<string, unknown>[] = [];
-    const fetcher = vi.fn<typeof fetch>(async (url, init) => {
-      expect(String(url)).toBe("https://openrouter.ai/api/v1/responses");
-      expect(new Headers(init?.headers).get("Authorization")).toBe(
-        `Bearer ${modelEnv.OPENROUTER_API_KEY}`,
-      );
-      requests.push(JSON.parse(String(init?.body)));
-      if (requests.length === 1)
-        return response([reasoning, call("list_farms")]);
-      if (requests.length === 2)
-        return response([call("list_plots", '{"farmId":"farm"}', "call_2")]);
-      if (requests.length === 3)
-        return response([
+  it("discovers farms, plots and weather while preserving provider reasoning between steps", async () => {
+    const reasoning = [
+      {
+        type: "reasoning.text",
+        text: "private_reasoning",
+        signature: "opaque_signature",
+        id: "rs_1",
+        format: "unknown",
+        index: 0,
+      },
+    ];
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        chatResponse(null, [call("list_farms")], "tool_calls", reasoning),
+      )
+      .mockResolvedValueOnce(
+        chatResponse(null, [call("list_plots", '{"farmId":"farm"}', "call_2")]),
+      )
+      .mockResolvedValueOnce(
+        chatResponse(null, [
           call("get_forecast", '{"plotId":"plot","days":3}', "call_3"),
-        ]);
-      return response([
-        answer(
-          "For the next three days, the forecast shows lows of 3, 2 and 4°C. Source: Open-Meteo.",
-        ),
-      ]);
-    });
-    const registry = tools();
-    const result = await runAgent({
-      text: "How is the forecast for the next three days?",
-      history: [],
-      tools: registry,
-      model: createOpenRouterModel(modelEnv, fetcher),
-      now,
-    });
+        ]),
+      )
+      .mockResolvedValueOnce(
+        chatResponse("Lows of 3, 2 and 4°C. Source: Open-Meteo."),
+      );
+    const result = await run(fetcher);
     expect(result.modelSteps).toBe(4);
     expect(result.trace.map((entry) => entry.tool)).toEqual([
       "list_farms",
@@ -116,159 +93,189 @@ describe("reasoning and tool loop", () => {
       "get_forecast",
     ]);
     expect(result.reply).toContain("Open-Meteo");
-    expect(requests[1]?.input).toContainEqual(reasoning);
-    expect(requests[1]?.input).toContainEqual({
-      type: "function_call_output",
-      call_id: "call_1",
-      output: JSON.stringify({ ok: true, data: { result: "available" } }),
+    expect(body(fetcher, 1).messages).toContainEqual(
+      expect.objectContaining({
+        role: "assistant",
+        reasoning_details: reasoning,
+      }),
+    );
+    expect(body(fetcher, 1).messages).toContainEqual({
+      role: "tool",
+      name: "list_farms",
+      tool_call_id: "call_1",
+      content: JSON.stringify({ ok: true, data: { result: "available" } }),
     });
-    for (const request of requests) {
-      expect(request.store).toBe(false);
-      expect(request.model).toBe("deepseek/deepseek-v4.1-flash");
+    for (const [url, init] of fetcher.mock.calls) {
+      expect(String(url)).toBe("https://openrouter.ai/api/v1/chat/completions");
+      expect(new Headers(init?.headers).get("Authorization")).toBe(
+        `Bearer ${modelEnv.OPENROUTER_API_KEY}`,
+      );
+      const request = JSON.parse(String(init?.body));
+      expect(request.model).toBe(modelEnv.OPENROUTER_MODEL);
       expect(request.provider).toEqual({
         require_parameters: true,
         allow_fallbacks: false,
       });
-      expect(request.include).toEqual(["reasoning.encrypted_content"]);
       expect(request.reasoning).toEqual({ effort: "medium" });
       expect(request).not.toHaveProperty("parallel_tool_calls");
-      expect(request.max_output_tokens).toBe(4096);
+      expect(request.max_tokens).toBe(4096);
     }
-    expect(JSON.stringify(result)).not.toContain("opaque_reasoning");
-    expect(JSON.stringify(result)).not.toContain(modelEnv.OPENROUTER_API_KEY);
+    expect(JSON.stringify(result)).not.toMatch(
+      /private_reasoning|opaque_signature|test_model_key/,
+    );
   });
 
-  it("returns tool errors to the model so it can recover", async () => {
+  it("returns schema errors to the model for correction without executing invalid calls", async () => {
     const fetcher = vi
       .fn<typeof fetch>()
       .mockResolvedValueOnce(
-        response([call("list_farms", '{"ownerId":"other"}')]),
+        chatResponse(null, [call("list_farms", '{"ownerId":"other"}')]),
       )
-      .mockResolvedValueOnce(response([call("list_farms", "{}", "call_2")]))
-      .mockResolvedValueOnce(response([answer("Which farm do you mean?")]));
-    const registry = tools();
-    registry.execute = vi
-      .fn()
-      .mockResolvedValueOnce({
-        ok: false,
-        error: { code: "INVALID_ARGUMENTS", message: "No ownerId allowed" },
-      })
-      .mockResolvedValueOnce({ ok: true, data: { farms: [] } });
-    const result = await runAgent({
-      text: "My farm?",
-      history: [],
-      tools: registry,
-      model: createOpenRouterModel(modelEnv, fetcher),
-      now,
-    });
-    const secondInput = JSON.parse(
-      String(fetcher.mock.calls[1]?.[1]?.body),
-    ).input;
-    expect(secondInput).toContainEqual(
-      expect.objectContaining({
-        type: "function_call_output",
-        output: expect.stringContaining("INVALID_ARGUMENTS"),
-      }),
-    );
+      .mockResolvedValueOnce(
+        chatResponse(null, [call("list_farms", "{}", "call_2")]),
+      )
+      .mockResolvedValueOnce(chatResponse("Which farm?"));
+    const { tools, execute } = testTools();
+    const result = await run(fetcher, tools);
+    expect(execute).toHaveBeenCalledTimes(1);
     expect(result.trace[0]).toMatchObject({
       tool: "list_farms",
       ok: false,
       errorCode: "INVALID_ARGUMENTS",
     });
+    expect(body(fetcher, 1).messages).toContainEqual(
+      expect.objectContaining({ role: "tool", tool_call_id: "call_1" }),
+    );
     expect(result.modelSteps).toBe(3);
   });
 
-  it("includes recent conversation turns for follow-up questions", async () => {
+  it("includes recent turns and the current local date", async () => {
     const fetcher = vi
       .fn<typeof fetch>()
-      .mockResolvedValue(response([answer("Which plot?")]));
+      .mockResolvedValue(chatResponse("Which plot?"));
     const history = [
-      { role: "user" as const, content: "Tell me about North farm" },
+      { role: "user" as const, content: "Tell me about North" },
       { role: "assistant" as const, content: "What would you like to know?" },
     ];
     await runAgent({
       text: "And tomorrow?",
       history,
-      tools: tools(),
+      tools: testTools().tools,
       model: createOpenRouterModel(modelEnv, fetcher),
       now,
     });
-    expect(JSON.parse(String(fetcher.mock.calls[0]?.[1]?.body)).input).toEqual([
+    expect(body(fetcher, 0).messages.slice(1)).toEqual([
       ...history,
       { role: "user", content: "And tomorrow?" },
     ]);
+    expect(body(fetcher, 0).messages[0].content[0].text).toContain(
+      "Current date: 2026-09-12",
+    );
   });
 
-  it("stops a tool loop at the configured budget", async () => {
+  it("stops after eight model steps", async () => {
     let index = 0;
     const fetcher = vi.fn<typeof fetch>(async () =>
-      response([call("list_farms", "{}", `call_${++index}`)]),
+      chatResponse(null, [call("list_farms", "{}", `call_${++index}`)]),
     );
-    await expect(
-      runAgent({
-        text: "Check",
-        history: [],
-        tools: tools(),
-        model: createOpenRouterModel(modelEnv, fetcher),
-        now,
-      }),
-    ).rejects.toMatchObject({ code: "AGENT_BUDGET_EXCEEDED" });
+    await expect(run(fetcher)).rejects.toMatchObject({
+      code: "AGENT_BUDGET_EXCEEDED",
+      modelSteps: 8,
+    });
     expect(fetcher).toHaveBeenCalledTimes(8);
   });
 
-  it("ignores commentary as a final answer and never replies before executing requested tools", async () => {
-    const fetcher = vi
-      .fn<typeof fetch>()
-      .mockResolvedValueOnce(
-        response([
-          { ...answer("Checking now"), phase: "commentary" },
-          call("list_farms"),
-        ]),
-      )
-      .mockResolvedValueOnce(response([answer("No farm is available.")]));
-    const result = await runAgent({
-      text: "Check",
-      history: [],
-      tools: tools(),
-      model: createOpenRouterModel(modelEnv, fetcher),
-      now,
-    });
-    expect(result.reply).toBe("No farm is available.");
-    const next = JSON.parse(String(fetcher.mock.calls[1]?.[1]?.body)).input;
-    expect(next).toContainEqual(
-      expect.objectContaining({ phase: "commentary" }),
-    );
-  });
-
-  it.each([
-    response([call("list_farms")], "incomplete"),
-    response([{ type: "function_call", name: "list_farms" }]),
-    response([answer("a".repeat(4097))]),
-    new Response("not json"),
-    Response.json(
-      { error: { message: "private upstream details" } },
-      { status: 401 },
-    ),
-  ])(
-    "rejects incomplete or malformed model output safely (case %#)",
-    async (providerResponse) => {
-      const registry = tools();
-      const fetcher = vi.fn<typeof fetch>().mockResolvedValue(providerResponse);
-      await expect(
-        runAgent({
-          text: "Check",
-          history: [],
-          tools: registry,
-          model: createOpenRouterModel(modelEnv, fetcher),
-          now,
-        }),
-      ).rejects.toMatchObject({ code: "MODEL_UNAVAILABLE" });
-      expect(registry.execute).not.toHaveBeenCalled();
+  it.each([9, 20])(
+    "rejects an oversized batch of %i calls before executing any",
+    async (count) => {
+      const fetcher = vi.fn<typeof fetch>(async () =>
+        chatResponse(
+          null,
+          Array.from({ length: count }, (_, i) =>
+            call("list_farms", "{}", `call_${i}`),
+          ),
+        ),
+      );
+      const { tools, execute } = testTools();
+      await expect(run(fetcher, tools)).rejects.toMatchObject({
+        code: "AGENT_BUDGET_EXCEEDED",
+        trace: [],
+      });
+      expect(execute).not.toHaveBeenCalled();
       expect(fetcher).toHaveBeenCalledTimes(1);
     },
   );
 
-  it("bounds model requests and does not retry stalled calls", async () => {
+  it("enforces the total tool budget across batches", async () => {
+    let index = 0;
+    const fetcher = vi.fn<typeof fetch>(async () =>
+      chatResponse(
+        null,
+        Array.from({ length: 3 }, () =>
+          call("list_farms", "{}", `call_${++index}`),
+        ),
+      ),
+    );
+    const { tools, execute } = testTools();
+    await expect(run(fetcher, tools)).rejects.toMatchObject({
+      code: "AGENT_BUDGET_EXCEEDED",
+      modelSteps: 3,
+    });
+    expect(execute).toHaveBeenCalledTimes(6);
+  });
+
+  it("rejects a repeated call ID before re-execution", async () => {
+    const fetcher = vi.fn<typeof fetch>(async () =>
+      chatResponse(null, [call("list_farms")]),
+    );
+    const { tools, execute } = testTools();
+    await expect(run(fetcher, tools)).rejects.toMatchObject({
+      code: "MODEL_UNAVAILABLE",
+      modelSteps: 2,
+    });
+    expect(execute).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns a bounded error when a tool result is too large", async () => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(chatResponse(null, [call("list_farms")]))
+      .mockResolvedValueOnce(chatResponse("Please narrow the query."));
+    const { tools, execute } = testTools();
+    execute.mockResolvedValue({
+      ok: true,
+      data: { result: "x".repeat(33000) },
+    });
+    const result = await run(fetcher, tools);
+    expect(result.trace[0]?.errorCode).toBe("TOOL_RESULT_TOO_LARGE");
+    expect(JSON.stringify(body(fetcher, 1))).not.toContain("x".repeat(33000));
+  });
+
+  it.each([
+    () => chatResponse(null, [call("list_farms")], "length"),
+    () => chatResponse(null),
+    () => chatResponse("a".repeat(4097)),
+    () => Response.json({ choices: [{ message: { role: "assistant" } }] }),
+    () => new Response("not json"),
+    () =>
+      Response.json(
+        { error: { message: "private upstream details" } },
+        { status: 401 },
+      ),
+  ])(
+    "rejects incomplete or malformed model output safely (case %#)",
+    async (response) => {
+      const { tools, execute } = testTools();
+      const fetcher = vi.fn<typeof fetch>(async () => response());
+      await expect(run(fetcher, tools)).rejects.toMatchObject({
+        code: "MODEL_UNAVAILABLE",
+      });
+      expect(execute).not.toHaveBeenCalled();
+      expect(fetcher).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it("bounds stalled requests and never retries them", async () => {
     vi.useFakeTimers();
     let started!: () => void;
     const pending = new Promise<void>((resolve) => {
@@ -285,19 +292,35 @@ describe("reasoning and tool loop", () => {
           started();
         }),
     );
-    const task = runAgent({
-      text: "Check",
-      history: [],
-      tools: tools(),
-      model: createOpenRouterModel(modelEnv, fetcher),
-      now,
-    });
-    const assertion = expect(task).rejects.toMatchObject({
+    const assertion = expect(run(fetcher)).rejects.toMatchObject({
       code: "MODEL_UNAVAILABLE",
     });
     await pending;
     await vi.advanceTimersByTimeAsync(20000);
     await assertion;
     expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it("cancels the whole run after 60 seconds across successful requests", async () => {
+    vi.useFakeTimers();
+    let index = 0;
+    const fetcher = vi.fn<typeof fetch>(async (_url, init) => {
+      await new Promise<void>((resolve, reject) => {
+        setTimeout(resolve, 15000);
+        init?.signal?.addEventListener(
+          "abort",
+          () => reject(new Error("aborted")),
+          { once: true },
+        );
+      });
+      return chatResponse(null, [call("list_farms", "{}", `call_${++index}`)]);
+    });
+    const assertion = expect(run(fetcher)).rejects.toMatchObject({
+      code: "AGENT_TIMEOUT",
+      modelSteps: 4,
+    });
+    await vi.advanceTimersByTimeAsync(60000);
+    await assertion;
+    expect(fetcher).toHaveBeenCalledTimes(4);
   });
 });

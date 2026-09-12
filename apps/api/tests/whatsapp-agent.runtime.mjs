@@ -130,7 +130,7 @@ test("signed webhook → durable alarm → three chosen tools → WhatsApp reply
               },
             });
           }
-          if (url.href === "https://openrouter.ai/api/v1/responses") {
+          if (url.href === "https://openrouter.ai/api/v1/chat/completions") {
             const body = await request.json();
             requests.push(body);
             assert.equal(
@@ -142,13 +142,13 @@ test("signed webhook → durable alarm → three chosen tools → WhatsApp reply
               require_parameters: true,
               allow_fallbacks: false,
             });
-            assert.equal(body.store, false);
+            assert.equal(body.max_tokens, 4096);
             assert.equal(body.reasoning.effort, "medium");
-            const results = body.input.filter(
-              (item) => item.type === "function_call_output",
+            const results = body.messages.filter(
+              (item) => item.role === "tool",
             );
             for (const result of results)
-              assert.equal(JSON.parse(result.output).ok, true);
+              assert.equal(JSON.parse(result.content).ok, true);
             const calls = [
               ["list_farms", {}],
               ["list_plots", { farmId: farm }],
@@ -157,54 +157,61 @@ test("signed webhook → durable alarm → three chosen tools → WhatsApp reply
             if (results.length < 3) {
               const [name, args] = calls[results.length];
               return Response.json({
-                status: "completed",
-                output: [
+                id: `gen_${results.length}`,
+                object: "chat.completion",
+                created: Math.floor(Date.now() / 1000),
+                model: body.model,
+                choices: [
                   {
-                    type: "reasoning",
-                    id: `rs_${results.length}`,
-                    status: "completed",
-                    encrypted_content: null,
-                    content: [
-                      {
-                        type: "reasoning_text",
-                        text: "private-test-reasoning",
-                      },
-                    ],
-                    summary: [],
-                  },
-                  {
-                    type: "function_call",
-                    id: `fc_${name}`,
-                    status: "completed",
-                    call_id: `call_${results.length}`,
-                    name,
-                    arguments: JSON.stringify(args),
+                    index: 0,
+                    finish_reason: "tool_calls",
+                    message: {
+                      role: "assistant",
+                      content: null,
+                      reasoning_details: [
+                        {
+                          type: "reasoning.text",
+                          id: `rs_${results.length}`,
+                          format: "unknown",
+                          index: 0,
+                          text: `private-test-reasoning-${results.length}`,
+                          signature: "opaque-signature",
+                        },
+                      ],
+                      tool_calls: [
+                        {
+                          id: `call_${results.length}`,
+                          type: "function",
+                          function: { name, arguments: JSON.stringify(args) },
+                        },
+                      ],
+                    },
                   },
                 ],
               });
             }
-            assert.equal(
-              body.input.filter((item) => item.type === "reasoning").length,
-              3,
+            const reasoning = body.messages.flatMap(
+              (item) => item.reasoning_details ?? [],
             );
+            assert.equal(reasoning.length, 3);
             assert.ok(
-              body.input
-                .filter((item) => item.type === "reasoning")
-                .every(
-                  (item) => item.content[0].text === "private-test-reasoning",
-                ),
+              reasoning.every(
+                (item) =>
+                  item.text.startsWith("private-test-reasoning-") &&
+                  item.signature === "opaque-signature",
+              ),
             );
-            assert.equal(JSON.parse(results[2].output).data.days.length, 3);
+            assert.equal(JSON.parse(results[2].content).data.days.length, 3);
             return Response.json({
-              status: "completed",
-              output: [
+              id: "gen_final",
+              object: "chat.completion",
+              created: Math.floor(Date.now() / 1000),
+              model: body.model,
+              choices: [
                 {
-                  type: "message",
-                  id: "msg_final",
-                  status: "completed",
-                  role: "assistant",
-                  phase: null,
-                  content: [{ type: "output_text", text: answer }],
+                  index: 0,
+                  finish_reason: "stop",
+                  message: { role: "assistant", content: answer },
                 },
               ],
             });
@@ -347,7 +354,7 @@ test("signed webhook → durable alarm → three chosen tools → WhatsApp reply
     await waitAccepted("wamid.2");
     assert.equal(sends.length, 2);
     assert.equal(requests.length, 8);
-    assert.deepEqual(requests[4].input.slice(0, 2), [
+    assert.deepEqual(requests[4].messages.slice(1, 3), [
       { role: "user", content: initial.message.text.body },
       { role: "assistant", content: answer },
     ]);

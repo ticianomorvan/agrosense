@@ -8,8 +8,9 @@ import {
   type StoreTransaction,
 } from "./conversation";
 import type { InboundMessage } from "./inbound";
-import { AgentError } from "./model";
+import { createOpenRouterModel } from "./model";
 import { type AgentResult, runAgent } from "./runner";
+import { call, chatResponse, testTools } from "./test-helpers";
 
 class MemoryStore implements ConversationStore {
   data = new Map<string, unknown>();
@@ -121,23 +122,14 @@ describe("durable conversation processing", () => {
       runAgent({
         text: message().text,
         history: [],
-        tools: {
-          definitions: [],
-          execute: async () => ({ ok: true, data: { farms: [] } }),
-        },
-        model: {
-          respond: vi
-            .fn()
-            .mockResolvedValueOnce([
-              {
-                type: "function_call",
-                call_id: "call_1",
-                name: "list_farms",
-                arguments: "{}",
-              },
-            ])
-            .mockRejectedValueOnce(new AgentError("MODEL_UNAVAILABLE")),
-        },
+        tools: testTools().tools,
+        model: createOpenRouterModel(
+          { OPENROUTER_API_KEY: "test" },
+          vi
+            .fn<typeof fetch>()
+            .mockResolvedValueOnce(chatResponse(null, [call("list_farms")]))
+            .mockRejectedValueOnce(new Error("private upstream error")),
+        ),
       }),
     );
     await conversation.enqueue([message()], ownerId);

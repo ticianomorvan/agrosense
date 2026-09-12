@@ -18,6 +18,7 @@ local runtime checks for API responses and SPA fallback.
 | Contracts | Shared Zod schemas | Runtime response validation and inferred TypeScript types |
 | Hosting | Workers Static Assets + API Worker | One deployment and origin; explicit `/api` routing |
 | Quality | Biome + Vitest | Formatting, linting, and API contract tests |
+| Agent | Vercel AI SDK + official OpenRouter provider | Native Zod tools and bounded `ToolLoopAgent` execution |
 | Persistence | Supabase Postgres + Auth | Typed Data API client, JWT verification, and owner-scoped RLS |
 
 Use Node 24 and the pnpm version pinned in package.json. Exact dependency

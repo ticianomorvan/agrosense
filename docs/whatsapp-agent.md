@@ -1,7 +1,8 @@
 # WhatsApp agent foundation
 
-A signed Kapso text message is admitted to a Durable Object. OpenRouter runs a
-bounded reasoning/tool loop, and the final answer is sent through the shared
+A signed Kapso text message is admitted to a Durable Object. Vercel AI SDK’s
+`ToolLoopAgent` runs a bounded tool loop through the official OpenRouter provider.
+The final answer is sent through the shared
 [Kapso adapter](kapso.md). The agent supports one configured producer per deployment.
 Automatic alerts, scheduled forecast refreshes, farm mutations, media, templates,
 and account-linking flows are outside this slice.
@@ -25,9 +26,9 @@ queries. This is the explicit exception allowing the Supabase server secret for
 owner-scoped agent reads. Agricultural tables and dashboard refresh budgets in
 [the domain model](domain-model.md) remain unchanged.
 
-The model chooses tools and receives their results before continuing. All
-response items, including plain or encrypted reasoning, are replayed within a
-run. Only the final answer leaves the runner. Current facts require current tools;
+The model chooses tools and receives their results before continuing. AI SDK manages
+the message history and tool results; the OpenRouter provider preserves its
+`reasoning_details` within a run. Only the final answer leaves the runner. Current facts require current tools;
 ambiguous locations should produce a clarifying question. Recent user/assistant
 turns provide follow-up context, without retaining private reasoning or tool bodies.
 
@@ -52,13 +53,14 @@ inspection. The business sender is selected by `KAPSO_PHONE_NUMBER_ID`; it is
 separate from the producer's number. Use the sender ID reported by WhatsApp;
 country-specific mobile prefixes are not inferred.
 
-Requests use `https://openrouter.ai/api/v1/responses`, `store:false`, full in-run
-context and no `previous_response_id`. Routing requires support for supplied
-parameters and disables provider fallbacks. `parallel_tool_calls` is omitted
-because DeepSeek's listed providers do not advertise it; the runner executes
-multiple returned calls sequentially. A replacement model must support reasoning
-and tools. OpenRouter and downstream provider retention follows their policies
-and account settings. Direct `OPENAI_*` settings are unused.
+The agent uses `ai` and `@openrouter/ai-sdk-provider`, with native Zod tool
+schemas. The provider uses `https://openrouter.ai/api/v1/chat/completions`.
+AI SDK manages tool selection, argument validation, execution and continuation;
+the application enforces run limits, serializes data reads and retains safe traces.
+Routing requires support for supplied parameters and disables provider fallbacks.
+Model requests are not retried. A replacement model must support reasoning and
+tools. OpenRouter and downstream provider retention follows their policies and
+account settings. Direct `OPENAI_*` settings are unused.
 
 ## Enablement
 
@@ -142,9 +144,8 @@ real WhatsApp message. Live model behavior and delivery remain a deployment chec
 Recovery from intermediate run/send states is covered by unit tests; runtime
 eviction coverage verifies completed receipts and history.
 
-References: [OpenRouter Responses](https://openrouter.ai/docs/api_reference/responses/overview),
-[reasoning](https://openrouter.ai/docs/api_reference/responses/reasoning),
-[tool calling](https://openrouter.ai/docs/api_reference/responses/tool-calling),
+References: [AI SDK ToolLoopAgent](https://ai-sdk.dev/docs/reference/ai-sdk-core/tool-loop-agent),
+[OpenRouter AI SDK provider](https://github.com/OpenRouterTeam/ai-sdk-provider),
 [provider routing](https://openrouter.ai/docs/guides/routing/provider-selection),
 [DeepSeek V4.1 Flash](https://openrouter.ai/deepseek/deepseek-v4.1-flash),
 [Kapso events](https://docs.kapso.ai/docs/platform/webhooks/message-events),

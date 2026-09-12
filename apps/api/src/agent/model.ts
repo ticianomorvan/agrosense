@@ -1,6 +1,6 @@
+import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { z } from "zod";
 import { boundedFetch } from "../lib/http";
-import type { AgentTools } from "./tools";
 
 export type ModelBindings = {
   OPENROUTER_API_KEY?: string;
@@ -38,94 +38,23 @@ export function readModelConfig(env: ModelBindings) {
   if (!result.success) throw new AgentError("MODEL_UNAVAILABLE");
   return result.data;
 }
-const outputSchema = z.discriminatedUnion("type", [
-  z
-    .object({
-      type: z.literal("function_call"),
-      call_id: z.string().min(1).max(200),
-      name: z.string().min(1).max(100),
-      arguments: z.string().max(16384),
-    })
-    .passthrough(),
-  z
-    .object({
-      type: z.literal("reasoning"),
-      encrypted_content: z
-        .string()
-        .max(512 * 1024)
-        .nullish(),
-    })
-    .passthrough(),
-  z
-    .object({
-      type: z.literal("message"),
-      role: z.literal("assistant"),
-      phase: z.enum(["commentary", "final_answer"]).nullish(),
-      content: z
-        .array(
-          z
-            .object({
-              type: z.literal("output_text"),
-              text: z.string().min(1).max(4096),
-            })
-            .passthrough(),
-        )
-        .min(1)
-        .max(8),
-    })
-    .passthrough(),
-]);
-const responseSchema = z.object({
-  status: z.literal("completed"),
-  output: z.array(outputSchema).min(1).max(32),
-});
-export type ModelOutput = z.infer<typeof outputSchema>;
-export type ModelInput = Record<string, unknown>;
-export type ReasoningModel = {
-  respond(
-    input: ModelInput[],
-    definitions: AgentTools["definitions"],
-    instructions: string,
-    signal: AbortSignal,
-  ): Promise<ModelOutput[]>;
-};
-
 export function createOpenRouterModel(
   env: ModelBindings,
   fetcher: typeof fetch = fetch,
-): ReasoningModel {
-  return {
-    async respond(input, definitions, instructions, signal) {
-      const config = readModelConfig(env);
-      try {
-        const response = await boundedFetch(
-          "https://openrouter.ai/api/v1/responses",
-          {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${config.OPENROUTER_API_KEY}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              model: config.OPENROUTER_MODEL,
-              reasoning: { effort: config.OPENROUTER_REASONING_EFFORT },
-              store: false,
-              include: ["reasoning.encrypted_content"],
-              provider: { require_parameters: true, allow_fallbacks: false },
-              input,
-              instructions,
-              tools: definitions,
-              tool_choice: "auto",
-              max_output_tokens: 4096,
-            }),
-          },
-          { fetcher, signal, timeoutMs: 20000, maxBytes: 1024 * 1024 },
-        );
-        if (!response.ok) throw new Error("Model request failed");
-        return responseSchema.parse(await response.json()).output;
-      } catch {
-        throw new AgentError("MODEL_UNAVAILABLE");
-      }
-    },
-  };
+) {
+  const config = readModelConfig(env);
+  const openrouter = createOpenRouter({
+    apiKey: config.OPENROUTER_API_KEY,
+    fetch: (input, init) =>
+      boundedFetch(input, init ?? {}, {
+        fetcher,
+        signal: init?.signal ?? undefined,
+        timeoutMs: 20000,
+        maxBytes: 1024 * 1024,
+      }),
+  });
+  return openrouter.chat(config.OPENROUTER_MODEL, {
+    reasoning: { effort: config.OPENROUTER_REASONING_EFFORT },
+    provider: { require_parameters: true, allow_fallbacks: false },
+  });
 }

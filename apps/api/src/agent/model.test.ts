@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { createOpenRouterModel, readModelConfig } from "./model";
+import { runAgent } from "./runner";
 
 describe("OpenRouter model boundary", () => {
   it("requires an OpenRouter key and accepts provider-qualified model IDs", () => {
@@ -24,43 +25,6 @@ describe("OpenRouter model boundary", () => {
     ).toThrow("MODEL_UNAVAILABLE");
   });
 
-  it.each([undefined, null])(
-    "preserves reasoning and accepts phase %s",
-    async (phase) => {
-      const output = [
-        {
-          type: "reasoning",
-          id: "rs_test",
-          encrypted_content: null,
-          content: [{ type: "reasoning_text", text: "private reasoning" }],
-          summary: [],
-          signature: "opaque-signature",
-        },
-        {
-          type: "message",
-          role: "assistant",
-          phase,
-          content: [{ type: "output_text", text: "Which plot?" }],
-        },
-      ];
-      const fetcher = vi
-        .fn<typeof fetch>()
-        .mockResolvedValue(Response.json({ status: "completed", output }));
-      const model = createOpenRouterModel(
-        { OPENROUTER_API_KEY: "router_test" },
-        fetcher,
-      );
-      expect(
-        await model.respond(
-          [],
-          [],
-          "Instructions",
-          new AbortController().signal,
-        ),
-      ).toEqual(output);
-    },
-  );
-
   it.each([401, 402, 429, 503])(
     "does not retry OpenRouter HTTP %i or expose its body",
     async (status) => {
@@ -77,7 +41,7 @@ describe("OpenRouter model boundary", () => {
         fetcher,
       );
       await expect(
-        model.respond([], [], "Instructions", new AbortController().signal),
+        runAgent({ text: "Check", history: [], tools: {}, model }),
       ).rejects.toThrow("MODEL_UNAVAILABLE");
       expect(fetcher).toHaveBeenCalledTimes(1);
     },
