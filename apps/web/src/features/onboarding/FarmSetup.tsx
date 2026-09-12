@@ -7,7 +7,7 @@ import { type FormEvent, useId, useState } from "react";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { BoundaryFields } from "./BoundaryFields";
-import { BoundaryMapDrawer } from "./BoundaryMapDrawer";
+import { BoundaryMap } from "./BoundaryMap";
 import { boundaryValues } from "./form-values";
 import { type CoordinateBounds, rectangleFromBounds } from "./geometry";
 
@@ -148,11 +148,11 @@ export function FarmSetup({
               Farm boundary
             </h2>
             <p className="text-sm leading-normal text-muted-foreground">
-              Mark 4 corners on the satellite map by clicking or right-clicking.
-              Coordinates will calculate and populate automatically.
+              Mark 4 points on the satellite map to define a rectangular
+              boundary. The preview shows the rectangle that will be saved.
             </p>
           </div>
-          <BoundaryMapDrawer
+          <BoundaryMap
             bounds={coordinates}
             onBoundsChange={setCoordinates}
             disabled={pending}
@@ -161,8 +161,12 @@ export function FarmSetup({
             className="rounded-lg border border-border bg-card p-3"
             open={manualCoordsOpen || boundaryInvalid}
             onToggle={(e) => setManualCoordsOpen(e.currentTarget.open)}
+            onInvalidCapture={(event) => {
+              event.currentTarget.open = true;
+              setManualCoordsOpen(true);
+            }}
           >
-            <summary className="cursor-pointer font-semibold text-sm text-foreground flex items-center justify-between">
+            <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-2 rounded-lg text-sm font-semibold text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
               <span>Manual coordinate inputs (synced)</span>
               <span className="text-xs text-muted-foreground font-normal">
                 {coordinates.west

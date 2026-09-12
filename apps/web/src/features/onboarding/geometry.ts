@@ -74,17 +74,3 @@ export function boundsFromPoints(
     north: Math.max(...lats).toFixed(6),
   };
 }
-
-export function polygonFromPoints(
-  points: ReadonlyArray<{ lat: number; lng: number }>,
-): Polygon | null {
-  if (points.length < 3) return null;
-  const ring = points.map((p) => [p.lng, p.lat] as [number, number]);
-  const first = ring[0];
-  if (!first) return null;
-  ring.push(first);
-  return {
-    type: "Polygon",
-    coordinates: [ring],
-  };
-}

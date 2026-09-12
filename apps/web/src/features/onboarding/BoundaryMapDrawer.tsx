@@ -40,9 +40,18 @@ export function BoundaryMapDrawer({
   const drawingLayerRef = useRef<L.LayerGroup | null>(null);
   const farmLayerRef = useRef<L.LayerGroup | null>(null);
 
-  const [points, setPoints] = useState<Array<{ lat: number; lng: number }>>([]);
+  const [drawing, setDrawing] = useState<{
+    points: Array<{ lat: number; lng: number }>;
+    bounds: CoordinateBounds | undefined;
+  }>({ points: [], bounds });
+  // Manual coordinate edits replace the controlled bounds and retire old clicks.
+  const points = drawing.bounds === bounds ? drawing.points : [];
   const [ready, setReady] = useState(false);
   const [restrictionError, setRestrictionError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (drawing.bounds !== bounds) setRestrictionError(null);
+  }, [bounds, drawing.bounds]);
 
   // Initialize map and tile layer
   useEffect(() => {
@@ -50,7 +59,7 @@ export function BoundaryMapDrawer({
 
     const mapInstance = L.map(containerRef.current, {
       zoomControl: false,
-      attributionControl: false,
+      attributionControl: true,
       zoomAnimation: false,
       fadeAnimation: false,
       markerZoomAnimation: false,
@@ -116,7 +125,7 @@ export function BoundaryMapDrawer({
     const latLngs = polygonToLatLngs(farmBoundary);
     // Outer casing for high contrast on satellite imagery
     L.polygon(latLngs, {
-      color: "#ffffff",
+      color: themeColor("card"),
       weight: 4,
       fill: false,
       dashArray: "6 6",
@@ -125,7 +134,7 @@ export function BoundaryMapDrawer({
 
     // Inner farm boundary stroke
     const innerFarm = L.polygon(latLngs, {
-      color: "#173c2d",
+      color: themeColor("foreground"),
       weight: 2,
       fill: false,
       dashArray: "6 6",
@@ -159,34 +168,33 @@ export function BoundaryMapDrawer({
           return;
         }
       }
-      setRestrictionError(null);
-      setPoints((current) => {
-        if (current.length >= 4) return current;
-        const next = [...current, { lat: latlng.lat, lng: latlng.lng }];
-        if (next.length === 4) {
-          const calculatedBounds = boundsFromPoints(next);
-          if (calculatedBounds) {
-            if (farmBoundary) {
-              const rect = rectangleFromBounds(calculatedBounds);
-              if (
-                rect.ok &&
-                !polygonContainsPolygon(
-                  farmBoundary.coordinates,
-                  rect.boundary.coordinates,
-                )
-              ) {
-                setRestrictionError(
-                  "Plot boundary must remain inside the farm boundary.",
-                );
-              }
-            }
-            if (onBoundsChange) {
-              onBoundsChange(calculatedBounds);
-            }
-          }
+      if (points.length >= 4) return;
+      const next = [...points, { lat: latlng.lat, lng: latlng.lng }];
+      const nextBounds =
+        boundsFromPoints(next) ??
+        (points.length === 0 ? emptyBounds() : bounds);
+      if (next.length === 4 && nextBounds) {
+        const rectangle = rectangleFromBounds(nextBounds);
+        if (!rectangle.ok) {
+          setRestrictionError(rectangle.message);
+          return;
         }
-        return next;
-      });
+        if (
+          farmBoundary &&
+          !polygonContainsPolygon(
+            farmBoundary.coordinates,
+            rectangle.boundary.coordinates,
+          )
+        ) {
+          setRestrictionError(
+            "Plot boundary must remain inside the farm boundary.",
+          );
+          return;
+        }
+      }
+      setRestrictionError(null);
+      setDrawing({ points: next, bounds: nextBounds });
+      if (nextBounds && nextBounds !== bounds) onBoundsChange?.(nextBounds);
     };
 
     const onClick = (e: L.LeafletMouseEvent) => {
@@ -208,7 +216,7 @@ export function BoundaryMapDrawer({
       map.off("click", onClick);
       map.off("contextmenu", onContextMenu);
     };
-  }, [ready, disabled, onBoundsChange, farmBoundary]);
+  }, [ready, disabled, onBoundsChange, farmBoundary, points, bounds]);
 
   // Render points, polyline, and polygon
   useEffect(() => {
@@ -231,33 +239,19 @@ export function BoundaryMapDrawer({
       if (points.length >= 2 && points.length < 4) {
         // Connecting polyline
         L.polyline(latLngs, {
-          color: "#ffffff",
+          color: themeColor("card"),
           weight: 4,
           interactive: false,
         }).addTo(layer);
         L.polyline(latLngs, {
-          color: "#245c3b",
+          color: themeColor("primary"),
           weight: 2,
-          interactive: false,
-        }).addTo(layer);
-      } else if (points.length === 4) {
-        // Closed polygon
-        L.polygon(latLngs, {
-          color: "#ffffff",
-          weight: 4,
-          fill: false,
-          interactive: false,
-        }).addTo(layer);
-        L.polygon(latLngs, {
-          color: "#245c3b",
-          weight: 2,
-          fillColor: "#245c3b",
-          fillOpacity: 0.25,
           interactive: false,
         }).addTo(layer);
       }
-    } else if (bounds?.west && bounds.east && bounds.south && bounds.north) {
-      // If no clicked points exist, but manual valid bounds are provided, display the bounding rectangle
+    }
+    if (bounds) {
+      // Preview the same canonical rectangle submitted by both setup forms.
       const rect = rectangleFromBounds(bounds);
       if (rect.ok) {
         const ring = rect.boundary.coordinates[0] ?? [];
@@ -265,15 +259,15 @@ export function BoundaryMapDrawer({
           ([lng, lat]) => [lat, lng] as [number, number],
         );
         L.polygon(rectLatLngs, {
-          color: "#ffffff",
+          color: themeColor("card"),
           weight: 4,
           fill: false,
           interactive: false,
         }).addTo(layer);
         L.polygon(rectLatLngs, {
-          color: "#245c3b",
+          color: themeColor("primary"),
           weight: 2,
-          fillColor: "#245c3b",
+          fillColor: themeColor("primary"),
           fillOpacity: 0.2,
           interactive: false,
         }).addTo(layer);
@@ -283,21 +277,16 @@ export function BoundaryMapDrawer({
 
   const handleClear = () => {
     setRestrictionError(null);
-    setPoints([]);
-    if (onBoundsChange) {
-      onBoundsChange({ west: "", east: "", south: "", north: "" });
-    }
+    const cleared = emptyBounds();
+    setDrawing({ points: [], bounds: cleared });
+    onBoundsChange?.(cleared);
   };
 
   const handleUndo = () => {
     setRestrictionError(null);
-    setPoints((current) => {
-      const updated = current.slice(0, -1);
-      if (updated.length < 4 && onBoundsChange && current.length === 4) {
-        onBoundsChange({ west: "", east: "", south: "", north: "" });
-      }
-      return updated;
-    });
+    const cleared = emptyBounds();
+    setDrawing({ points: points.slice(0, -1), bounds: cleared });
+    onBoundsChange?.(cleared);
   };
 
   const handleFitOrCenter = () => {
@@ -317,15 +306,17 @@ export function BoundaryMapDrawer({
   const getStatusText = () => {
     switch (points.length) {
       case 0:
-        return "Click or right-click on the map to place corner 1.";
+        return bounds && rectangleFromBounds(bounds).ok
+          ? "Preview matches the manual boundary coordinates."
+          : "Click or right-click on the map to place point 1.";
       case 1:
-        return "Place corner 2.";
+        return "Place point 2.";
       case 2:
-        return "Place corner 3.";
+        return "Place point 3.";
       case 3:
-        return "Place corner 4 to close the boundary.";
+        return "Place point 4 to complete the rectangular boundary.";
       case 4:
-        return "Boundary complete (4 corners placed). Form coordinates synced.";
+        return "Rectangle complete. Preview and form coordinates match.";
       default:
         return "";
     }
@@ -381,14 +372,14 @@ export function BoundaryMapDrawer({
           </Button>
         </div>
         <div className="text-sm font-semibold text-foreground tabular-nums">
-          Corners: {points.length} / 4
+          Points: {points.length} / 4
         </div>
       </div>
 
       <section
         ref={containerRef}
         className="field-map relative z-0 h-80 min-h-72 w-full rounded-lg border border-input bg-muted font-sans md:h-96"
-        aria-label="Satellite boundary map. Click or right-click to place 4 boundary corners."
+        aria-label="Satellite boundary map. Click or right-click to place 4 points for a rectangular boundary. Manual coordinate inputs are below."
       />
 
       {restrictionError && (
@@ -398,7 +389,9 @@ export function BoundaryMapDrawer({
       )}
 
       <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
-        <p className="font-medium text-foreground">{getStatusText()}</p>
+        <p className="font-medium text-foreground" role="status">
+          {getStatusText()}
+        </p>
         <div className="flex flex-wrap items-center gap-3 text-muted-foreground">
           {farmBoundary && (
             <span className="flex items-center gap-1.5">
@@ -424,25 +417,26 @@ export function BoundaryMapDrawer({
 }
 
 function createPointIcon(index: number): L.DivIcon {
+  const marker = document.createElement("span");
+  marker.className =
+    "flex size-7 items-center justify-center rounded-full border-2 border-card bg-primary text-sm font-semibold text-primary-foreground";
+  marker.textContent = String(index);
   return L.divIcon({
     className: "boundary-point-marker",
-    html: `<div style="
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      width: 26px;
-      height: 26px;
-      background-color: #245c3b;
-      color: #ffffff;
-      border: 2px solid #ffffff;
-      border-radius: 50%;
-      font-size: 13px;
-      font-weight: 600;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.4);
-    ">${index}</div>`,
-    iconSize: [26, 26],
-    iconAnchor: [13, 13],
+    html: marker,
+    iconSize: [28, 28],
+    iconAnchor: [14, 14],
   });
+}
+
+function emptyBounds(): CoordinateBounds {
+  return { west: "", east: "", south: "", north: "" };
+}
+
+function themeColor(name: "card" | "foreground" | "primary") {
+  return getComputedStyle(document.documentElement)
+    .getPropertyValue(`--${name}`)
+    .trim();
 }
 
 function polygonToLatLngs(polygon: Polygon): [number, number][] {

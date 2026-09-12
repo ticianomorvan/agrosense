@@ -16,7 +16,7 @@ import {
   NativeSelectOption,
 } from "../../components/ui/native-select";
 import { BoundaryFields } from "./BoundaryFields";
-import { BoundaryMapDrawer } from "./BoundaryMapDrawer";
+import { BoundaryMap } from "./BoundaryMap";
 import { boundaryValues, farmExtent, todayInCordoba } from "./form-values";
 import { type CoordinateBounds, rectangleFromBounds } from "./geometry";
 
@@ -253,11 +253,12 @@ export function PlotSetup({
               Plot boundary
             </h2>
             <p className="text-sm leading-normal text-muted-foreground">
-              The farm outline is shown with a dashed line. Mark 4 corners on
-              the map inside your farm by clicking or right-clicking.
+              The farm outline is dashed. Mark 4 points inside it to define a
+              rectangular plot. The preview shows the rectangle that will be
+              saved.
             </p>
           </div>
-          <BoundaryMapDrawer
+          <BoundaryMap
             farmBoundary={farm.boundary}
             farmName={farm.name}
             bounds={coordinates}
@@ -276,8 +277,12 @@ export function PlotSetup({
             className="rounded-lg border border-border bg-card p-3"
             open={manualCoordsOpen || boundaryInvalid}
             onToggle={(e) => setManualCoordsOpen(e.currentTarget.open)}
+            onInvalidCapture={(event) => {
+              event.currentTarget.open = true;
+              setManualCoordsOpen(true);
+            }}
           >
-            <summary className="cursor-pointer font-semibold text-sm text-foreground flex items-center justify-between">
+            <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-2 rounded-lg text-sm font-semibold text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
               <span>Manual coordinate inputs (synced)</span>
               <span className="text-xs text-muted-foreground font-normal">
                 {coordinates.west

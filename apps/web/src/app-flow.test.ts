@@ -9,7 +9,6 @@ import { routeFromPath, workspaceNeedsSignIn } from "./app/routing";
 import { timelineEventsForPlot } from "./features/events/timeline";
 import {
   boundsFromPoints,
-  polygonFromPoints,
   rectangleFromBounds,
 } from "./features/onboarding/geometry";
 
@@ -98,36 +97,6 @@ describe("onboarding geometry", () => {
     if (!bounds) throw new Error("Expected bounds");
     const rectangle = rectangleFromBounds(bounds);
     expect(rectangle.ok).toBe(true);
-  });
-
-  it("builds a polygon from points", () => {
-    expect(polygonFromPoints([])).toBeNull();
-    expect(
-      polygonFromPoints([
-        { lat: -31.4, lng: -64.2 },
-        { lat: -31.4, lng: -64.1 },
-      ]),
-    ).toBeNull();
-
-    const points = [
-      { lat: -31.4, lng: -64.2 },
-      { lat: -31.4, lng: -64.1 },
-      { lat: -31.5, lng: -64.1 },
-      { lat: -31.5, lng: -64.2 },
-    ];
-    const polygon = polygonFromPoints(points);
-    expect(polygon).toEqual({
-      type: "Polygon",
-      coordinates: [
-        [
-          [-64.2, -31.4],
-          [-64.1, -31.4],
-          [-64.1, -31.5],
-          [-64.2, -31.5],
-          [-64.2, -31.4],
-        ],
-      ],
-    });
   });
 
   it("enforces plot points and boundary are contained inside the farm boundary", () => {
