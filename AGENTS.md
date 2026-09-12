@@ -17,6 +17,7 @@
 
 - Follow `docs/stack.md`: React/Vite, plain CSS, Hono, shared Zod contracts.
   Do not introduce a CSS framework or UI kit as part of styling work.
+- Read `docs/domain-model.md` before implementation and verification.
 - Read existing code before editing and preserve unrelated user changes.
 - Implement only the requested slice. A map, action, or metric in the guide is
   not authorization to invent its API, data, or agronomic logic.
