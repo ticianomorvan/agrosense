@@ -152,9 +152,11 @@ export function createDemoDashboard(now = new Date()): DashboardResponse {
     assessmentState: "evaluated" as const,
     riskLevel: "high" as const,
     reason:
-      "Escenario sintético: la regla demo-maize-v6 coincide (-1°C en maíz V6).",
+      "Synthetic scenario: rule demo-maize-v6 matches (-1°C at maize V6).",
     recommendedActions: [
-      "Demostración: monitorear ápice vegetativo y hojas expuestas; no es asesoramiento agronómico.",
+      "Apply supplemental irrigation before the event to increase soil thermal inertia.",
+      "Suspend crop-protection and foliar fertilizer applications until thermal recovery.",
+      "Monitor the growing point and damage to exposed leaves 48–72 hours after the frost.",
     ],
     ruleVersion: "demo-v1",
     generatedAt: asOf,
@@ -185,9 +187,11 @@ export function createDemoDashboard(now = new Date()): DashboardResponse {
     assessmentState: "evaluated" as const,
     riskLevel: "high" as const,
     reason:
-      "Escenario sintético: la regla demo-soybean-r4 coincide (-1°C en soja R4).",
+      "Synthetic scenario: rule demo-soybean-r4 matches (-1°C at soybean R4).",
     recommendedActions: [
-      "Demostración: revisar daño en flores/vainas; no es asesoramiento agronómico.",
+      "Apply irrigation beforehand if the field has equipment to mitigate the temperature drop.",
+      "Suspend foliar chemical treatments to avoid phytotoxicity under cold stress.",
+      "Monitor damage to flowers, nodes, and developing pods after the event.",
     ],
     ruleVersion: "demo-v1",
     generatedAt: asOf,
@@ -223,7 +227,7 @@ export function createDemoDashboard(now = new Date()): DashboardResponse {
     asOf,
     farm: {
       id: "11111111-1111-4111-8111-111111111111",
-      name: "Campo La Posta (Demo)",
+      name: "La Posta Farm (Demo)",
       province: "Córdoba",
       locality: "Río Cuarto",
       timezone: "America/Argentina/Cordoba",
@@ -236,7 +240,7 @@ export function createDemoDashboard(now = new Date()): DashboardResponse {
     plots: [
       {
         id: plot1Id,
-        name: "Lote 1 (Maíz V6 - Alto Riesgo)",
+        name: "Field 1 (Maize V6 - High Risk)",
         boundary: rectangle(-64.17, -31.46, -64.154, -31.44),
         samplePoint: { type: "Point", coordinates: [-64.162, -31.45] },
         declaredAreaHa: plot1Area,
@@ -244,7 +248,7 @@ export function createDemoDashboard(now = new Date()): DashboardResponse {
       },
       {
         id: plot2Id,
-        name: "Lote 2 (Soja R4 - Alto Riesgo)",
+        name: "Field 2 (Soybean R4 - High Risk)",
         boundary: rectangle(-64.154, -31.47, -64.14, -31.45),
         samplePoint: { type: "Point", coordinates: [-64.147, -31.46] },
         declaredAreaHa: plot2Area,
@@ -252,7 +256,7 @@ export function createDemoDashboard(now = new Date()): DashboardResponse {
       },
       {
         id: plot3Id,
-        name: "Lote 3 (Maíz V3 - Sin Alerta)",
+        name: "Field 3 (Maize V3 - No Alert)",
         boundary: rectangle(-64.154, -31.45, -64.14, -31.44),
         samplePoint: { type: "Point", coordinates: [-64.147, -31.445] },
         declaredAreaHa: plot3Area,
@@ -298,7 +302,7 @@ export function createDemoDashboard(now = new Date()): DashboardResponse {
       {
         ...eventSnapshot,
         kind: "frost",
-        title: "Helada meteorológica pronosticada",
+        title: "Forecast Meteorological Frost",
         temporalState,
         source,
         alerts: [alert1, alert2],

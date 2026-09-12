@@ -367,8 +367,8 @@ Use this fully synthetic initial rule set, version `demo-v1`:
 | demo-storm-v | severe-storm / maize / V6 | wind >= 70 km/h | 1 | 14 days | high |
 
 All synthetic rules have reviewState=synthetic and evidenceUrl=null. Use reasonTemplate
-`Escenario sintético: la regla {code} coincide.` and recommendedActionsTemplates
-`["Demostración: revisar el lote; no es asesoramiento agronómico."]`. Substitute only
+`Synthetic scenario: rule {code} matches.` and recommendedActionsTemplates
+`["Demonstration: inspect the field; this is not agronomic advice."]`. Substitute only
 {code}. Other supported stages have no demo rule. These values demonstrate UI differentiation and are **not validated
 agronomic thresholds**. Live evaluation permits approved rules with evidence URLs
 only; if none exist, live events appear with no_applicable_rule, empty recommended_actions, and null risk.

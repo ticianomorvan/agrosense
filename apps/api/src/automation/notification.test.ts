@@ -10,7 +10,7 @@ const env = {
   KAPSO_API_KEY: "test-key",
   KAPSO_PHONE_NUMBER_ID: "123456",
   KAPSO_NOTIFICATION_TEMPLATE_NAME: "agrosense_weather_alert",
-  KAPSO_NOTIFICATION_TEMPLATE_LANGUAGE: "es_AR",
+  KAPSO_NOTIFICATION_TEMPLATE_LANGUAGE: "en_US",
 };
 const job = {
   id: "11111111-1111-4111-8111-111111111111",
@@ -22,7 +22,7 @@ const job = {
   payload: {
     farmName: "El Ceibo",
     plotName: "Norte",
-    title: "Helada",
+    title: "Frost",
     hazardKind: "frost" as const,
     startsAt: "2026-09-12T06:00:00+00:00",
     endsAt: "2026-09-12T08:00:00+00:00",
@@ -55,8 +55,8 @@ it("sends a plain text notification to the persisted recipient with a callback t
   expect(body.biz_opaque_callback_data).toBe(
     `agrosense:${job.id}:${job.token}`,
   );
-  expect(body.text.body).toContain("AgroSense: Aviso meteorológico");
-  expect(body.text.body).toContain("Riesgo del cultivo no disponible");
+  expect(body.text.body).toContain("AgroSense: Weather alert");
+  expect(body.text.body).toContain("Crop risk unavailable");
   expect(init.redirect).toBe("manual");
   expect(fetcher).toHaveBeenCalledTimes(1);
 });
@@ -104,7 +104,7 @@ it("never turns malformed success into a retryable rejection", async () => {
 
 it("bounds template parameters and states withdrawal without declaring the plot safe", () => {
   const template = notificationTemplate({ ...job, kind: "withdrawal" });
-  expect(template.details).toContain("retirado");
+  expect(template.details).toContain("withdrawn");
   expect(template.details).not.toContain("seguro");
   const lengthy = notificationTemplate({
     ...job,

@@ -38,7 +38,7 @@ test("Worker authenticates Supabase jobs, dispatches a template once and verifie
         KAPSO_API_KEY: "kapso_test",
         KAPSO_PHONE_NUMBER_ID: "123456",
         KAPSO_NOTIFICATION_TEMPLATE_NAME: "agrosense_weather_alert",
-        KAPSO_NOTIFICATION_TEMPLATE_LANGUAGE: "es",
+        KAPSO_NOTIFICATION_TEMPLATE_LANGUAGE: "en",
         KAPSO_NOTIFICATION_WEBHOOK_SECRET: webhookSecret,
       },
       outboundService: async (request) => {
@@ -69,7 +69,7 @@ test("Worker authenticates Supabase jobs, dispatches a template once and verifie
                   payload: {
                     farmName: "Farm",
                     plotName: "Plot",
-                    title: "Helada",
+                    title: "Frost",
                     hazardKind: "frost",
                     startsAt: now,
                     endsAt: new Date(Date.now() + 3600000).toISOString(),
@@ -107,7 +107,7 @@ test("Worker authenticates Supabase jobs, dispatches a template once and verifie
           assert.equal(request.headers.get("X-API-Key"), "kapso_test");
           assert.equal(state, "sending");
           assert.equal(body.type, "text");
-          assert.match(body.text.body, /AgroSense: Aviso meteorológico/);
+          assert.match(body.text.body, /AgroSense: Weather alert/);
           assert.equal(
             body.biz_opaque_callback_data,
             `agrosense:${id}:${token}`,

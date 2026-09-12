@@ -27,7 +27,7 @@ separate enable flag does not disable this endpoint.
 to the configured operator and `Content-Type: application/json`.
 
 ```json
-{"to":"5493511234567","text":"Hola desde AgroSense"}
+{"to":"5493511234567","text":"Hello from AgroSense"}
 ```
 
 `to` accepts 7–15 international digits with an optional leading `+`, which is

@@ -399,7 +399,7 @@ it("runs scheduled weather → rules → outbox → Kapso → delivery with dupl
       const body = JSON.parse(String(init?.body));
       expect(body.to).toBe("5493515551234");
       expect(body.type).toBe("text");
-      expect(body.text.body).toContain("AgroSense: Aviso meteorológico");
+      expect(body.text.body).toContain("AgroSense: Weather alert");
       sends.push(body);
       return Response.json({
         messaging_product: "whatsapp",
@@ -410,7 +410,7 @@ it("runs scheduled weather → rules → outbox → Kapso → delivery with dupl
       KAPSO_API_KEY: "test",
       KAPSO_PHONE_NUMBER_ID: "123456",
       KAPSO_NOTIFICATION_TEMPLATE_NAME: "agrosense_weather_alert",
-      KAPSO_NOTIFICATION_TEMPLATE_LANGUAGE: "es_AR",
+      KAPSO_NOTIFICATION_TEMPLATE_LANGUAGE: "en_US",
     });
     const sent = await dispatchNotifications(
       serviceClient,

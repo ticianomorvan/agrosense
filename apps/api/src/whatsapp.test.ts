@@ -13,7 +13,7 @@ const env = {
   KAPSO_PHONE_NUMBER_ID: "647015955153740",
   KAPSO_ALLOWED_USER_ID: userId,
 };
-const body = { to: "5493511234567", text: "Hola desde AgroSense" };
+const body = { to: "5493511234567", text: "Hello from AgroSense" };
 const accepted = {
   messaging_product: "whatsapp",
   contacts: [{ input: body.to, wa_id: body.to }],

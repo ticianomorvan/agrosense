@@ -64,12 +64,12 @@ export const notificationJobSchema = z.strictObject({
 export type NotificationJob = z.infer<typeof notificationJobSchema>;
 
 const risks = {
-  low: "bajo",
-  moderate: "moderado",
-  high: "alto",
-  critical: "crítico",
+  low: "low",
+  moderate: "moderate",
+  high: "high",
+  critical: "critical",
 };
-const dateFormatter = new Intl.DateTimeFormat("es-AR", {
+const dateFormatter = new Intl.DateTimeFormat("en-US", {
   timeZone: "America/Argentina/Cordoba",
   day: "2-digit",
   month: "2-digit",
@@ -87,10 +87,10 @@ export function notificationTemplate(job: NotificationJob) {
   const window = `${dateFormatter.format(new Date(payload.startsAt))}–${dateFormatter.format(new Date(payload.endsAt))} (Córdoba).`;
   const details =
     job.kind === "withdrawal"
-      ? `Pronóstico retirado por datos más recientes. ${window} Consultá las condiciones actuales en AgroSense.`
+      ? `Forecast withdrawn due to newer data. ${window} Check current conditions in AgroSense.`
       : payload.assessmentState === "evaluated" && payload.riskLevel !== null
-        ? `${job.kind === "escalation" ? "Aumento del riesgo. " : ""}Riesgo del cultivo: ${risks[payload.riskLevel]}. ${window} ${compact(payload.reason, 180)} ${compact(payload.recommendedActions[0] ?? "Consultá AgroSense.", 140)}`
-        : `Aviso meteorológico. ${window} Riesgo del cultivo no disponible: falta una evaluación agronómica aplicable con datos vigentes. Consultá AgroSense.`;
+        ? `${job.kind === "escalation" ? "Increased risk. " : ""}Crop risk: ${risks[payload.riskLevel]}. ${window} ${compact(payload.reason, 180)} ${compact(payload.recommendedActions[0] ?? "Check AgroSense.", 140)}`
+        : `Weather alert. ${window} Crop risk unavailable: no applicable agronomic assessment with current data. Check AgroSense.`;
   return {
     farm: compact(payload.farmName, 100),
     plot: compact(payload.plotName, 100),
@@ -102,13 +102,13 @@ export function notificationTemplate(job: NotificationJob) {
 export function formatNotificationText(job: NotificationJob): string {
   const params = notificationTemplate(job);
   return [
-    `*AgroSense: Aviso meteorológico*`,
-    `Finca: ${params.farm}`,
-    `Lote: ${params.plot}`,
-    `Evento previsto: ${params.hazard}`,
-    `Detalles: ${params.details}`,
+    `*AgroSense: Weather alert*`,
+    `Farm: ${params.farm}`,
+    `Field: ${params.plot}`,
+    `Forecast event: ${params.hazard}`,
+    `Details: ${params.details}`,
     ``,
-    `Consultá AgroSense para revisar el pronóstico y la evaluación del lote.`,
+    `Check AgroSense to review the forecast and field assessment.`,
   ].join("\n");
 }
 
