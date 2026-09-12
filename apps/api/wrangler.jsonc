@@ -21,7 +21,7 @@
   },
   "vars": {
     "CORS_ORIGIN": "https://agrosense-web.ticiano-morvan.workers.dev",
-    "WHATSAPP_AGENT_ENABLED": "false",
+    "WHATSAPP_AGENT_ENABLED": "true",
     "OPENROUTER_MODEL": "deepseek/deepseek-v4.1-flash",
     "OPENROUTER_REASONING_EFFORT": "medium",
     "KAPSO_NOTIFICATION_TEMPLATE_NAME": "agrosense_weather_alert",

@@ -3,6 +3,7 @@ import { sendWhatsappText } from "../lib/kapso";
 import {
   type AgentBindings,
   AgentConfigurationError,
+  conversationName,
   readAgentConfig,
 } from "./config";
 import { AdmissionError, Conversation } from "./conversation";
@@ -13,12 +14,14 @@ import { createAgentTools } from "./tools";
 
 export class WhatsAppConversation extends DurableObject<AgentBindings> {
   #conversation: Conversation;
+  #objectName: string | undefined;
   constructor(ctx: DurableObjectState, env: AgentBindings) {
     super(ctx, env);
+    this.#objectName = ctx.id.name;
     this.#conversation = new Conversation({
       store: ctx.storage,
       run: async (input) => {
-        this.#authorize(input.ownerId, [input.message]);
+        await this.#authorizeMessages(input.ownerId, [input.message]);
         return runAgent({
           text: input.message.text,
           history: input.history,
@@ -27,7 +30,9 @@ export class WhatsAppConversation extends DurableObject<AgentBindings> {
         });
       },
       send: async (input) => {
-        const config = this.#authorize(input.ownerId, [input.message]);
+        const config = await this.#authorizeMessages(input.ownerId, [
+          input.message,
+        ]);
         return sendWhatsappText(config.kapso, {
           to: input.message.sender,
           text: input.reply,
@@ -36,15 +41,24 @@ export class WhatsAppConversation extends DurableObject<AgentBindings> {
     });
   }
 
-  #authorize(ownerId: string, messages: InboundMessage[]) {
+  async #authorizeIdentity(ownerId: string, sender: string) {
     const config = readAgentConfig(this.env);
     if (
       ownerId !== config.ownerId ||
-      messages.some(
-        (message) =>
-          message.sender !== config.sender ||
-          message.phoneNumberId !== config.phoneNumberId,
-      )
+      !this.#objectName ||
+      (await conversationName({ ...config, sender })) !== this.#objectName
+    )
+      throw new AgentConfigurationError();
+    return config;
+  }
+
+  async #authorizeMessages(ownerId: string, messages: InboundMessage[]) {
+    const sender = messages[0]?.sender;
+    if (!sender || messages.some((message) => message.sender !== sender))
+      throw new AgentConfigurationError();
+    const config = await this.#authorizeIdentity(ownerId, sender);
+    if (
+      messages.some((message) => message.phoneNumberId !== config.phoneNumberId)
     )
       throw new AgentConfigurationError();
     return config;
@@ -53,7 +67,7 @@ export class WhatsAppConversation extends DurableObject<AgentBindings> {
   // The Worker validates the signed payload before making this internal RPC call.
   async enqueue(messages: InboundMessage[], ownerId: string) {
     try {
-      this.#authorize(ownerId, messages);
+      await this.#authorizeMessages(ownerId, messages);
       return await this.#conversation.enqueue(messages, ownerId);
     } catch (error) {
       if (error instanceof AdmissionError)
@@ -68,8 +82,9 @@ export class WhatsAppConversation extends DurableObject<AgentBindings> {
     }
   }
 
-  async status(messageId: string) {
+  async status(messageId: string, ownerId: string, sender: string) {
     try {
+      await this.#authorizeIdentity(ownerId, sender);
       return await this.#conversation.status(messageId);
     } catch {
       throw new Error("Conversation is temporarily unavailable");

@@ -64,8 +64,9 @@ file. The core browser flow requires the four `SUPABASE_*` settings and both
 `COPERNICUS_*` settings. `CORS_ORIGIN` is a non-secret Wrangler variable set to
 the exact frontend origin; update it if that origin changes.
 Kapso, OpenRouter, and monitoring settings are required only when those features
-are activated; keep the reasoning agent disabled until its producer number and
-webhook secret are configured. Never use a `VITE_` variable for a secret.
+are activated; keep the reasoning agent disabled until its owner, provider keys,
+and webhook signing secret are configured. Never use a `VITE_` variable for a
+secret.
 
 For subsequent releases, export the same Worker origin and run `pnpm deploy`;
 its preflight rejects a missing or malformed API origin before it changes either

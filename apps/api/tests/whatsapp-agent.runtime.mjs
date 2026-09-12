@@ -6,13 +6,14 @@ import { fileURLToPath } from "node:url";
 import { exportJWK, generateKeyPair, SignJWT } from "jose";
 import { convertV4MiniflareOptions, Miniflare, Response } from "miniflare";
 
-test("signed webhook → durable alarm → three chosen tools → WhatsApp reply, with replay and restart", {
+test("signed webhook → isolated durable conversation → tool-backed reply, replay and restart", {
   timeout: 30000,
 }, async () => {
   const owner = "11111111-1111-4111-8111-111111111111";
   const farm = "22222222-2222-4222-8222-222222222222";
   const plot = "33333333-3333-4333-8333-333333333333";
   const sender = "5493511234567";
+  const secondSender = "5493519999999";
   const business = "647015955153740";
   const secret = "test_webhook_secret_not_real";
   const supabase = "https://agent-runtime.supabase.co";
@@ -60,7 +61,6 @@ test("signed webhook → durable alarm → three chosen tools → WhatsApp reply
         KAPSO_PHONE_NUMBER_ID: business,
         KAPSO_ALLOWED_USER_ID: owner,
         WHATSAPP_AGENT_ENABLED: "true",
-        WHATSAPP_AGENT_PHONE_NUMBER: sender,
         KAPSO_WEBHOOK_SECRET: secret,
         OPENROUTER_API_KEY: "openrouter_test",
       },
@@ -222,7 +222,7 @@ test("signed webhook → durable alarm → three chosen tools → WhatsApp reply
           );
           assert.equal(request.headers.get("X-API-Key"), "kapso_test");
           const body = await request.json();
-          assert.equal(body.to, sender);
+          assert.ok([sender, secondSender].includes(body.to));
           assert.equal(body.text.body, answer);
           sends.push(body);
           return Response.json({
@@ -269,10 +269,22 @@ test("signed webhook → durable alarm → three chosen tools → WhatsApp reply
         },
       });
     };
-    const status = (id, headers = auth) =>
-      mf.dispatchFetch(`https://local/api/whatsapp/agent/runs/${id}`, {
-        headers,
-      });
+    const status = (id, headers = auth, runSender = sender) =>
+      mf.dispatchFetch(
+        `https://local/api/whatsapp/agent/runs/${id}?sender=${encodeURIComponent(runSender)}`,
+        {
+          headers,
+        },
+      );
+    assert.equal(
+      (
+        await mf.dispatchFetch(
+          "https://local/api/whatsapp/agent/runs/wamid.1",
+          { headers: auth },
+        )
+      ).status,
+      400,
+    );
     assert.equal((await status("wamid.1", {})).status, 401);
     assert.equal(
       (
@@ -289,10 +301,6 @@ test("signed webhook → durable alarm → three chosen tools → WhatsApp reply
     );
     assert.equal((await webhook("{")).status, 400);
     assert.equal((await webhook("x".repeat(131073))).status, 413);
-    assert.deepEqual(
-      await (await webhook(event("ignored", "5493519999999"))).json(),
-      { accepted: 0, duplicates: 0, ignored: 1 },
-    );
     assert.equal(requests.length, 0);
     const initial = event("wamid.1");
     assert.deepEqual(await (await webhook(initial)).json(), {
@@ -300,9 +308,9 @@ test("signed webhook → durable alarm → three chosen tools → WhatsApp reply
       duplicates: 0,
       ignored: 0,
     });
-    const waitAccepted = async (id) => {
+    const waitAccepted = async (id, runSender = sender) => {
       for (let attempt = 0; attempt < 100; attempt++) {
-        const response = await status(id);
+        const response = await status(id, auth, runSender);
         assert.equal(response.status, 200);
         assert.match(response.headers.get("cache-control"), /no-store/);
         const run = await response.json();
@@ -371,6 +379,23 @@ test("signed webhook → durable alarm → three chosen tools → WhatsApp reply
       { role: "user", content: initial.message.text.body },
       { role: "assistant", content: answer },
     ]);
+
+    const isolated = event("wamid.other", secondSender);
+    isolated.message.text.body = "Use a separate conversation for me.";
+    assert.deepEqual(await (await webhook(isolated)).json(), {
+      accepted: 1,
+      duplicates: 0,
+      ignored: 0,
+    });
+    assert.equal((await status("wamid.other")).status, 404);
+    await waitAccepted("wamid.other", secondSender);
+    assert.equal(sends.length, 3);
+    assert.deepEqual(
+      requests[8].messages.filter((item) =>
+        ["user", "assistant"].includes(item.role),
+      ),
+      [{ role: "user", content: isolated.message.text.body }],
+    );
   } finally {
     await mf.dispose();
   }

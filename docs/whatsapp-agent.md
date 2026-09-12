@@ -3,7 +3,10 @@
 A signed Kapso text message is admitted to a Durable Object. Vercel AI SDK’s
 `ToolLoopAgent` runs a bounded tool loop through the official OpenRouter provider.
 The final answer is sent through the shared
-[Kapso adapter](kapso.md). The agent supports one configured producer per deployment.
+[Kapso adapter](kapso.md). For this public demo, every valid inbound sender is
+mapped to one configured Supabase owner. Each sender has an isolated queue, history,
+rate limit and run receipts, but all senders can query that owner's farm data; this
+is not an account-linking or authorization flow.
 Automatic alerts, scheduled forecast refreshes, farm mutations, media, templates,
 and account-linking flows are outside this slice.
 For implementation changes, see the [official skills and development references](agent-development.md).
@@ -42,16 +45,15 @@ Use the ignored `apps/api/.env` locally, based on
 | Binding | Value |
 | --- | --- |
 | `SUPABASE_SECRET_KEY` | Server key for the owner-scoped read adapter |
-| `WHATSAPP_AGENT_PHONE_NUMBER` | Producer's WhatsApp sender ID: international digits, optional leading `+` |
 | `KAPSO_WEBHOOK_SECRET` | Kapso subscription signing secret, at least 16 characters |
 | `OPENROUTER_API_KEY` | OpenRouter inference key |
 | `OPENROUTER_MODEL` | Default `deepseek/deepseek-v4.1-flash` |
 | `OPENROUTER_REASONING_EFFORT` | `low`, `medium` (default), or `high` |
 | `WHATSAPP_AGENT_ENABLED` | Literal `true` to enable; disabled by default |
 
-`KAPSO_ALLOWED_USER_ID` links the producer to a Supabase owner and authorizes run
-inspection. The business sender is selected by `KAPSO_PHONE_NUMBER_ID`; it is
-separate from the producer's number. Use the sender ID reported by WhatsApp;
+`KAPSO_ALLOWED_USER_ID` selects the single Supabase owner whose data every demo
+sender can query and authorizes run inspection. The business number is selected by
+`KAPSO_PHONE_NUMBER_ID`. Contact identities come from the signed inbound event;
 country-specific mobile prefixes are not inferred.
 
 The agent uses `ai` and `@openrouter/ai-sdk-provider`, with native Zod tool
@@ -76,21 +78,24 @@ account settings. Direct `OPENAI_*` settings are unused.
    `phone_number_id`, subscribing to `whatsapp.message.received` events at
    `https://<your-worker-host>/api/whatsapp/webhook` with the same signing secret.
    Use unbuffered events or batches of at most 20 messages and 128 KiB.
-4. Enable the agent and have the linked producer message the business number.
+4. Enable the agent and message the business number from each demo participant's
+   phone.
    Verify an actual tool-backed answer, a follow-up question in the same
    conversation, and the run's status.
 
 Setting `WHATSAPP_AGENT_ENABLED=false` stops admission and subsequent run/send
 operations. Current identity is checked again before processing and sending.
-Changing owner, producer or business sender selects a different conversation
-store. Status inspection currently requires the full enabled configuration.
+Changing owner, contact sender or business number selects a different conversation
+store. Status inspection requires the full enabled configuration and the contact
+sender used to select that store.
 
 ## HTTP and delivery behavior
 
 `POST /api/whatsapp/webhook` verifies the raw body using HMAC-SHA256 from the bare
 hex `X-Webhook-Signature` header. The event name is in `X-Webhook-Event`.
-No Supabase bearer token is required. Wrong senders/business IDs, outbound echoes,
-history imports, non-text events and messages older than 24 hours are ignored.
+No Supabase bearer token is required. Mismatched sender identities, wrong business
+IDs, outbound echoes, history imports, non-text events and messages older than 24
+hours are ignored.
 BSUID-only contacts are unsupported.
 
 The Worker calls the Durable Object through typed RPC. HTTP 200 follows durable
@@ -105,11 +110,13 @@ This acknowledges queued work. Invalid signatures return 401, malformed bodies
 configuration/storage failures 503. Ignored events return 200 with an ignored count.
 Deduplication uses signed message identity/content, independent of delivery headers.
 
-`GET /api/whatsapp/agent/runs/<URL-encoded-message-id>` requires the configured
-operator's verified Supabase bearer token. Unknown/expired IDs return 404; missing
-or invalid authentication returns 401 and another user receives 403. Responses
-contain status, timestamps, attempts, model steps, tool outcomes, reply message ID
-and error code. They exclude bodies, credentials and reasoning.
+`GET /api/whatsapp/agent/runs/<URL-encoded-message-id>?sender=<international-digits>`
+requires exactly one contact sender query parameter and the configured operator's
+verified Supabase bearer token. An optional leading `+` must be URL-encoded.
+Unknown/expired IDs return 404; malformed lookups return 400; missing or invalid
+authentication returns 401 and another user receives 403. Responses contain status,
+timestamps, attempts, model steps, tool outcomes, reply message ID and error code.
+They exclude bodies, credentials and reasoning.
 
 A run moves through `queued`, `running`, `reply_pending`, `sending`, then
 `accepted`, `failed` or `send_unknown`. The generated reply and then a sending
@@ -131,7 +138,7 @@ Check Kapso before manually retrying `send_unknown`.
 | Provider requests | 20 seconds per model request; 8 seconds per data/send request |
 | Provider success bodies | 1 MiB for model responses; 128 KiB for Supabase; 64 KiB for forecasts; 16 KiB for sends |
 | Output | 4,096 model output tokens per step; 4,096 characters per reply |
-| Admission | 20 queued messages; 60 new messages per hour |
+| Admission | Per sender: 20 queued messages; 60 new messages per hour |
 | History | 6 exchanges; session expires 24 hours after its first accepted reply |
 | Run receipts | 7 days, with completed input/reply bodies removed |
 

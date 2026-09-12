@@ -60,7 +60,7 @@ export async function verifyWebhookSignature(
 export function normalizeInbound(
   payload: unknown,
   event: string | undefined,
-  config: { phoneNumberId: string; sender: string },
+  config: { phoneNumberId: string },
   now = new Date(),
 ): { messages: InboundMessage[]; ignored: number } {
   const envelope = envelopeSchema.safeParse(payload);
@@ -96,12 +96,7 @@ export function normalizeInbound(
     const contact = whatsappPhoneSchema.safeParse(
       conversation.phone_number ?? message.from,
     );
-    if (
-      !from.success ||
-      !contact.success ||
-      from.data !== contact.data ||
-      from.data !== config.sender
-    )
+    if (!from.success || !contact.success || from.data !== contact.data)
       continue;
     const timestamp = Number(message.timestamp) * 1000;
     if (

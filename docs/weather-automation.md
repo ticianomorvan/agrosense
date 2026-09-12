@@ -6,7 +6,8 @@ Every live farm is refreshed approximately every 30 minutes using the stored sam
 point of each plot. A complete forecast is normalized, evaluated by the existing
 deterministic rule engine, and published atomically. Each plot belongs to its farm's
 owner. Notifications use a separately provisioned owner contact with recorded
-WhatsApp opt-in; the conversation agent's allowlisted phone is not a contact database.
+WhatsApp opt-in; the demo conversation agent's inbound senders are not a contact
+database.
 
 This extends the original five-table demo scope to scheduled ingestion and outbound
 delivery. Demo farms remain manually refreshable and never generate automatic sends.

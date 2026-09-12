@@ -1,5 +1,6 @@
 import {
   whatsappMessageRequestSchema,
+  whatsappPhoneSchema,
   whatsappWebhookResponseSchema,
 } from "@agrosense/contracts";
 import { Hono } from "hono";
@@ -141,17 +142,31 @@ whatsapp.post(
         c.req.header("X-Webhook-Event"),
         config,
       );
-      let admission = { accepted: 0, duplicates: 0 };
+      const admission = { accepted: 0, duplicates: 0 };
       if (messages.length) {
-        const stub = c.env.WHATSAPP_CONVERSATIONS.getByName(
-          await conversationName(config),
-        );
-        const result = await stub.enqueue(messages, config.ownerId);
-        if ("error" in result) {
-          if (result.status === 429) c.header("Retry-After", "60");
-          return c.json({ error: result.error }, result.status);
+        const groups = new Map<string, typeof messages>();
+        for (const message of messages) {
+          const group = groups.get(message.sender);
+          if (group) group.push(message);
+          else groups.set(message.sender, [message]);
         }
-        admission = result;
+        const results = await Promise.all(
+          [...groups].map(async ([sender, senderMessages]) => {
+            const stub = c.env.WHATSAPP_CONVERSATIONS?.getByName(
+              await conversationName({ ...config, sender }),
+            );
+            if (!stub) throw new AgentConfigurationError();
+            return stub.enqueue(senderMessages, config.ownerId);
+          }),
+        );
+        for (const result of results) {
+          if ("error" in result) {
+            if (result.status === 429) c.header("Retry-After", "60");
+            return c.json({ error: result.error }, result.status);
+          }
+          admission.accepted += result.accepted;
+          admission.duplicates += result.duplicates;
+        }
       }
       return c.json(
         whatsappWebhookResponseSchema.parse({ ...admission, ignored }),
@@ -189,11 +204,26 @@ whatsapp.get("/agent/runs/:messageId", requireAuth, async (c) => {
       .string()
       .min(1)
       .max(512)
-      .parse(c.req.param("messageId"));
+      .safeParse(c.req.param("messageId"));
+    const url = new URL(c.req.url);
+    const senderValues = url.searchParams.getAll("sender");
+    const sender = whatsappPhoneSchema.safeParse(senderValues[0]);
+    if (
+      !messageId.success ||
+      !sender.success ||
+      senderValues.length !== 1 ||
+      [...url.searchParams.keys()].some((key) => key !== "sender")
+    )
+      return jsonError(
+        c,
+        400,
+        "BAD_REQUEST",
+        "Provide one valid sender query parameter and message ID",
+      );
     const stub = c.env.WHATSAPP_CONVERSATIONS.getByName(
-      await conversationName(config),
+      await conversationName({ ...config, sender: sender.data }),
     );
-    const run = await stub.status(messageId);
+    const run = await stub.status(messageId.data, config.ownerId, sender.data);
     return run ? c.json(run) : jsonError(c, 404, "NOT_FOUND", "Run not found");
   } catch {
     return jsonError(
