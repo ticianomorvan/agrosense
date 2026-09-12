@@ -349,6 +349,10 @@ export type Database = {
         };
         Returns: boolean;
       };
+      import_demo_seed: {
+        Args: { p_owner_id: string; p_payload: Json };
+        Returns: Json;
+      };
     };
     Enums: { [_ in never]: never };
     CompositeTypes: { [_ in never]: never };

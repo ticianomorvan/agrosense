@@ -116,6 +116,15 @@ export async function refreshFarm(
     .select("*")
     .eq("farm_id", farmId);
   if (plotsError) throw plotsError;
+  const { data: cycles, error: cyclesError } = await userClient
+    .from("crop_cycles")
+    .select("*")
+    .in(
+      "plot_id",
+      (plots ?? []).map((plot) => plot.id),
+    )
+    .is("ended_on", null);
+  if (cyclesError) throw cyclesError;
   let forecast:
     | ReturnType<typeof syntheticForecast>
     | {
@@ -177,7 +186,16 @@ export async function refreshFarm(
   }
   const publications = buildPublication({
     forecasts: forecast.plots,
-    cycles: [],
+    cycles: (cycles ?? []).map((cycle) => ({
+      id: cycle.id,
+      plotId: cycle.plot_id,
+      cropCode: cycle.crop_code as "maize" | "soybean",
+      stageCode: cycle.stage_code,
+      stageAsOf: cycle.stage_as_of,
+      sownOn: cycle.sown_on,
+      endedOn: cycle.ended_on,
+      updatedAt: cycle.updated_at,
+    })),
     now: refreshedAt,
     detect: detectThreatEvents,
   });

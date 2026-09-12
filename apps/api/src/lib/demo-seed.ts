@@ -138,54 +138,8 @@ export async function importDemoSeed(
 ) {
   const seed = validateDemoSeed(input);
   const nowIso = now.toISOString();
-  const { data: farm, error: farmError } = await serviceClient
-    .from("farms")
-    .insert({
-      owner_id: ownerId,
-      name: seed.farm.name,
-      province: seed.farm.province,
-      locality: seed.farm.locality,
-      boundary_geojson: seed.farm
-        .boundary as unknown as Database["public"]["Tables"]["farms"]["Insert"]["boundary_geojson"],
-      declared_area_ha: seed.farm.declaredAreaHa,
-      data_mode: "demo",
-      custom_rules: [],
-    })
-    .select("id")
-    .single();
-  if (farmError) throw farmError;
-
-  const plotIds: string[] = [];
-  for (const plot of seed.plots) {
-    const { data: inserted, error } = await serviceClient
-      .from("plots")
-      .insert({
-        farm_id: farm.id,
-        name: plot.name,
-        boundary_geojson:
-          plot.boundary as unknown as Database["public"]["Tables"]["plots"]["Insert"]["boundary_geojson"],
-        sample_point_geojson:
-          plot.samplePoint as unknown as Database["public"]["Tables"]["plots"]["Insert"]["sample_point_geojson"],
-        declared_area_ha: plot.declaredAreaHa,
-      })
-      .select("id")
-      .single();
-    if (error) throw error;
-    plotIds.push(inserted.id);
-    const { error: cycleError } = await serviceClient
-      .from("crop_cycles")
-      .insert({
-        plot_id: inserted.id,
-        crop_code: plot.cropCycle.cropCode,
-        season_label: plot.cropCycle.seasonLabel,
-        sown_on: plot.cropCycle.sownOn,
-        stage_code: plot.cropCycle.stageCode,
-        stage_as_of: plot.cropCycle.stageAsOf,
-      });
-    if (cycleError) throw cycleError;
-  }
-
-  const forecastDate = now.toISOString().slice(0, 10);
+  const plotIds = seed.plots.map(() => crypto.randomUUID());
+  const forecastDate = nowIso.slice(0, 10);
   const hours = Array.from({ length: 24 }, (_, index) => ({
     at: new Date(
       Date.parse(`${forecastDate}T00:00:00Z`) + index * 3600000,
@@ -196,6 +150,9 @@ export async function importDemoSeed(
     precipitationProbability: null,
     weatherCode: null,
   }));
+  const firstHour = hours[0];
+  const secondHour = hours[1];
+  if (!firstHour || !secondHour) throw new Error("Demo forecast has no hours");
   const source = {
     code: "demo" as const,
     url: null,
@@ -214,75 +171,75 @@ export async function importDemoSeed(
     detectionThresholdC: 0,
     hours,
   };
-  const firstHour = hours[0];
-  const secondHour = hours[1];
-  if (!firstHour || !secondHour) throw new Error("Demo forecast has no hours");
-  const { data: event, error: eventError } = await serviceClient
-    .from("events")
-    .insert({
-      farm_id: farm.id,
-      source_code: "demo",
-      source_event_key: `demo:frost:${forecastDate}`,
-      kind: "frost",
-      title: `Alerta de Helada (${forecastDate})`,
-      starts_at: firstHour.at,
-      ends_at: secondHour.at,
-      issued_at: null,
-      retrieved_at: nowIso,
-      source_url: null,
-      status: "active",
-      evidence:
-        evidence as unknown as Database["public"]["Tables"]["events"]["Insert"]["evidence"],
-      is_demo: true,
-    })
-    .select("id")
-    .single();
-  if (eventError) throw eventError;
-  for (const [index, plotId] of plotIds.entries()) {
-    const cycle = seed.plots[index]?.cropCycle;
+  const eventId = crypto.randomUUID();
+  const alerts = seed.plots.map((plot, index) => {
+    const plotId = plotIds[index];
+    if (!plotId) throw new Error("Missing plot id");
     const evaluation = evaluateRisk(
       demoRuleSet,
       evidence,
-      cycle
-        ? {
-            id: "00000000-0000-4000-8000-000000000000",
-            plotId,
-            ...cycle,
-            endedOn: null,
-            updatedAt: nowIso,
-          }
-        : null,
+      {
+        id: crypto.randomUUID(),
+        plotId,
+        ...plot.cropCycle,
+        endedOn: null,
+        updatedAt: nowIso,
+      },
       "frost",
     );
-    const { error } = await serviceClient.from("plot_alerts").insert({
-      farm_id: farm.id,
-      plot_id: plotId,
-      event_id: event.id,
-      assessment_state: evaluation.assessmentState,
-      risk_level: evaluation.riskLevel,
+    return {
+      plotId,
+      assessmentState: evaluation.assessmentState,
+      riskLevel: evaluation.riskLevel,
       reason: evaluation.reason,
-      recommended_actions: evaluation.recommendedActions,
-      input_snapshot: {
+      recommendedActions: evaluation.recommendedActions,
+      inputSnapshot: {
         schemaVersion: 1,
         plotId,
         cropCycle: null,
         event: {
-          id: event.id,
+          id: eventId,
           status: "active",
-          startsAt: hours[0]?.at,
-          endsAt: hours[1]?.at,
+          startsAt: firstHour.at,
+          endsAt: secondHour.at,
           evidence,
-        } as unknown as Database["public"]["Tables"]["plot_alerts"]["Insert"]["input_snapshot"],
+        },
         ruleSetVersion: demoRuleSet.version,
         matchedRuleCodes: evaluation.matchedRuleCodes,
         generation: { method: "template", modelId: null, promptVersion: null },
       },
-      rule_version: demoRuleSet.version,
-      generated_at: nowIso,
-      valid_until: new Date(now.getTime() + 3600000).toISOString(),
-      generation_method: "template",
-    });
-    if (error) throw error;
-  }
-  return { farmId: farm.id, plotIds, eventId: event.id };
+      ruleVersion: demoRuleSet.version,
+      generatedAt: nowIso,
+      validUntil: new Date(now.getTime() + 3600000).toISOString(),
+      generationMethod: "template",
+    };
+  });
+  const payload = {
+    farm: {
+      name: seed.farm.name,
+      province: seed.farm.province,
+      locality: seed.farm.locality,
+      boundary: seed.farm.boundary,
+      declaredAreaHa: seed.farm.declaredAreaHa,
+    },
+    plots: seed.plots.map((plot, index) => ({ ...plot, id: plotIds[index] })),
+    event: {
+      id: eventId,
+      sourceEventKey: `demo:frost:${forecastDate}`,
+      kind: "frost",
+      title: `Alerta de Helada (${forecastDate})`,
+      startsAt: firstHour.at,
+      endsAt: secondHour.at,
+      retrievedAt: nowIso,
+      evidence,
+    },
+    alerts,
+  };
+  const { data, error } = await serviceClient.rpc("import_demo_seed", {
+    p_owner_id: ownerId,
+    p_payload:
+      payload as unknown as Database["public"]["Functions"]["import_demo_seed"]["Args"]["p_payload"],
+  });
+  if (error) throw error;
+  return { ...(data as { farmId: string; eventId: string }), plotIds };
 }
