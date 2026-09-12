@@ -355,6 +355,19 @@ export type Database = {
         Args: { p_owner_id: string; p_payload: Json };
         Returns: Json;
       };
+      create_user_farm: {
+        Args: { p_owner_id: string; p_payload: Json };
+        Returns: Json;
+      };
+      create_farm_plot: {
+        Args: {
+          p_owner_id: string;
+          p_farm_id: string;
+          p_expected_data_version: number;
+          p_payload: Json;
+        };
+        Returns: Json;
+      };
     };
     Enums: { [_ in never]: never };
     CompositeTypes: { [_ in never]: never };
