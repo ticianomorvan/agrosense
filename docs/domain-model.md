@@ -8,14 +8,10 @@ and the three-column sketch. Stack: [stack.md](stack.md).
 
 ## How to use this document
 
-This is the single reference for the five-table MVP. The column dictionary and
-inline SQL specify persistence. The inline type definitions specify JSON payloads
-and API bodies; the accompanying rules define runtime validation and transactions.
-The complete dashboard example shows how the models fit together.
-
-The SQL is a fresh-database design requiring existing Supabase Auth objects and
-roles. It is not an applied migration or a rerunnable setup script. Mutation RPCs,
-provider integration, and application code are future implementation work.
+This is the single design reference for the five-table MVP. The column dictionary
+specifies persistence; payload field tables specify JSON and API bodies. Validation
+and transaction sections define behavior that depends on multiple fields or rows.
+Implementation code, migrations, and fixtures belong in the build work.
 
 ## Product and scope
 
@@ -73,8 +69,9 @@ erDiagram
 ## Column dictionary
 
 Every column is listed below. “NULL” means nullable with an implicit SQL NULL
-default; “required” means NOT NULL without a default. The inline SQL appendix gives the exact CHECK
-expressions. created_at and updated_at default to now(); a trigger refreshes
+default; “required” means NOT NULL without a default. Enforce the constraints
+documented below in the database where possible. created_at and updated_at
+default to now(); timestamp maintenance refreshes
 updated_at on every UPDATE. Only the server writes these timestamps.
 
 ### farms
@@ -187,6 +184,23 @@ updated_at on every UPDATE. Only the server writes these timestamps.
   complete JSON shapes below, polygon topology, or cross-row JSON references.
   The trusted import/publication boundary validates those before writing.
 
+### Database consistency checks and indexes
+
+- data_version is a positive integer. forecast_summary is null exactly when
+  last_success_at is null. A non-null last_success_at requires last_attempt_at
+  and must be <= last_attempt_at.
+- source_event_key length is 1–200; rule_version length is 1–100. source_url is
+  null or HTTPS with at most 2,048 characters. Enforce enums and all column
+  dictionary limits. JSONB objects carry schemaVersion=1 where specified.
+- stage_code/stage_as_of are both null or both present. Stage must belong to the
+  crop. Known stage_as_of >= sown_on; known ended_on > sown_on and > stage_as_of.
+- ends_at > starts_at; known issued_at <= retrieved_at. is_demo matches the
+  source code. valid_until > generated_at. evaluated has non-null risk and
+  recommendation; other assessment states have both null.
+- Besides indexes backing primary/unique keys, add farms(owner_id),
+  crop_cycles(plot_id), events(farm_id,starts_at,id), plot_alerts(farm_id), and
+  plot_alerts(event_id). These cover owner reads, joins and the timeline ordering.
+
 ## Exact enums and catalogs
 
 | Name | Allowed values |
@@ -208,10 +222,10 @@ stages requires updating the API catalog and SQL CHECK together.
 
 ## Exact JSONB shapes
 
-The type definitions below specify every nested field. All properties are required
-unless marked with `?`; `| null` means a present nullable value. Array bounds,
-format rules, conditional nullability and cross-field checks are mandatory runtime
-validation, not inferred TypeScript behavior. Unknown object keys are rejected.
+The payload field tables below specify every nested field. Presence and
+nullability are separate: required nullable fields must be present with null when
+unknown. Array bounds, format rules and cross-field checks are mandatory runtime
+validation. Unknown object keys are rejected.
 
 | SQL field | Schema | Fields |
 | --- | --- | --- |
@@ -269,7 +283,7 @@ consecutive hours from the evidence, never from ends_at minus starts_at. Changes
 to hours/bounds within the date retain the same event ID; a different date is a
 different event. This is a demo grouping policy, not regional storm correlation.
 
-RiskRule and RuleSet are defined in the inline type reference. Evaluate the
+RiskRule and RuleSet are defined in the payload field tables. Evaluate the
 seeded open cycle only; the MVP has no scheduled crop transitions. For each rule:
 match crop and stage, require declared stage_as_of <= the event's local start
 date, and require its age on that date <= stageMaxAgeDays. Height must equal the
@@ -351,7 +365,7 @@ IDs and counts but increments the farm publication version.
 All paths require `Authorization: Bearer <Supabase access token>`. Local fixtures
 may bypass auth only in an explicitly local demo mode. Responses use
 `Cache-Control: private, no-store`. Query parameters are unsupported in v1.
-Exact bodies and response examples are included below; the three operations are:
+Exact body fields are defined below; the three operations are:
 
 | Method/path | Input | Success |
 | --- | --- | --- |
@@ -400,8 +414,8 @@ forecast, events, monitoring. Read all DB data under one consistent snapshot.
 - Basemap is either available with HTTPS tileUrlTemplate, attribution, zoom bounds
   and nullable acquiredAt, or unavailable with reason. Available templates must
   include {z}, {x}, {y}; minZoom <= maxZoom; credentials must be browser-safe.
-  Provider selection remains deployment configuration. The inline example
-  intentionally reports unavailable instead of inventing a working tile service.
+  Provider selection remains deployment configuration; report unavailable until
+  a working tile service is configured.
 
 | HTTP | Error code and condition |
 | --- | --- |
@@ -434,742 +448,315 @@ cancellation clearing current risk; cross-owner/cross-farm denial; limits and
 freshness derivations. Run pnpm check after application changes, and inspect the
 three panels in a browser. This document is a reference, not completed runtime code.
 
-The SQL was checked in isolated PostgreSQL with mocked Supabase Auth objects,
-including relational constraints, owner-scoped reads, denied client writes, and
-event-alert deletion behavior. The JSON shapes and example were also validated.
-These checks do not test deployed Supabase, provider integration, mutation RPCs,
-or application behavior that has not been implemented.
-
 A real farmer pilot requires reviewed agronomic rules and provider permissions
 plus monitoring reliability, history and notification design beyond this MVP.
 
-## Inline JSON and API type reference
+## Payload field reference
 
-Use these names directly when implementing shared contracts. `Id`, `Instant`,
-and `LocalDate` must pass UUID, UTC RFC3339 and calendar-date validation; they are
-strings on the wire. `number` must be finite, and version/count/hour-limit values
-must be integers. Text length/range comments and the column dictionary are binding.
+These are data shapes, not additional database tables. Every field is required
+unless its Presence column says optional. Null is permitted only when listed in
+Type. A dash means no additional field-specific constraint; named types retain
+their shared constraints. All objects reject unknown fields. Named types refer to other tables in
+this section or to the enum catalog. Id is a UUID string; Instant is an RFC3339
+UTC string ending Z; LocalDate is a valid YYYY-MM-DD date. Position is the
+longitude/latitude pair defined under Conventions and limits. StageCode is the
+union of supported stages, constrained by crop. EventStatus and AssessmentState
+use the enum catalog. RefreshErrorCode uses the five refresh failure codes above.
 
-Conditional checks beyond the type notation:
+Additional conditional validation:
 
-- CropCycle.stageCode must match cropCode's allowed stage list. stageCode and
-  stageAsOf are both null or both non-null.
-- Source.isDemo is true exactly for code=demo. Source.url is HTTPS or null, with
-  at most 2,048 characters. issuedAt can be null and is never fabricated.
+- CropCycle.stageCode must match cropCode. stageCode/stageAsOf are both null or
+  both non-null. Source.isDemo is true exactly for code=demo.
 - EventEvidence.scope=farm_demo requires demo source and null samplePoint;
-  plot_forecast requires open_meteo, one plot ID and a non-null samplePoint.
+  plot_forecast requires open_meteo, exactly one plot ID and non-null samplePoint.
 - Generation.method=template requires null modelId/promptVersion; llm requires
-  both, with maxima of 200 and 100 characters respectively.
-- PlotAlert.assessmentState=evaluated requires non-null riskLevel/recommendation;
-  other states require both null. Recommendation length is 1–1,000 when present.
-- Basemap.available requires all three tile placeholders, HTTPS, minZoom <= maxZoom,
-  attribution length 1–500, and nullable acquiredAt. Unavailable has only status
-  and a reason of length 1–300.
-- RiskRule.stageCodes contains only stages supported by its crop. Approved rules
-  require an HTTPS evidenceUrl of at most 2,048 characters; synthetic rules may
-  use null. Rule codes are unique within a set; all version/code strings have
-  length 1–100. thresholdC is in [-100,0], hours in [1,24], stage age in [1,30].
-- PATCH accepts only its listed fields, requires at least one cultivation field
-  beyond expectedDataVersion, and follows the merge/pairing rules above.
-- IDs in arrays must resolve within the farm. Exact array limits appear in the
-  type comments. All geometry conditions from Conventions and limits still apply.
+  both. PlotAlert.evaluated requires riskLevel/recommendation; other states
+  require both null.
+- Basemap uses exactly one of the two alternatives below. Available templates
+  require {z}, {x}, {y} and minZoom <= maxZoom.
+- RiskRule stages must belong to its crop. Approved rules require a non-null
+  HTTPS evidenceUrl. Rule codes must be unique within RuleSet.
+- PATCH requires at least one cultivation field, and the stage pair/merge rules
+  in the HTTP section apply even though its fields are individually optional.
 
-```ts
-// format: uuid
-type Id = string;
+### Point
 
-// format: date-time; pattern: Z$
-type Instant = string;
+| Field | Type | Presence | Validation |
+| --- | --- | --- | --- |
+| type | Point (constant) | required | — |
+| coordinates | Position | required | — |
 
-// format: date
-type LocalDate = string;
+### Polygon
 
-type DataMode = "demo" | "live";
+| Field | Type | Presence | Validation |
+| --- | --- | --- | --- |
+| type | Polygon (constant) | required | — |
+| coordinates | array of array of Position | required | 1–1 items; each item: 4–5000 items; each item: — |
 
-type CropCode = "maize" | "soybean";
+### Source
 
-type StageCode = "V3" | "V6" | "VT" | "R1" | "V2" | "R4" | "R6";
+| Field | Type | Presence | Validation |
+| --- | --- | --- | --- |
+| code | SourceCode | required | — |
+| url | text or null | required | 0–2048 characters; uri; HTTPS only; — |
+| issuedAt | Instant or null | required | —; — |
+| retrievedAt | Instant | required | — |
+| isDemo | boolean | required | — |
 
-type RiskLevel = "low" | "moderate" | "high";
+### ForecastHour
 
-type SourceCode = "demo" | "open_meteo";
+| Field | Type | Presence | Validation |
+| --- | --- | --- | --- |
+| at | Instant | required | — |
+| temperatureC | number | required | -100–70 |
 
-type AssessmentState = "evaluated" | "insufficient_data" | "no_applicable_rule";
+### PlotForecast
 
-type EventStatus = "active" | "cancelled";
+| Field | Type | Presence | Validation |
+| --- | --- | --- | --- |
+| plotId | Id | required | — |
+| samplePoint | Point | required | — |
+| source | Source | required | — |
+| temperatureHeightM | 2 (constant) | required | — |
+| hours | array of ForecastHour | required | 1–168 items; each item: — |
 
-type RefreshErrorCode = "PROVIDER_TIMEOUT" | "PROVIDER_UNAVAILABLE" | "INVALID_PROVIDER_DATA" | "PAYLOAD_LIMIT_EXCEEDED" | "PUBLISH_FAILED";
+### ForecastSummary
 
-// min items: 2; max items: 2
-type Position = [number, number];
+| Field | Type | Presence | Validation |
+| --- | --- | --- | --- |
+| schemaVersion | 1 (constant) | required | — |
+| fetchedAt | Instant | required | — |
+| windowStart | Instant | required | — |
+| windowEnd | Instant | required | — |
+| plots | array of PlotForecast | required | 1–10 items; each item: — |
 
-type Point = {
-  type: "Point";
-  coordinates: Position;
-};
+### CropCycle
 
-type Polygon = {
-  type: "Polygon";
-  // min items 1, max items 1
-  coordinates: Position[][];
-};
+| Field | Type | Presence | Validation |
+| --- | --- | --- | --- |
+| id | Id | required | — |
+| plotId | Id | required | — |
+| cropCode | CropCode | required | — |
+| seasonLabel | text | required | YYYY/YY |
+| sownOn | LocalDate or null | required | —; — |
+| stageCode | StageCode or null | required | —; — |
+| stageAsOf | LocalDate or null | required | —; — |
+| endedOn | LocalDate or null | required | —; — |
+| updatedAt | Instant | required | — |
 
-type Source = {
-  code: SourceCode;
-  url: string | null;
-  issuedAt: Instant | null;
-  retrievedAt: Instant;
-  isDemo: boolean;
-};
+### EventEvidence
 
-type ForecastHour = {
-  at: Instant;
-  // min -100, max 70
-  temperatureC: number;
-};
+| Field | Type | Presence | Validation |
+| --- | --- | --- | --- |
+| schemaVersion | 1 (constant) | required | — |
+| scope | farm_demo, plot_forecast | required | — |
+| plotIds | array of Id | required | 1–10 items; unique values; each item: — |
+| forecastDate | LocalDate | required | — |
+| samplePoint | Point or null | required | —; — |
+| source | Source | required | — |
+| temperatureHeightM | 2 (constant) | required | — |
+| detectionThresholdC | 0 (constant) | required | — |
+| hours | array of ForecastHour | required | 1–24 items; each item: — |
 
-type PlotForecast = {
-  plotId: Id;
-  samplePoint: Point;
-  source: Source;
-  temperatureHeightM: 2;
-  // min items 1, max items 168
-  hours: ForecastHour[];
-};
+### EventSnapshot
 
-type ForecastSummary = {
-  schemaVersion: 1;
-  fetchedAt: Instant;
-  windowStart: Instant;
-  windowEnd: Instant;
-  // min items 1, max items 10
-  plots: PlotForecast[];
-};
+| Field | Type | Presence | Validation |
+| --- | --- | --- | --- |
+| id | Id | required | — |
+| status | EventStatus | required | — |
+| startsAt | Instant | required | — |
+| endsAt | Instant | required | — |
+| evidence | EventEvidence | required | — |
 
-type CropCycle = {
-  id: Id;
-  plotId: Id;
-  cropCode: CropCode;
-  // pattern ^[0-9]{4}/[0-9]{2}$
-  seasonLabel: string;
-  sownOn: LocalDate | null;
-  stageCode: StageCode | null;
-  stageAsOf: LocalDate | null;
-  endedOn: LocalDate | null;
-  updatedAt: Instant;
-};
+### Generation
 
-type EventEvidence = {
-  schemaVersion: 1;
-  scope: "farm_demo" | "plot_forecast";
-  // min items 1, max items 10, unique items
-  plotIds: Id[];
-  forecastDate: LocalDate;
-  samplePoint: Point | null;
-  source: Source;
-  temperatureHeightM: 2;
-  detectionThresholdC: 0;
-  // min items 1, max items 24
-  hours: ForecastHour[];
-};
+| Field | Type | Presence | Validation |
+| --- | --- | --- | --- |
+| method | template, llm | required | — |
+| modelId | text or null | required | 1–200 characters; — |
+| promptVersion | text or null | required | 1–100 characters; — |
 
-type EventSnapshot = {
-  id: Id;
-  status: EventStatus;
-  startsAt: Instant;
-  endsAt: Instant;
-  evidence: EventEvidence;
-};
+### InputSnapshot
 
-type Generation = {
-  method: "template" | "llm";
-  modelId: string | null;
-  promptVersion: string | null;
-};
+| Field | Type | Presence | Validation |
+| --- | --- | --- | --- |
+| schemaVersion | 1 (constant) | required | — |
+| plotId | Id | required | — |
+| cropCycle | CropCycle or null | required | —; — |
+| event | EventSnapshot | required | — |
+| ruleSetVersion | text | required | 1–100 characters |
+| matchedRuleCodes | array of text | required | 0–20 items; unique values; each item: 1–100 characters |
+| generation | Generation | required | — |
 
-type InputSnapshot = {
-  schemaVersion: 1;
-  plotId: Id;
-  cropCycle: CropCycle | null;
-  event: EventSnapshot;
-  // min length 1, max length 100
-  ruleSetVersion: string;
-  // min items 0, max items 20, unique items
-  matchedRuleCodes: string[];
-  generation: Generation;
-};
+### PlotAlert
 
-type PlotAlert = {
-  id: Id;
-  plotId: Id;
-  eventId: Id;
-  assessmentState: AssessmentState;
-  riskLevel: RiskLevel | null;
-  // min length 1, max length 1000
-  reason: string;
-  recommendation: string | null;
-  // min length 1, max length 100
-  ruleVersion: string;
-  generatedAt: Instant;
-  validUntil: Instant;
-  generationMethod: "template" | "llm";
-  inputSnapshot: InputSnapshot;
-  isStale: boolean;
-};
+| Field | Type | Presence | Validation |
+| --- | --- | --- | --- |
+| id | Id | required | — |
+| plotId | Id | required | — |
+| eventId | Id | required | — |
+| assessmentState | AssessmentState | required | — |
+| riskLevel | RiskLevel or null | required | —; — |
+| reason | text | required | 1–1000 characters |
+| recommendation | text or null | required | 1–1000 characters; — |
+| ruleVersion | text | required | 1–100 characters |
+| generatedAt | Instant | required | — |
+| validUntil | Instant | required | — |
+| generationMethod | template, llm | required | — |
+| inputSnapshot | InputSnapshot | required | — |
+| isStale | boolean | required | — |
 
-type Farm = {
-  id: Id;
-  // min length 1, max length 100
-  name: string;
-  // min length 1, max length 100
-  province: string;
-  locality: string | null;
-  timezone: "America/Argentina/Cordoba";
-  dataMode: DataMode;
-  boundary: Polygon;
-  // min 0.01, max 1000000
-  declaredAreaHa: number;
-  // min 1, max 2147483647
-  dataVersion: number;
-};
+### Farm
 
-type Plot = {
-  id: Id;
-  // min length 1, max length 100
-  name: string;
-  boundary: Polygon;
-  samplePoint: Point;
-  // min 0.01, max 1000000
-  declaredAreaHa: number;
-  activeCropCycle: CropCycle | null;
-};
+| Field | Type | Presence | Validation |
+| --- | --- | --- | --- |
+| id | Id | required | — |
+| name | text | required | 1–100 characters |
+| province | text | required | 1–100 characters |
+| locality | text or null | required | 1–100 characters; — |
+| timezone | America/Argentina/Cordoba | required | — |
+| dataMode | DataMode | required | — |
+| boundary | Polygon | required | — |
+| declaredAreaHa | number | required | 0.01–1000000 |
+| dataVersion | integer | required | 1–2147483647 |
 
-type Basemap = {
-  status: "available";
-  // min length 1, max length 2048, pattern ^https://
-  tileUrlTemplate: string;
-  // min length 1, max length 500
-  attribution: string;
-  // min 0, max 24
-  minZoom: number;
-  // min 0, max 24
-  maxZoom: number;
-  acquiredAt: Instant | null;
-} | {
-  status: "unavailable";
-  // min length 1, max length 300
-  reason: string;
-};
+### Plot
 
-type EventCard = {
-  id: Id;
-  kind: "frost";
-  // min length 1, max length 160
-  title: string;
-  startsAt: Instant;
-  endsAt: Instant;
-  status: EventStatus;
-  temporalState: "upcoming" | "ongoing" | "recent";
-  source: Source;
-  evidence: EventEvidence;
-  // min items 1, max items 10
-  alerts: PlotAlert[];
-};
+| Field | Type | Presence | Validation |
+| --- | --- | --- | --- |
+| id | Id | required | — |
+| name | text | required | 1–100 characters |
+| boundary | Polygon | required | — |
+| samplePoint | Point | required | — |
+| declaredAreaHa | number | required | 0.01–1000000 |
+| activeCropCycle | CropCycle or null | required | —; — |
 
-type Monitoring = {
-  status: "never_refreshed" | "fresh" | "stale" | "failed";
-  lastAttemptAt: Instant | null;
-  lastSuccessAt: Instant | null;
-  lastErrorCode: RefreshErrorCode | null;
-  forecastValidUntil: Instant | null;
-};
+### Basemap — available
 
-type DashboardResponse = {
-  schemaVersion: 1;
-  asOf: Instant;
-  farm: Farm;
-  // min items 1, max items 10
-  plots: Plot[];
-  basemap: Basemap;
-  forecast: ForecastSummary | null;
-  // min items 0, max items 50
-  events: EventCard[];
-  monitoring: Monitoring;
-};
+| Field | Type | Presence | Validation |
+| --- | --- | --- | --- |
+| status | available | required | — |
+| tileUrlTemplate | text | required | 1–2048 characters; HTTPS only |
+| attribution | text | required | 1–500 characters |
+| minZoom | integer | required | 0–24 |
+| maxZoom | integer | required | 0–24 |
+| acquiredAt | Instant or null | required | —; — |
 
-type RefreshResponse = {
-  farmId: Id;
-  // min 1, max 2147483647
-  dataVersion: number;
-  refreshedAt: Instant;
-  dataMode: DataMode;
-  // min 0, max 50
-  eventCount: number;
-  // min 0, max 500
-  alertCount: number;
-};
+### Basemap — unavailable
 
-type UpdateCropCycleRequest = {
-  // min 1, max 2147483647
-  expectedDataVersion: number;
-  cropCode?: CropCode;
-  sownOn?: LocalDate | null;
-  stageCode?: StageCode | null;
-  stageAsOf?: LocalDate | null;
-};
+| Field | Type | Presence | Validation |
+| --- | --- | --- | --- |
+| status | unavailable | required | — |
+| reason | text | required | 1–300 characters |
 
-type UpdateCropCycleResponse = {
-  farmId: Id;
-  // min 1, max 2147483647
-  dataVersion: number;
-  cropCycle: CropCycle;
-};
+### EventCard
 
-type ErrorResponse = {
-  error: {
-    code: "BAD_REQUEST" | "UNAUTHENTICATED" | "NOT_FOUND" | "VERSION_CONFLICT" | "STALE_PROVIDER_DATA" | "PAYLOAD_LIMIT_EXCEEDED" | "VALIDATION_ERROR" | "RATE_LIMITED" | "REFRESH_UNAVAILABLE" | "INTERNAL_ERROR";
-    // min length 1, max length 300
-    message: string;
-    // min items 0, max items 20
-    details?: {
-      // min length 1, max length 200
-      path: string;
-      // min length 1, max length 300
-      message: string;
-    }[];
-  };
-};
+| Field | Type | Presence | Validation |
+| --- | --- | --- | --- |
+| id | Id | required | — |
+| kind | frost | required | — |
+| title | text | required | 1–160 characters |
+| startsAt | Instant | required | — |
+| endsAt | Instant | required | — |
+| status | EventStatus | required | — |
+| temporalState | upcoming, ongoing, recent | required | — |
+| source | Source | required | — |
+| evidence | EventEvidence | required | — |
+| alerts | array of PlotAlert | required | 1–10 items; each item: — |
 
-type RiskRule = {
-  // min length 1, max length 100
-  code: string;
-  cropCode: CropCode;
-  // min items 1, max items 8, unique items
-  stageCodes: StageCode[];
-  temperatureHeightM: 2;
-  // min -100, max 0
-  thresholdC: number;
-  // min 1, max 24
-  minimumConsecutiveHours: number;
-  // min 1, max 30
-  stageMaxAgeDays: number;
-  riskLevel: RiskLevel;
-  reviewState: "synthetic" | "approved";
-  evidenceUrl: string | null;
-  // min length 1, max length 1000
-  reasonTemplate: string;
-  // min length 1, max length 1000
-  recommendationTemplate: string;
-};
+### Monitoring
 
-type RuleSet = {
-  // min length 1, max length 100
-  version: string;
-  // min items 0, max items 20
-  rules: RiskRule[];
-};
-```
+| Field | Type | Presence | Validation |
+| --- | --- | --- | --- |
+| status | never_refreshed, fresh, stale, failed | required | — |
+| lastAttemptAt | Instant or null | required | —; — |
+| lastSuccessAt | Instant or null | required | —; — |
+| lastErrorCode | RefreshErrorCode or null | required | —; — |
+| forecastValidUntil | Instant or null | required | —; — |
 
-## Inline dashboard example
+### DashboardResponse
 
-This complete JSON response uses fixed synthetic dates and one plot for readability.
-The actual demo seeds two or three plots. Satellite configuration is explicitly
-unavailable here; no placeholder URL is presented as a working image service.
+| Field | Type | Presence | Validation |
+| --- | --- | --- | --- |
+| schemaVersion | 1 (constant) | required | — |
+| asOf | Instant | required | — |
+| farm | Farm | required | — |
+| plots | array of Plot | required | 1–10 items; each item: — |
+| basemap | Basemap | required | — |
+| forecast | ForecastSummary or null | required | —; — |
+| events | array of EventCard | required | 0–50 items; each item: — |
+| monitoring | Monitoring | required | — |
 
-```json
-{
-  "schemaVersion": 1,
-  "asOf": "2026-09-12T04:00:00Z",
-  "farm": {
-    "id": "00000000-0000-4000-8000-000000000001",
-    "name": "Campo demo",
-    "province": "Córdoba",
-    "locality": null,
-    "timezone": "America/Argentina/Cordoba",
-    "dataMode": "demo",
-    "boundary": {
-      "type": "Polygon",
-      "coordinates": [
-        [
-          [-64.1, -31.4],
-          [-64.09, -31.4],
-          [-64.09, -31.39],
-          [-64.1, -31.39],
-          [-64.1, -31.4]
-        ]
-      ]
-    },
-    "declaredAreaHa": 100,
-    "dataVersion": 2
-  },
-  "plots": [
-    {
-      "id": "00000000-0000-4000-8000-000000000002",
-      "name": "Lote 1",
-      "boundary": {
-        "type": "Polygon",
-        "coordinates": [
-          [
-            [-64.1, -31.4],
-            [-64.09, -31.4],
-            [-64.09, -31.39],
-            [-64.1, -31.39],
-            [-64.1, -31.4]
-          ]
-        ]
-      },
-      "samplePoint": {
-        "type": "Point",
-        "coordinates": [-64.095, -31.395]
-      },
-      "declaredAreaHa": 100,
-      "activeCropCycle": {
-        "id": "00000000-0000-4000-8000-000000000003",
-        "plotId": "00000000-0000-4000-8000-000000000002",
-        "cropCode": "maize",
-        "seasonLabel": "2026/27",
-        "sownOn": "2026-08-01",
-        "stageCode": "V6",
-        "stageAsOf": "2026-09-11",
-        "endedOn": null,
-        "updatedAt": "2026-09-12T03:00:00Z"
-      }
-    }
-  ],
-  "basemap": {
-    "status": "unavailable",
-    "reason": "Proveedor satelital pendiente de configuración."
-  },
-  "forecast": {
-    "schemaVersion": 1,
-    "fetchedAt": "2026-09-12T04:00:00Z",
-    "windowStart": "2026-09-12T06:00:00Z",
-    "windowEnd": "2026-09-12T08:00:00Z",
-    "plots": [
-      {
-        "plotId": "00000000-0000-4000-8000-000000000002",
-        "samplePoint": {
-          "type": "Point",
-          "coordinates": [-64.095, -31.395]
-        },
-        "source": {
-          "code": "demo",
-          "url": null,
-          "issuedAt": "2026-09-12T03:00:00Z",
-          "retrievedAt": "2026-09-12T04:00:00Z",
-          "isDemo": true
-        },
-        "temperatureHeightM": 2,
-        "hours": [
-          {
-            "at": "2026-09-12T06:00:00Z",
-            "temperatureC": -2
-          },
-          {
-            "at": "2026-09-12T07:00:00Z",
-            "temperatureC": -2
-          }
-        ]
-      }
-    ]
-  },
-  "events": [
-    {
-      "id": "00000000-0000-4000-8000-000000000004",
-      "kind": "frost",
-      "title": "Riesgo de helada — simulación",
-      "startsAt": "2026-09-12T06:00:00Z",
-      "endsAt": "2026-09-12T08:00:00Z",
-      "status": "active",
-      "temporalState": "upcoming",
-      "source": {
-        "code": "demo",
-        "url": null,
-        "issuedAt": "2026-09-12T03:00:00Z",
-        "retrievedAt": "2026-09-12T04:00:00Z",
-        "isDemo": true
-      },
-      "evidence": {
-        "schemaVersion": 1,
-        "scope": "farm_demo",
-        "plotIds": ["00000000-0000-4000-8000-000000000002"],
-        "forecastDate": "2026-09-12",
-        "samplePoint": null,
-        "source": {
-          "code": "demo",
-          "url": null,
-          "issuedAt": "2026-09-12T03:00:00Z",
-          "retrievedAt": "2026-09-12T04:00:00Z",
-          "isDemo": true
-        },
-        "temperatureHeightM": 2,
-        "detectionThresholdC": 0,
-        "hours": [
-          {
-            "at": "2026-09-12T06:00:00Z",
-            "temperatureC": -2
-          },
-          {
-            "at": "2026-09-12T07:00:00Z",
-            "temperatureC": -2
-          }
-        ]
-      },
-      "alerts": [
-        {
-          "id": "00000000-0000-4000-8000-000000000005",
-          "plotId": "00000000-0000-4000-8000-000000000002",
-          "eventId": "00000000-0000-4000-8000-000000000004",
-          "assessmentState": "evaluated",
-          "riskLevel": "high",
-          "reason": "Escenario sintético: la regla demo-maize-v6 coincide.",
-          "recommendation": "Demostración: revisar el lote; no es asesoramiento agronómico.",
-          "ruleVersion": "demo-v1",
-          "generatedAt": "2026-09-12T04:00:00Z",
-          "validUntil": "2026-09-12T05:00:00Z",
-          "generationMethod": "template",
-          "inputSnapshot": {
-            "schemaVersion": 1,
-            "plotId": "00000000-0000-4000-8000-000000000002",
-            "cropCycle": {
-              "id": "00000000-0000-4000-8000-000000000003",
-              "plotId": "00000000-0000-4000-8000-000000000002",
-              "cropCode": "maize",
-              "seasonLabel": "2026/27",
-              "sownOn": "2026-08-01",
-              "stageCode": "V6",
-              "stageAsOf": "2026-09-11",
-              "endedOn": null,
-              "updatedAt": "2026-09-12T03:00:00Z"
-            },
-            "event": {
-              "id": "00000000-0000-4000-8000-000000000004",
-              "status": "active",
-              "startsAt": "2026-09-12T06:00:00Z",
-              "endsAt": "2026-09-12T08:00:00Z",
-              "evidence": {
-                "schemaVersion": 1,
-                "scope": "farm_demo",
-                "plotIds": ["00000000-0000-4000-8000-000000000002"],
-                "forecastDate": "2026-09-12",
-                "samplePoint": null,
-                "source": {
-                  "code": "demo",
-                  "url": null,
-                  "issuedAt": "2026-09-12T03:00:00Z",
-                  "retrievedAt": "2026-09-12T04:00:00Z",
-                  "isDemo": true
-                },
-                "temperatureHeightM": 2,
-                "detectionThresholdC": 0,
-                "hours": [
-                  {
-                    "at": "2026-09-12T06:00:00Z",
-                    "temperatureC": -2
-                  },
-                  {
-                    "at": "2026-09-12T07:00:00Z",
-                    "temperatureC": -2
-                  }
-                ]
-              }
-            },
-            "ruleSetVersion": "demo-v1",
-            "matchedRuleCodes": ["demo-maize-v6"],
-            "generation": {
-              "method": "template",
-              "modelId": null,
-              "promptVersion": null
-            }
-          },
-          "isStale": false
-        }
-      ]
-    }
-  ],
-  "monitoring": {
-    "status": "fresh",
-    "lastAttemptAt": "2026-09-12T04:00:00Z",
-    "lastSuccessAt": "2026-09-12T04:00:00Z",
-    "lastErrorCode": null,
-    "forecastValidUntil": "2026-09-12T05:00:00Z"
-  }
-}
-```
+### RefreshResponse
 
-## Inline PostgreSQL DDL reference
+| Field | Type | Presence | Validation |
+| --- | --- | --- | --- |
+| farmId | Id | required | — |
+| dataVersion | integer | required | 1–2147483647 |
+| refreshedAt | Instant | required | — |
+| dataMode | DataMode | required | — |
+| eventCount | integer | required | 0–50 |
+| alertCount | integer | required | 0–500 |
 
-This appendix defines only tables, constraints, indexes, timestamp maintenance,
-and read access. Full JSON/topology validation and atomic mutation behavior remain
-as specified above. Port the DDL into a migration when implementing persistence.
+### UpdateCropCycleRequest
 
-```sql
--- AgroSense MVP schema reference v1. Fresh Supabase database only.
--- Not an applied migration. Requires auth.users, auth.uid(), and Supabase roles.
--- Full JSON shapes and application invariants are defined earlier in this document.
-BEGIN;
+| Field | Type | Presence | Validation |
+| --- | --- | --- | --- |
+| expectedDataVersion | integer | required | 1–2147483647 |
+| cropCode | CropCode | optional | — |
+| sownOn | LocalDate or null | optional | —; — |
+| stageCode | StageCode or null | optional | —; — |
+| stageAsOf | LocalDate or null | optional | —; — |
 
-CREATE TABLE public.farms (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  owner_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE RESTRICT,
-  name text NOT NULL CHECK (length(btrim(name)) BETWEEN 1 AND 100),
-  province text NOT NULL CHECK (length(btrim(province)) BETWEEN 1 AND 100),
-  locality text CHECK (locality IS NULL OR length(btrim(locality)) BETWEEN 1 AND 100),
-  timezone text NOT NULL DEFAULT 'America/Argentina/Cordoba'
-    CHECK (timezone = 'America/Argentina/Cordoba'),
-  data_mode text NOT NULL DEFAULT 'demo' CHECK (data_mode IN ('demo', 'live')),
-  boundary_geojson jsonb NOT NULL CHECK (
-    jsonb_typeof(boundary_geojson) = 'object'
-    AND boundary_geojson @> '{"type":"Polygon"}'::jsonb
-    AND jsonb_typeof(boundary_geojson->'coordinates') IS NOT DISTINCT FROM 'array'),
-  declared_area_ha numeric(12,2) NOT NULL
-    CHECK (declared_area_ha > 0 AND declared_area_ha <= 1000000),
-  data_version integer NOT NULL DEFAULT 1 CHECK (data_version > 0),
-  forecast_summary jsonb CHECK (forecast_summary IS NULL OR (
-    jsonb_typeof(forecast_summary) = 'object'
-    AND forecast_summary @> '{"schemaVersion":1}'::jsonb)),
-  last_attempt_at timestamptz,
-  last_success_at timestamptz,
-  last_error_code text CHECK (last_error_code IN (
-    'PROVIDER_TIMEOUT', 'PROVIDER_UNAVAILABLE', 'INVALID_PROVIDER_DATA',
-    'PAYLOAD_LIMIT_EXCEEDED', 'PUBLISH_FAILED')),
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now(),
-  CHECK ((forecast_summary IS NULL) = (last_success_at IS NULL)),
-  CHECK (last_success_at IS NULL OR (last_attempt_at IS NOT NULL AND last_success_at <= last_attempt_at))
-);
+### UpdateCropCycleResponse
 
-CREATE TABLE public.plots (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  farm_id uuid NOT NULL REFERENCES public.farms(id) ON DELETE RESTRICT,
-  name text NOT NULL CHECK (length(btrim(name)) BETWEEN 1 AND 100),
-  boundary_geojson jsonb NOT NULL CHECK (
-    jsonb_typeof(boundary_geojson) = 'object'
-    AND boundary_geojson @> '{"type":"Polygon"}'::jsonb
-    AND jsonb_typeof(boundary_geojson->'coordinates') IS NOT DISTINCT FROM 'array'),
-  sample_point_geojson jsonb NOT NULL CHECK (
-    jsonb_typeof(sample_point_geojson) = 'object'
-    AND sample_point_geojson @> '{"type":"Point"}'::jsonb
-    AND jsonb_typeof(sample_point_geojson->'coordinates') IS NOT DISTINCT FROM 'array'),
-  declared_area_ha numeric(12,2) NOT NULL
-    CHECK (declared_area_ha > 0 AND declared_area_ha <= 1000000),
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now(),
-  UNIQUE (farm_id, name),
-  UNIQUE (id, farm_id)
-);
+| Field | Type | Presence | Validation |
+| --- | --- | --- | --- |
+| farmId | Id | required | — |
+| dataVersion | integer | required | 1–2147483647 |
+| cropCycle | CropCycle | required | — |
 
-CREATE TABLE public.crop_cycles (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  plot_id uuid NOT NULL REFERENCES public.plots(id) ON DELETE RESTRICT,
-  crop_code text NOT NULL CHECK (crop_code IN ('maize', 'soybean')),
-  season_label text NOT NULL CHECK (season_label ~ '^[0-9]{4}/[0-9]{2}$'),
-  sown_on date,
-  stage_code text,
-  stage_as_of date,
-  ended_on date,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now(),
-  CHECK ((stage_code IS NULL) = (stage_as_of IS NULL)),
-  CHECK (stage_code IS NULL OR
-    (crop_code = 'maize' AND stage_code IN ('V3', 'V6', 'VT', 'R1')) OR
-    (crop_code = 'soybean' AND stage_code IN ('V2', 'R1', 'R4', 'R6'))),
-  CHECK (sown_on IS NULL OR stage_as_of IS NULL OR stage_as_of >= sown_on),
-  CHECK (ended_on IS NULL OR sown_on IS NULL OR ended_on > sown_on),
-  CHECK (ended_on IS NULL OR stage_as_of IS NULL OR stage_as_of < ended_on)
-);
-CREATE UNIQUE INDEX crop_cycles_one_open ON public.crop_cycles(plot_id) WHERE ended_on IS NULL;
-CREATE INDEX crop_cycles_plot ON public.crop_cycles(plot_id);
+### ErrorResponse
 
-CREATE TABLE public.events (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  farm_id uuid NOT NULL REFERENCES public.farms(id) ON DELETE RESTRICT,
-  source_code text NOT NULL CHECK (source_code IN ('demo', 'open_meteo')),
-  source_event_key text NOT NULL CHECK (length(source_event_key) BETWEEN 1 AND 200),
-  kind text NOT NULL DEFAULT 'frost' CHECK (kind = 'frost'),
-  title text NOT NULL CHECK (length(btrim(title)) BETWEEN 1 AND 160),
-  starts_at timestamptz NOT NULL,
-  ends_at timestamptz NOT NULL CHECK (ends_at > starts_at),
-  issued_at timestamptz,
-  retrieved_at timestamptz NOT NULL,
-  source_url text CHECK (source_url IS NULL OR (length(source_url) <= 2048 AND source_url LIKE 'https://%')),
-  status text NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'cancelled')),
-  evidence jsonb NOT NULL CHECK (
-    jsonb_typeof(evidence) = 'object' AND evidence @> '{"schemaVersion":1}'::jsonb),
-  is_demo boolean NOT NULL,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now(),
-  CHECK (is_demo = (source_code = 'demo')),
-  CHECK (issued_at IS NULL OR issued_at <= retrieved_at),
-  UNIQUE (farm_id, source_code, source_event_key),
-  UNIQUE (id, farm_id)
-);
-CREATE INDEX events_farm_time ON public.events(farm_id, starts_at, id);
+| Field | Type | Presence | Validation |
+| --- | --- | --- | --- |
+| error | ErrorBody | required | — |
 
-CREATE TABLE public.plot_alerts (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  farm_id uuid NOT NULL REFERENCES public.farms(id) ON DELETE RESTRICT,
-  plot_id uuid NOT NULL,
-  event_id uuid NOT NULL,
-  assessment_state text NOT NULL CHECK (assessment_state IN (
-    'evaluated', 'insufficient_data', 'no_applicable_rule')),
-  risk_level text CHECK (risk_level IN ('low', 'moderate', 'high')),
-  reason text NOT NULL CHECK (length(btrim(reason)) BETWEEN 1 AND 1000),
-  recommendation text CHECK (recommendation IS NULL OR length(btrim(recommendation)) BETWEEN 1 AND 1000),
-  input_snapshot jsonb NOT NULL CHECK (
-    jsonb_typeof(input_snapshot) = 'object' AND input_snapshot @> '{"schemaVersion":1}'::jsonb),
-  rule_version text NOT NULL CHECK (length(btrim(rule_version)) BETWEEN 1 AND 100),
-  generated_at timestamptz NOT NULL,
-  valid_until timestamptz NOT NULL CHECK (valid_until > generated_at),
-  generation_method text NOT NULL DEFAULT 'template' CHECK (generation_method IN ('template', 'llm')),
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now(),
-  FOREIGN KEY (plot_id, farm_id) REFERENCES public.plots(id, farm_id) ON DELETE RESTRICT,
-  FOREIGN KEY (event_id, farm_id) REFERENCES public.events(id, farm_id) ON DELETE CASCADE,
-  UNIQUE (plot_id, event_id),
-  CHECK ((assessment_state = 'evaluated' AND risk_level IS NOT NULL AND recommendation IS NOT NULL)
-    OR (assessment_state <> 'evaluated' AND risk_level IS NULL AND recommendation IS NULL))
-);
-CREATE INDEX plot_alerts_farm ON public.plot_alerts(farm_id);
-CREATE INDEX plot_alerts_event ON public.plot_alerts(event_id);
-CREATE INDEX farms_owner ON public.farms(owner_id);
+### RiskRule
 
--- Timestamp maintenance only: application mutations MUST also increment
--- farms.data_version in the same transaction, as specified in the reference.
-CREATE FUNCTION public.set_mvp_updated_at() RETURNS trigger
-LANGUAGE plpgsql SET search_path = '' AS $$
-BEGIN
-  NEW.updated_at = now();
-  RETURN NEW;
-END;
-$$;
-REVOKE ALL ON FUNCTION public.set_mvp_updated_at() FROM PUBLIC;
-CREATE TRIGGER farms_updated BEFORE UPDATE ON public.farms FOR EACH ROW EXECUTE FUNCTION public.set_mvp_updated_at();
-CREATE TRIGGER plots_updated BEFORE UPDATE ON public.plots FOR EACH ROW EXECUTE FUNCTION public.set_mvp_updated_at();
-CREATE TRIGGER cycles_updated BEFORE UPDATE ON public.crop_cycles FOR EACH ROW EXECUTE FUNCTION public.set_mvp_updated_at();
-CREATE TRIGGER events_updated BEFORE UPDATE ON public.events FOR EACH ROW EXECUTE FUNCTION public.set_mvp_updated_at();
-CREATE TRIGGER alerts_updated BEFORE UPDATE ON public.plot_alerts FOR EACH ROW EXECUTE FUNCTION public.set_mvp_updated_at();
+| Field | Type | Presence | Validation |
+| --- | --- | --- | --- |
+| code | text | required | 1–100 characters |
+| cropCode | CropCode | required | — |
+| stageCodes | array of StageCode | required | 1–8 items; unique values; each item: — |
+| temperatureHeightM | 2 (constant) | required | — |
+| thresholdC | number | required | -100–0 |
+| minimumConsecutiveHours | integer | required | 1–24 |
+| stageMaxAgeDays | integer | required | 1–30 |
+| riskLevel | RiskLevel | required | — |
+| reviewState | synthetic, approved | required | — |
+| evidenceUrl | text or null | required | 0–2048 characters; uri; HTTPS only; — |
+| reasonTemplate | text | required | 1–1000 characters |
+| recommendationTemplate | text | required | 1–1000 characters |
 
-ALTER TABLE public.farms ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.plots ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.crop_cycles ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.events ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.plot_alerts ENABLE ROW LEVEL SECURITY;
-CREATE POLICY farms_owner_read ON public.farms FOR SELECT TO authenticated
-  USING (owner_id = (SELECT auth.uid()));
-CREATE POLICY plots_owner_read ON public.plots FOR SELECT TO authenticated
-  USING (EXISTS (SELECT 1 FROM public.farms f WHERE f.id = farm_id AND f.owner_id = (SELECT auth.uid())));
-CREATE POLICY cycles_owner_read ON public.crop_cycles FOR SELECT TO authenticated
-  USING (EXISTS (SELECT 1 FROM public.plots p JOIN public.farms f ON f.id = p.farm_id
-    WHERE p.id = plot_id AND f.owner_id = (SELECT auth.uid())));
-CREATE POLICY events_owner_read ON public.events FOR SELECT TO authenticated
-  USING (EXISTS (SELECT 1 FROM public.farms f WHERE f.id = farm_id AND f.owner_id = (SELECT auth.uid())));
-CREATE POLICY alerts_owner_read ON public.plot_alerts FOR SELECT TO authenticated
-  USING (EXISTS (SELECT 1 FROM public.farms f WHERE f.id = farm_id AND f.owner_id = (SELECT auth.uid())));
+### RuleSet
 
--- No direct browser writes; narrow mutation RPCs are a separate implementation.
-REVOKE ALL ON public.farms, public.plots, public.crop_cycles, public.events, public.plot_alerts FROM PUBLIC, anon, authenticated;
-GRANT SELECT ON public.farms, public.plots, public.crop_cycles, public.events, public.plot_alerts TO authenticated;
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.farms, public.plots, public.crop_cycles, public.events, public.plot_alerts TO service_role;
-COMMIT;
-```
+| Field | Type | Presence | Validation |
+| --- | --- | --- | --- |
+| version | text | required | 1–100 characters |
+| rules | array of RiskRule | required | 0–20 items; each item: — |
+
+### FieldError
+
+| Field | Type | Presence | Validation |
+| --- | --- | --- | --- |
+| path | text | required | 1–200 characters |
+| message | text | required | 1–300 characters |
+
+### ErrorBody
+
+| Field | Type | Presence | Validation |
+| --- | --- | --- | --- |
+| code | BAD_REQUEST, UNAUTHENTICATED, NOT_FOUND, VERSION_CONFLICT, STALE_PROVIDER_DATA, PAYLOAD_LIMIT_EXCEEDED, VALIDATION_ERROR, RATE_LIMITED, REFRESH_UNAVAILABLE, INTERNAL_ERROR | required | — |
+| message | text | required | 1–300 characters |
+| details | array of FieldError | optional | 0–20 items; each item: — |
